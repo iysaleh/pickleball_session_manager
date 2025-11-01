@@ -295,6 +295,22 @@ function handleAddSessionPlayer() {
   currentSession = addPlayerToSession(currentSession, player);
   sessionPlayerNameInput.value = '';
   
+  // New players should be prioritized - set their gamesWaited to high value
+  // so they're selected first when creating new matches
+  const stats = currentSession.playerStats.get(player.id);
+  if (stats) {
+    // Get max gamesWaited from all players and add a lot to it
+    let maxWaited = 0;
+    currentSession.playerStats.forEach(s => {
+      if (s.gamesWaited > maxWaited) maxWaited = s.gamesWaited;
+    });
+    // Set new player to have waited more than anyone else
+    stats.gamesWaited = maxWaited + 100;
+  }
+  
+  // Evaluate to create new matches if courts available
+  currentSession = evaluateAndCreateMatches(currentSession);
+  
   // Auto-start any new matches
   currentSession.matches.forEach(match => {
     if (match.status === 'waiting') {
@@ -328,6 +344,17 @@ function handleRemoveSessionPlayer(playerId: string) {
 
 function handleCompleteMatch(matchId: string, team1Score: number, team2Score: number) {
   if (!currentSession) return;
+  
+  // Validate scores
+  if (team1Score === team2Score) {
+    alert('Invalid score: There must be a winner. Scores cannot be tied.');
+    return;
+  }
+  
+  if (team1Score < 0 || team2Score < 0) {
+    alert('Invalid score: Scores cannot be negative.');
+    return;
+  }
   
   currentSession = completeMatch(currentSession, matchId, team1Score, team2Score);
   

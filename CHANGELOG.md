@@ -2,6 +2,26 @@
 
 ## Version 2.2 - Court Stability & Improvements (Current)
 
+### Bug Fixes & Improvements
+
+#### ✅ Score Validation
+- **FIXED**: Cannot submit tied scores (5-5, 11-11, etc.)
+- **FIXED**: Cannot submit negative scores
+- Validation alerts explain the issue
+- Ensures valid match results
+
+#### 🔢 Better Score Display
+- **FIXED**: Score input font size reduced for readability
+- Changed from 1.2em to 0.95em
+- Numbers easier to see and input
+- Better visual balance in controls
+
+#### 🔄 New Player Priority
+- **FIXED**: Players added mid-session now get priority
+- New players automatically placed at front of queue
+- Set to have "waited" longer than anyone else
+- Ensures fair rotation for late arrivals
+
 ### Quality of Life Improvements
 
 #### 🎛️ Court Layout Controls
