@@ -273,6 +273,8 @@ function handleStartSession() {
   setupSection.classList.add('hidden');
   controlSection.classList.remove('hidden');
   courtsSection.classList.remove('hidden');
+  matchHistorySection.classList.remove('hidden'); // Show history by default
+  showHistoryBtn.textContent = 'Hide History'; // Update button text
   
   // Apply initial layout
   updateCourtsGridLayout();
@@ -391,6 +393,11 @@ function handleForfeitMatch(matchId: string) {
 
 function renderSession() {
   if (!currentSession) return;
+  
+  // Always update match history if visible
+  if (!matchHistorySection.classList.contains('hidden')) {
+    renderMatchHistory();
+  }
   
   // Render courts - ALL courts in order, not just active ones
   courtsGrid.innerHTML = '';
@@ -571,13 +578,13 @@ function toggleStats() {
 
 function toggleHistory() {
   if (matchHistorySection.classList.contains('hidden')) {
-    renderMatchHistory();
     matchHistorySection.classList.remove('hidden');
     showHistoryBtn.textContent = 'Hide History';
   } else {
     matchHistorySection.classList.add('hidden');
     showHistoryBtn.textContent = 'Show History';
   }
+  renderMatchHistory();
 }
 
 function renderMatchHistory() {
@@ -594,8 +601,12 @@ function renderMatchHistory() {
     return;
   }
   
-  // Show most recent first
-  const sortedMatches = [...completedMatches].reverse();
+  // Sort by completion time - most recent first (reverse chronological)
+  const sortedMatches = [...completedMatches].sort((a, b) => {
+    const timeA = a.endTime || 0;
+    const timeB = b.endTime || 0;
+    return timeB - timeA; // Most recent first
+  });
   
   sortedMatches.forEach(match => {
     const card = document.createElement('div');

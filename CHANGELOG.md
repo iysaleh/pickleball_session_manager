@@ -4,6 +4,13 @@
 
 ### Bug Fixes & Improvements
 
+#### 📜 Match History Improvements
+- **FIXED**: History input boxes now plain text (no up/down arrows)
+- **FIXED**: History auto-updates when matches complete
+- **FIXED**: History sorted chronologically (newest first)
+- **NEW**: History shown by default when session starts
+- Better readability and user experience
+
 #### ✅ Score Validation
 - **FIXED**: Cannot submit tied scores (5-5, 11-11, etc.)
 - **FIXED**: Cannot submit negative scores
