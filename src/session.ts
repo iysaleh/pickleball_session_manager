@@ -264,6 +264,7 @@ export function completeMatch(
           ...m,
           status: 'completed' as const,
           score: { team1Score, team2Score },
+          endTime: Date.now(),
         }
       : m
   );
@@ -313,7 +314,7 @@ export function forfeitMatch(session: Session, matchId: string): Session {
   // Update match status to forfeited (no stats changes)
   const updatedMatches = session.matches.map((m) =>
     m.id === matchId
-      ? { ...m, status: 'forfeited' as const }
+      ? { ...m, status: 'forfeited' as const, endTime: Date.now() }
       : m
   );
   

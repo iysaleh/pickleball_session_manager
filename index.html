@@ -399,6 +399,13 @@
       margin: 0;
     }
     
+    /* Remove spinners from all number inputs */
+    input[type="text"]::-webkit-outer-spin-button,
+    input[type="text"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    
     .vs-text {
       font-weight: 700;
       color: var(--text-secondary);
@@ -810,7 +817,7 @@
           <h2 class="section-title" style="margin: 0;">Active Courts</h2>
           <div style="display: flex; gap: 10px; align-items: center;">
             <label for="courts-per-row" style="font-size: 0.9em;">Courts per row:</label>
-            <input type="text" id="courts-per-row" value="2" style="width: 60px; text-align: center;">
+            <input type="text" id="courts-per-row" value="2" style="width: 60px; text-align: center; -moz-appearance: textfield; appearance: textfield;">
             <button id="apply-courts-layout-btn" style="padding: 5px 15px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em;">Apply</button>
           </div>
         </div>
@@ -828,14 +835,14 @@
           <h2 class="section-title" style="margin: 0;">📋 Match Queue</h2>
           <div style="display: flex; gap: 10px; align-items: center;">
             <label for="matches-per-page" style="font-size: 0.9em;">Matches per page:</label>
-            <input type="text" id="matches-per-page" value="10" style="width: 60px; text-align: center;">
+            <input type="text" id="matches-per-page" value="10" style="width: 60px; text-align: center; -moz-appearance: textfield; appearance: textfield;">
             <button id="apply-queue-pagination-btn">Apply</button>
           </div>
         </div>
         
         <div id="queue-pagination" style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 15px;">
           <button id="queue-prev-btn">← Previous</button>
-          <span id="queue-page-info" style="font-weight: 600;"></span>
+          <span id="queue-page-info" style="font-weight: 600; color: var(--text-primary);"></span>
           <button id="queue-next-btn">Next →</button>
         </div>
         

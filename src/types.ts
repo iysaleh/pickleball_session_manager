@@ -19,6 +19,7 @@ export type Match = {
     team1Score: number;
     team2Score: number;
   };
+  endTime?: number; // timestamp when match was completed/forfeited
 };
 
 export type SessionConfig = {

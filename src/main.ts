@@ -1,6 +1,7 @@
 import type { Session, Player, SessionConfig, Match } from './types';
 import { createSession, addPlayerToSession, removePlayerFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches, canStartNextRound, startNextRound } from './session';
 import { generateId } from './utils';
+import { generateRoundRobinQueue } from './queue';
 
 let currentSession: Session | null = null;
 let players: Player[] = [];
@@ -333,6 +334,8 @@ function handleStartSession() {
   courtsSection.classList.remove('hidden');
   matchHistorySection.classList.remove('hidden'); // Show history by default
   showHistoryBtn.textContent = 'Hide History'; // Update button text
+  queueSection.classList.remove('hidden'); // Show queue by default
+  showQueueBtn.textContent = 'Hide Queue'; // Update button text
   
   // Apply initial layout
   updateCourtsGridLayout();
@@ -805,6 +808,7 @@ function handleEditSession() {
   courtsSection.classList.add('hidden');
   statsSection.classList.add('hidden');
   matchHistorySection.classList.add('hidden');
+  queueSection.classList.add('hidden'); // Hide queue when editing
   
   // Players are already in the players array, just re-render
   renderPlayerList();
@@ -905,10 +909,14 @@ function handleEndSession() {
 };
 
 function toggleQueue() {
-  queueSection.classList.toggle('hidden');
-  if (!queueSection.classList.contains('hidden')) {
+  if (queueSection.classList.contains('hidden')) {
+    queueSection.classList.remove('hidden');
+    showQueueBtn.textContent = 'Hide Queue';
     queuePage = 0;
     renderQueue();
+  } else {
+    queueSection.classList.add('hidden');
+    showQueueBtn.textContent = 'Show Queue';
   }
 }
 
@@ -929,15 +937,38 @@ function renderQueue() {
   
   // For round-robin, show the match queue
   if (currentSession.config.mode === 'round-robin') {
+    // Calculate how many matches we need to display a full page
+    const neededMatches = (queuePage + 1) * matchesPerPage;
+    
+    // If we don't have enough matches in the queue, generate more
+    let displayQueue = [...currentSession.matchQueue];
+    if (displayQueue.length < neededMatches) {
+      // Generate a full round-robin schedule for all active players
+      const allActivePlayers = currentSession.config.players.filter(p => 
+        currentSession.activePlayers.has(p.id)
+      );
+      const fullQueue = generateRoundRobinQueue(
+        allActivePlayers,
+        currentSession.config.sessionType,
+        currentSession.config.bannedPairs
+      );
+      
+      // The displayed queue should show what's left in current queue + more from the full schedule
+      // Repeat the full schedule as many times as needed
+      const timesNeeded = Math.ceil(neededMatches / fullQueue.length);
+      for (let i = 1; i < timesNeeded; i++) {
+        displayQueue = [...displayQueue, ...fullQueue];
+      }
+    }
+    
     const startIdx = queuePage * matchesPerPage;
     const endIdx = startIdx + matchesPerPage;
-    const pageMatches = currentSession.matchQueue.slice(startIdx, endIdx);
+    const pageMatches = displayQueue.slice(startIdx, endIdx);
     
-    const totalPages = Math.ceil(currentSession.matchQueue.length / matchesPerPage);
-    queuePageInfo.textContent = `Page ${queuePage + 1} of ${totalPages || 1} (${currentSession.matchQueue.length} matches total)`;
+    queuePageInfo.textContent = `Page ${queuePage + 1}`;
     
     queuePrevBtn.disabled = queuePage === 0;
-    queueNextBtn.disabled = endIdx >= currentSession.matchQueue.length;
+    queueNextBtn.disabled = pageMatches.length < matchesPerPage;
     
     if (pageMatches.length === 0) {
       queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">No queued matches</p>';
