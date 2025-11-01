@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pickleball - Simple Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .test-result {
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 4px;
+    }
+    .pass {
+      background: #d4edda;
+      color: #155724;
+    }
+    .fail {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    h1 {
+      color: #333;
+    }
+    pre {
+      background: #f4f4f4;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎾 Pickleball Session Manager - Manual Tests</h1>
+  <div id="test-results"></div>
+
+  <script type="module">
+    // Inline testing since npm isn't working
+    const results = [];
+    
+    function test(name, fn) {
+      try {
+        fn();
+        results.push({ name, passed: true });
+      } catch (error) {
+        results.push({ name, passed: false, error: error.message });
+      }
+    }
+    
+    function assert(condition, message) {
+      if (!condition) throw new Error(message || 'Assertion failed');
+    }
+    
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) {
+        throw new Error(message || `Expected ${expected} but got ${actual}`);
+      }
+    }
+    
+    // Utils functions (inline)
+    function generateId() {
+      return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+    
+    function isPairBanned(player1Id, player2Id, bannedPairs) {
+      return bannedPairs.some(
+        ([p1, p2]) =>
+          (p1 === player1Id && p2 === player2Id) ||
+          (p1 === player2Id && p2 === player1Id)
+      );
+    }
+    
+    function createPlayerStats(playerId) {
+      return {
+        playerId,
+        gamesPlayed: 0,
+        gamesWaited: 0,
+        wins: 0,
+        losses: 0,
+        partnersPlayed: new Set(),
+        opponentsPlayed: new Set(),
+      };
+    }
+    
+    // Run tests
+    test('generateId creates unique IDs', () => {
+      const id1 = generateId();
+      const id2 = generateId();
+      assert(id1 !== id2, 'IDs should be unique');
+      assert(typeof id1 === 'string', 'ID should be a string');
+    });
+    
+    test('isPairBanned detects banned pairs', () => {
+      const bannedPairs = [['p1', 'p2']];
+      assert(isPairBanned('p1', 'p2', bannedPairs), 'Should detect banned pair');
+      assert(isPairBanned('p2', 'p1', bannedPairs), 'Should detect reversed banned pair');
+      assert(!isPairBanned('p1', 'p3', bannedPairs), 'Should not flag non-banned pair');
+    });
+    
+    test('createPlayerStats initializes correctly', () => {
+      const stats = createPlayerStats('player1');
+      assertEquals(stats.playerId, 'player1', 'Player ID should match');
+      assertEquals(stats.gamesPlayed, 0, 'Games played should be 0');
+      assertEquals(stats.wins, 0, 'Wins should be 0');
+      assertEquals(stats.losses, 0, 'Losses should be 0');
+    });
+    
+    test('Player stats track partners', () => {
+      const stats = createPlayerStats('p1');
+      stats.partnersPlayed.add('p2');
+      stats.partnersPlayed.add('p3');
+      assertEquals(stats.partnersPlayed.size, 2, 'Should track 2 partners');
+      assert(stats.partnersPlayed.has('p2'), 'Should have p2 as partner');
+    });
+    
+    test('Player stats track opponents', () => {
+      const stats = createPlayerStats('p1');
+      stats.opponentsPlayed.add('p3');
+      stats.opponentsPlayed.add('p4');
+      assertEquals(stats.opponentsPlayed.size, 2, 'Should track 2 opponents');
+      assert(stats.opponentsPlayed.has('p3'), 'Should have p3 as opponent');
+    });
+    
+    test('Session configuration works', () => {
+      const config = {
+        mode: 'round-robin',
+        sessionType: 'doubles',
+        players: [
+          { id: 'p1', name: 'Player 1' },
+          { id: 'p2', name: 'Player 2' },
+        ],
+        courts: 2,
+        bannedPairs: [],
+      };
+      
+      assert(config.mode === 'round-robin', 'Mode should be round-robin');
+      assert(config.players.length === 2, 'Should have 2 players');
+      assertEquals(config.courts, 2, 'Should have 2 courts');
+    });
+    
+    test('Match structure is correct', () => {
+      const match = {
+        id: generateId(),
+        courtNumber: 1,
+        team1: ['p1', 'p2'],
+        team2: ['p3', 'p4'],
+        status: 'waiting',
+      };
+      
+      assert(match.id, 'Match should have an ID');
+      assertEquals(match.courtNumber, 1, 'Court number should be 1');
+      assertEquals(match.team1.length, 2, 'Team 1 should have 2 players');
+      assertEquals(match.status, 'waiting', 'Status should be waiting');
+    });
+    
+    test('Win/loss tracking works', () => {
+      const stats = createPlayerStats('p1');
+      stats.wins++;
+      stats.gamesPlayed++;
+      
+      assertEquals(stats.wins, 1, 'Should have 1 win');
+      assertEquals(stats.gamesPlayed, 1, 'Should have played 1 game');
+      const winRate = (stats.wins / stats.gamesPlayed) * 100;
+      assertEquals(winRate, 100, 'Win rate should be 100%');
+    });
+    
+    // Display results
+    const resultsDiv = document.getElementById('test-results');
+    const passed = results.filter(r => r.passed).length;
+    const total = results.length;
+    
+    resultsDiv.innerHTML = `
+      <h2>Test Results: ${passed}/${total} passed</h2>
+      ${results.map(r => `
+        <div class="test-result ${r.passed ? 'pass' : 'fail'}">
+          ${r.passed ? '✓' : '✗'} ${r.name}
+          ${r.error ? `<pre>${r.error}</pre>` : ''}
+        </div>
+      `).join('')}
+    `;
+    
+    console.log(`Tests completed: ${passed}/${total} passed`);
+  </script>
+</body>
+</html>

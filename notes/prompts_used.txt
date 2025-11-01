@@ -1,0 +1,35 @@
+OK, so I want to build a mostly client-side typescript website that is able to manage pickleball play sessions.
+It should do the following:
+* Support a king of the court mode
+* Support a round-robin mode
+-- The round-robin mode should try to maximize the number of different people you play with in the least amount of games.
+* Support doubles sessions 
+* Support Singles Sessions
+* Support a teams session where players are locked together the entire time, and only their opponents change
+* Support having an uneven number of players, and having people wait for games. -- It should be as fair as possible with choosing who waits so that people don't have to wait repeatedly
+* Have a way to input a list of players for a session
+* Support adding/removing players from a session dynamically
+* Have a nice UI that shows where each player will play 
+* Have a queue system that waits for an open court and then assigns players to the court when it's free
+* Have a UI where users can input the score for a game when it is finished
+* Support banning potential team pairs for people that don't want to play together
+* 
+
+The website should have a robust unit test suite for all the capabilites that are built.
+
+
+
+
+
+### Revision 2
+Great start! Some major changes are required. We need to be able to see a list of players, and dynamically add
+   and remove players (some might come later, or leave the session early) -- we need to be able to forfeit a game --
+   which will be like that combination of players played, but there will be no saved results. We also need to remove
+   the "Start Next Round" capabilities, don't think of it as having rounds, think of it as a continuous queue of
+   games, everytime scores are input, the global state is re-evaluated and more games are made as possible.
+   
+### Revision 3
+ This is great, is there a way we can see a history of all games played easily? We should also be able to edit the
+   scores of those historical games if there was a mistake. Also, for the courts being displayed, can we have Team 1 be
+    boxed in the left, Team 2 being boxed on the right, and the controls & score input in the middle between them?
+   Right now it's top to bottom which is a little weird.
