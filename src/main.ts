@@ -1,6 +1,6 @@
 import type { Session, Player, SessionConfig, Match } from './types';
 import { createSession, addPlayerToSession, removePlayerFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches, canStartNextRound, startNextRound, updateMaxQueueSize } from './session';
-import { generateId, calculatePlayerRankings } from './utils';
+import { generateId, calculatePlayerRankings, calculateTeamRankings } from './utils';
 import { generateRoundRobinQueue } from './queue';
 
 let currentSession: Session | null = null;
@@ -1005,27 +1005,36 @@ function renderActivePlayers() {
   
   activePlayersList.innerHTML = '';
   
-  if (currentSession.config.players.length === 0) {
-    activePlayersList.innerHTML = '<p style="color: var(--text-secondary); padding: 10px;">No players in session</p>';
-  } else {
+  // For locked teams, show teams instead of individual players
+  if (currentSession.config.lockedTeams && currentSession.config.lockedTeams.length > 0) {
+    if (currentSession.config.lockedTeams.length === 0) {
+      activePlayersList.innerHTML = '<p style="color: var(--text-secondary); padding: 10px;">No teams in session</p>';
+      return;
+    }
+    
     const list = document.createElement('ol');
     list.style.paddingLeft = '0';
     list.style.marginLeft = '20px';
     list.style.color = 'var(--text-primary)';
     list.style.columns = 'auto';
-    list.style.columnWidth = '250px';
+    list.style.columnWidth = '300px';
     list.style.columnGap = '30px';
     list.style.listStylePosition = 'outside';
     list.style.width = '100%';
     
     // Estimate number of columns based on container width
     const containerWidth = activePlayersList.offsetWidth || 1000;
-    const columnWidth = 250 + 30; // columnWidth + gap
+    const columnWidth = 300 + 30; // columnWidth + gap
     const numColumns = Math.max(1, Math.floor(containerWidth / columnWidth));
-    const itemsPerColumn = Math.ceil(currentSession.config.players.length / numColumns);
+    const itemsPerColumn = Math.ceil(currentSession.config.lockedTeams.length / numColumns);
     
-    currentSession.config.players.forEach((player, idx) => {
-      const isActive = currentSession!.activePlayers.has(player.id);
+    currentSession.config.lockedTeams.forEach((team, idx) => {
+      const player1 = currentSession!.config.players.find(p => p.id === team[0]);
+      const player2 = currentSession!.config.players.find(p => p.id === team[1]);
+      
+      if (!player1 || !player2) return;
+      
+      const isActive = currentSession!.activePlayers.has(player1.id) && currentSession!.activePlayers.has(player2.id);
       const item = document.createElement('li');
       item.style.marginBottom = '8px';
       item.style.display = 'list-item';
@@ -1048,28 +1057,84 @@ function renderActivePlayers() {
       content.style.gap = '10px';
       
       const nameSpan = document.createElement('span');
-      nameSpan.textContent = player.name + (isActive ? '' : ' (Inactive)');
+      nameSpan.textContent = `${player1.name} & ${player2.name}${isActive ? '' : ' (Inactive)'}`;
       nameSpan.style.flex = '1';
       nameSpan.style.color = 'var(--text-primary)';
       
-      const actionBtn = document.createElement('button');
-      if (isActive) {
-        actionBtn.textContent = '×';
-        actionBtn.onclick = () => (window as any).removeSessionPlayer(player.id);
-        actionBtn.style.cssText = 'margin-left: 10px; color: #dc3545; background: transparent; border: 1px solid #dc3545; padding: 2px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;';
-      } else {
-        actionBtn.textContent = '↻';
-        actionBtn.onclick = () => (window as any).reactivatePlayer(player.id);
-        actionBtn.style.cssText = 'margin-left: 10px; color: #28a745; background: transparent; border: 1px solid #28a745; padding: 2px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;';
-      }
-      
       content.appendChild(nameSpan);
-      content.appendChild(actionBtn);
       item.appendChild(content);
       list.appendChild(item);
     });
     
     activePlayersList.appendChild(list);
+  } else {
+    // Regular players display
+    if (currentSession.config.players.length === 0) {
+      activePlayersList.innerHTML = '<p style="color: var(--text-secondary); padding: 10px;">No players in session</p>';
+    } else {
+      const list = document.createElement('ol');
+      list.style.paddingLeft = '0';
+      list.style.marginLeft = '20px';
+      list.style.color = 'var(--text-primary)';
+      list.style.columns = 'auto';
+      list.style.columnWidth = '250px';
+      list.style.columnGap = '30px';
+      list.style.listStylePosition = 'outside';
+      list.style.width = '100%';
+      
+      // Estimate number of columns based on container width
+      const containerWidth = activePlayersList.offsetWidth || 1000;
+      const columnWidth = 250 + 30; // columnWidth + gap
+      const numColumns = Math.max(1, Math.floor(containerWidth / columnWidth));
+      const itemsPerColumn = Math.ceil(currentSession.config.players.length / numColumns);
+      
+      currentSession.config.players.forEach((player, idx) => {
+        const isActive = currentSession!.activePlayers.has(player.id);
+        const item = document.createElement('li');
+        item.style.marginBottom = '8px';
+        item.style.display = 'list-item';
+        item.style.breakInside = 'avoid';
+        item.style.paddingLeft = '10px';
+        
+        // Calculate which column this item is in
+        const columnIndex = Math.floor(idx / itemsPerColumn);
+        const bgClass = columnIndex % 2 === 0 ? 'player-list-item-bg-0' : 'player-list-item-bg-1';
+        item.className = bgClass;
+        
+        if (!isActive) {
+          item.style.opacity = '0.5';
+        }
+        
+        const content = document.createElement('div');
+        content.style.display = 'flex';
+        content.style.justifyContent = 'space-between';
+        content.style.alignItems = 'center';
+        content.style.gap = '10px';
+        
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = player.name + (isActive ? '' : ' (Inactive)');
+        nameSpan.style.flex = '1';
+        nameSpan.style.color = 'var(--text-primary)';
+        
+        const actionBtn = document.createElement('button');
+        if (isActive) {
+          actionBtn.textContent = '×';
+          actionBtn.onclick = () => (window as any).removeSessionPlayer(player.id);
+          actionBtn.style.cssText = 'margin-left: 10px; color: #dc3545; background: transparent; border: 1px solid #dc3545; padding: 2px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;';
+        } else {
+          actionBtn.textContent = '↻';
+          actionBtn.onclick = () => (window as any).reactivatePlayer(player.id);
+          actionBtn.style.cssText = 'margin-left: 10px; color: #28a745; background: transparent; border: 1px solid #28a745; padding: 2px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;';
+        }
+        
+        content.appendChild(nameSpan);
+        content.appendChild(actionBtn);
+        item.appendChild(content);
+        list.appendChild(item);
+      });
+      
+      activePlayersList.appendChild(list);
+    }
   }
 }
 
@@ -1089,59 +1154,118 @@ function renderRankings() {
   
   rankingsList.innerHTML = '';
   
-  const playerIds = currentSession.config.players.map(p => p.id);
-  const rankings = calculatePlayerRankings(playerIds, currentSession.playerStats);
-  
-  if (rankings.length === 0) {
-    rankingsList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No rankings yet. Complete some games to see rankings!</p>';
-    return;
-  }
-  
-  rankings.forEach(ranking => {
-    const player = currentSession!.config.players.find(p => p.id === ranking.playerId);
-    if (!player) return;
+  // For locked teams, show team rankings instead of individual player rankings
+  if (currentSession.config.lockedTeams && currentSession.config.lockedTeams.length > 0) {
+    const rankings = calculateTeamRankings(currentSession.config.lockedTeams, currentSession.playerStats);
     
-    const item = document.createElement('div');
-    item.className = 'ranking-item';
+    if (rankings.length === 0) {
+      rankingsList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No rankings yet. Complete some games to see rankings!</p>';
+      return;
+    }
     
-    // Determine rank badge class
-    let rankClass = '';
-    if (ranking.rank === 1) rankClass = 'rank-1';
-    else if (ranking.rank === 2) rankClass = 'rank-2';
-    else if (ranking.rank === 3) rankClass = 'rank-3';
-    
-    // Determine color class for point differential
-    let diffClass = '';
-    if (ranking.avgPointDifferential > 0) diffClass = 'positive';
-    else if (ranking.avgPointDifferential < 0) diffClass = 'negative';
-    
-    const diffSign = ranking.avgPointDifferential >= 0 ? '+' : '';
-    
-    item.innerHTML = `
-      <div class="rank-badge ${rankClass}">
-        ${ranking.rank === 1 ? '🥇' : ranking.rank === 2 ? '🥈' : ranking.rank === 3 ? '🥉' : ranking.rank}
-      </div>
-      <div class="ranking-info">
-        <div class="ranking-name">${player.name}</div>
-        <div class="ranking-stats">
-          <div class="ranking-stat">
-            <div class="ranking-stat-label">Wins</div>
-            <div class="ranking-stat-value">${ranking.wins}</div>
-          </div>
-          <div class="ranking-stat">
-            <div class="ranking-stat-label">Losses</div>
-            <div class="ranking-stat-value">${ranking.losses}</div>
-          </div>
-          <div class="ranking-stat">
-            <div class="ranking-stat-label">Avg Pt Diff</div>
-            <div class="ranking-stat-value ${diffClass}">${diffSign}${ranking.avgPointDifferential.toFixed(1)}</div>
+    rankings.forEach(ranking => {
+      const player1 = currentSession!.config.players.find(p => p.id === ranking.team[0]);
+      const player2 = currentSession!.config.players.find(p => p.id === ranking.team[1]);
+      
+      if (!player1 || !player2) return;
+      
+      const item = document.createElement('div');
+      item.className = 'ranking-item';
+      
+      // Determine rank badge class
+      let rankClass = '';
+      if (ranking.rank === 1) rankClass = 'rank-1';
+      else if (ranking.rank === 2) rankClass = 'rank-2';
+      else if (ranking.rank === 3) rankClass = 'rank-3';
+      
+      // Determine color class for point differential
+      let diffClass = '';
+      if (ranking.avgPointDifferential > 0) diffClass = 'positive';
+      else if (ranking.avgPointDifferential < 0) diffClass = 'negative';
+      
+      const diffSign = ranking.avgPointDifferential >= 0 ? '+' : '';
+      
+      item.innerHTML = `
+        <div class="rank-badge ${rankClass}">
+          ${ranking.rank === 1 ? '🥇' : ranking.rank === 2 ? '🥈' : ranking.rank === 3 ? '🥉' : ranking.rank}
+        </div>
+        <div class="ranking-info">
+          <div class="ranking-name">${player1.name} & ${player2.name}</div>
+          <div class="ranking-stats">
+            <div class="ranking-stat">
+              <div class="ranking-stat-label">Wins</div>
+              <div class="ranking-stat-value">${ranking.wins}</div>
+            </div>
+            <div class="ranking-stat">
+              <div class="ranking-stat-label">Losses</div>
+              <div class="ranking-stat-value">${ranking.losses}</div>
+            </div>
+            <div class="ranking-stat">
+              <div class="ranking-stat-label">Avg Pt Diff</div>
+              <div class="ranking-stat-value ${diffClass}">${diffSign}${ranking.avgPointDifferential.toFixed(1)}</div>
+            </div>
           </div>
         </div>
-      </div>
-    `;
+      `;
+      
+      rankingsList.appendChild(item);
+    });
+  } else {
+    // Individual player rankings
+    const playerIds = currentSession.config.players.map(p => p.id);
+    const rankings = calculatePlayerRankings(playerIds, currentSession.playerStats);
     
-    rankingsList.appendChild(item);
-  });
+    if (rankings.length === 0) {
+      rankingsList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No rankings yet. Complete some games to see rankings!</p>';
+      return;
+    }
+    
+    rankings.forEach(ranking => {
+      const player = currentSession!.config.players.find(p => p.id === ranking.playerId);
+      if (!player) return;
+      
+      const item = document.createElement('div');
+      item.className = 'ranking-item';
+      
+      // Determine rank badge class
+      let rankClass = '';
+      if (ranking.rank === 1) rankClass = 'rank-1';
+      else if (ranking.rank === 2) rankClass = 'rank-2';
+      else if (ranking.rank === 3) rankClass = 'rank-3';
+      
+      // Determine color class for point differential
+      let diffClass = '';
+      if (ranking.avgPointDifferential > 0) diffClass = 'positive';
+      else if (ranking.avgPointDifferential < 0) diffClass = 'negative';
+      
+      const diffSign = ranking.avgPointDifferential >= 0 ? '+' : '';
+      
+      item.innerHTML = `
+        <div class="rank-badge ${rankClass}">
+          ${ranking.rank === 1 ? '🥇' : ranking.rank === 2 ? '🥈' : ranking.rank === 3 ? '🥉' : ranking.rank}
+        </div>
+        <div class="ranking-info">
+          <div class="ranking-name">${player.name}</div>
+          <div class="ranking-stats">
+            <div class="ranking-stat">
+              <div class="ranking-stat-label">Wins</div>
+              <div class="ranking-stat-value">${ranking.wins}</div>
+            </div>
+            <div class="ranking-stat">
+              <div class="ranking-stat-label">Losses</div>
+              <div class="ranking-stat-value">${ranking.losses}</div>
+            </div>
+            <div class="ranking-stat">
+              <div class="ranking-stat-label">Avg Pt Diff</div>
+              <div class="ranking-stat-value ${diffClass}">${diffSign}${ranking.avgPointDifferential.toFixed(1)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      rankingsList.appendChild(item);
+    });
+  }
 }
 
 function toggleStats() {

@@ -143,3 +143,67 @@ export function calculatePlayerRankings(
   
   return rankedPlayers;
 }
+
+export function calculateTeamRankings(
+  teams: string[][],
+  statsMap: Map<string, PlayerStats>
+): Array<{ team: string[]; rank: number; wins: number; losses: number; avgPointDifferential: number }> {
+  // Calculate rankings for teams by combining both players' stats
+  const teamData = teams
+    .map(team => {
+      const stats1 = statsMap.get(team[0]);
+      const stats2 = statsMap.get(team[1]);
+      
+      if (!stats1 || !stats2) return null;
+      
+      // Team stats are the average of both players
+      const wins = Math.floor((stats1.wins + stats2.wins) / 2);
+      const losses = Math.floor((stats1.losses + stats2.losses) / 2);
+      const totalGames1 = stats1.gamesPlayed;
+      const totalGames2 = stats2.gamesPlayed;
+      
+      // Average point differential across both players
+      const avgPointDiff1 = totalGames1 > 0 ? (stats1.totalPointsFor - stats1.totalPointsAgainst) / totalGames1 : 0;
+      const avgPointDiff2 = totalGames2 > 0 ? (stats2.totalPointsFor - stats2.totalPointsAgainst) / totalGames2 : 0;
+      const avgPointDifferential = (avgPointDiff1 + avgPointDiff2) / 2;
+      
+      return {
+        team,
+        wins,
+        losses,
+        avgPointDifferential,
+      };
+    })
+    .filter((data): data is NonNullable<typeof data> => data !== null);
+  
+  // Sort by wins (descending), then by average point differential (descending)
+  teamData.sort((a, b) => {
+    if (b.wins !== a.wins) {
+      return b.wins - a.wins;
+    }
+    return b.avgPointDifferential - a.avgPointDifferential;
+  });
+  
+  // Assign ranks (handle ties)
+  const rankedTeams: Array<{ team: string[]; rank: number; wins: number; losses: number; avgPointDifferential: number }> = [];
+  
+  for (let i = 0; i < teamData.length; i++) {
+    const teamEntry = teamData[i];
+    let rank = i + 1;
+    
+    // Check if tied with previous team
+    if (i > 0) {
+      const prev = rankedTeams[i - 1];
+      if (prev.wins === teamEntry.wins && prev.avgPointDifferential === teamEntry.avgPointDifferential) {
+        rank = prev.rank; // Same rank as previous
+      }
+    }
+    
+    rankedTeams.push({
+      ...teamEntry,
+      rank,
+    });
+  }
+  
+  return rankedTeams;
+}
