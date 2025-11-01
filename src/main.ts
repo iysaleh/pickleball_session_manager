@@ -459,10 +459,8 @@ function handleForfeitMatch(matchId: string) {
 function renderSession() {
   if (!currentSession) return;
   
-  // Always update match history if visible
-  if (!matchHistorySection.classList.contains('hidden')) {
-    renderMatchHistory();
-  }
+  // Always update match history (now always visible by default)
+  renderMatchHistory();
   
   // Render courts - ALL courts in order, not just active ones
   courtsGrid.innerHTML = '';
@@ -648,11 +646,11 @@ function toggleHistory() {
   if (matchHistorySection.classList.contains('hidden')) {
     matchHistorySection.classList.remove('hidden');
     showHistoryBtn.textContent = 'Hide History';
+    renderMatchHistory();
   } else {
     matchHistorySection.classList.add('hidden');
     showHistoryBtn.textContent = 'Show History';
   }
-  renderMatchHistory();
 }
 
 function renderMatchHistory() {
@@ -889,6 +887,17 @@ function handleEndSession() {
     return;
   }
   
+  // Validate scores
+  if (score1 === score2) {
+    alert('Invalid score: There must be a winner. Scores cannot be tied.');
+    return;
+  }
+  
+  if (score1 < 0 || score2 < 0) {
+    alert('Invalid score: Scores cannot be negative.');
+    return;
+  }
+  
   currentSession = completeMatch(currentSession, matchId, score1, score2);
   renderStats();
   renderMatchHistory();
@@ -904,9 +913,15 @@ function toggleQueue() {
 }
 
 function handleApplyQueuePagination() {
-  matchesPerPage = parseInt(matchesPerPageInput.value) || 10;
-  queuePage = 0;
-  renderQueue();
+  const value = parseInt(matchesPerPageInput.value);
+  if (value && value >= 5 && value <= 50) {
+    matchesPerPage = value;
+    queuePage = 0;
+    renderQueue();
+  } else {
+    alert('Please enter a value between 5 and 50');
+    matchesPerPageInput.value = matchesPerPage.toString();
+  }
 }
 
 function renderQueue() {

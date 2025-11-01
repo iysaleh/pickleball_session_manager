@@ -211,6 +211,7 @@
     
     .player-tag {
       background: var(--bg-tertiary);
+      color: var(--text-primary);
       padding: 8px 15px;
       border-radius: 20px;
       display: flex;
@@ -218,7 +219,7 @@
       gap: 8px;
       box-shadow: 0 2px 4px var(--shadow);
       border: 1px solid var(--border-light);
-      transition: background 0.3s ease;
+      transition: background 0.3s ease, color 0.3s ease;
     }
     
     .player-tag button {
@@ -388,6 +389,14 @@
       font-size: 0.95em;
       font-weight: bold;
       padding: 6px;
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+    
+    .score-input input::-webkit-outer-spin-button,
+    .score-input input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
     }
     
     .vs-text {
@@ -801,7 +810,7 @@
           <h2 class="section-title" style="margin: 0;">📋 Match Queue</h2>
           <div style="display: flex; gap: 10px; align-items: center;">
             <label for="matches-per-page" style="font-size: 0.9em;">Matches per page:</label>
-            <input type="number" id="matches-per-page" value="10" min="5" max="50" step="5" style="width: 60px;">
+            <input type="text" id="matches-per-page" value="10" style="width: 60px; text-align: center;">
             <button id="apply-queue-pagination-btn">Apply</button>
           </div>
         </div>
@@ -815,13 +824,19 @@
         <div id="queue-list"></div>
       </div>
       
+      <!-- Match History Section -->
+      <div id="match-history-section" class="section">
+        <h2 class="section-title">Match History</h2>
+        <div id="match-history-list"></div>
+      </div>
+      
       <!-- Courts Display -->
       <div id="courts-section" class="section hidden">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
           <h2 class="section-title" style="margin: 0;">Active Courts</h2>
           <div style="display: flex; gap: 10px; align-items: center;">
-            <label for="courts-per-row" style="font-size: 0.9em; color: #555;">Courts per row:</label>
-            <input type="number" id="courts-per-row" min="1" max="6" value="2" style="width: 60px; padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
+            <label for="courts-per-row" style="font-size: 0.9em;">Courts per row:</label>
+            <input type="text" id="courts-per-row" value="2" style="width: 60px; text-align: center;">
             <button id="apply-courts-layout-btn" style="padding: 5px 15px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em;">Apply</button>
           </div>
         </div>
@@ -831,12 +846,6 @@
           <div class="waiting-title">⏳ Waiting Players</div>
           <div class="player-list" id="waiting-players"></div>
         </div>
-      </div>
-      
-      <!-- Match History Section -->
-      <div id="match-history-section" class="section hidden">
-        <h2 class="section-title">Match History</h2>
-        <div id="match-history-list"></div>
       </div>
       
       <!-- Statistics Section -->
