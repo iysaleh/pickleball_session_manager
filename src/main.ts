@@ -937,29 +937,8 @@ function renderQueue() {
   
   // For round-robin, show the match queue
   if (currentSession.config.mode === 'round-robin') {
-    // Calculate how many matches we need to display a full page
-    const neededMatches = (queuePage + 1) * matchesPerPage;
-    
-    // If we don't have enough matches in the queue, generate more
-    let displayQueue = [...currentSession.matchQueue];
-    if (displayQueue.length < neededMatches) {
-      // Generate a full round-robin schedule for all active players
-      const allActivePlayers = currentSession.config.players.filter(p => 
-        currentSession.activePlayers.has(p.id)
-      );
-      const fullQueue = generateRoundRobinQueue(
-        allActivePlayers,
-        currentSession.config.sessionType,
-        currentSession.config.bannedPairs
-      );
-      
-      // The displayed queue should show what's left in current queue + more from the full schedule
-      // Repeat the full schedule as many times as needed
-      const timesNeeded = Math.ceil(neededMatches / fullQueue.length);
-      for (let i = 1; i < timesNeeded; i++) {
-        displayQueue = [...displayQueue, ...fullQueue];
-      }
-    }
+    // Just show what's in the actual queue
+    const displayQueue = [...currentSession.matchQueue];
     
     const startIdx = queuePage * matchesPerPage;
     const endIdx = startIdx + matchesPerPage;
@@ -968,7 +947,7 @@ function renderQueue() {
     queuePageInfo.textContent = `Page ${queuePage + 1}`;
     
     queuePrevBtn.disabled = queuePage === 0;
-    queueNextBtn.disabled = pageMatches.length < matchesPerPage;
+    queueNextBtn.disabled = endIdx >= displayQueue.length;
     
     if (pageMatches.length === 0) {
       queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">No queued matches</p>';
