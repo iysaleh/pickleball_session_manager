@@ -15,7 +15,7 @@ export function createSession(config: SessionConfig, maxQueueSize: number = 100)
   
   // Generate match queue for round-robin mode
   const matchQueue = config.mode === 'round-robin'
-    ? generateRoundRobinQueue(config.players, config.sessionType, config.bannedPairs, maxQueueSize)
+    ? generateRoundRobinQueue(config.players, config.sessionType, config.bannedPairs, maxQueueSize, config.lockedTeams)
     : [];
   
   return {
@@ -55,7 +55,8 @@ export function addPlayerToSession(session: Session, player: Player): Session {
       updated.config.players.filter(p => updated.activePlayers.has(p.id)),
       updated.config.sessionType,
       updated.config.bannedPairs,
-      updated.maxQueueSize
+      updated.maxQueueSize,
+      updated.config.lockedTeams
     );
   }
   
@@ -416,7 +417,8 @@ export function refillQueueIfNeeded(session: Session): Session {
       activePlayers,
       session.config.sessionType,
       session.config.bannedPairs,
-      session.maxQueueSize
+      session.maxQueueSize,
+      session.config.lockedTeams
     );
     
     // Append new matches to existing queue
@@ -446,7 +448,8 @@ export function updateMaxQueueSize(session: Session, newMaxSize: number): Sessio
       activePlayers,
       session.config.sessionType,
       session.config.bannedPairs,
-      newMaxSize
+      newMaxSize,
+      session.config.lockedTeams
     );
   }
   

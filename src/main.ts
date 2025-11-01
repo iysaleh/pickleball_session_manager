@@ -6,6 +6,7 @@ import { generateRoundRobinQueue } from './queue';
 let currentSession: Session | null = null;
 let players: Player[] = [];
 let bannedPairs: [string, string][] = [];
+let lockedTeams: string[][] = []; // Array of locked team pairs
 
 // Check for test mode
 const urlParams = new URLSearchParams(window.location.search);
@@ -65,6 +66,13 @@ const queueNextBtn = document.getElementById('queue-next-btn') as HTMLButtonElem
 const queuePageInfo = document.getElementById('queue-page-info') as HTMLElement;
 const startNextRoundBtn = document.getElementById('start-next-round-btn') as HTMLButtonElement;
 
+// Locked teams elements
+const lockedTeamsCheckbox = document.getElementById('locked-teams-checkbox') as HTMLInputElement;
+const lockedTeamsContainer = document.getElementById('locked-teams-container') as HTMLElement;
+const lockedTeamsSetup = document.getElementById('locked-teams-setup') as HTMLElement;
+const addLockedTeamBtn = document.getElementById('add-locked-team-btn') as HTMLButtonElement;
+const lockedTeamsList = document.getElementById('locked-teams-list') as HTMLElement;
+
 // Court layout state
 let courtsPerRow = 2;
 
@@ -106,8 +114,36 @@ queuePrevBtn.addEventListener('click', () => { queuePage = Math.max(0, queuePage
 queueNextBtn.addEventListener('click', () => { queuePage++; renderQueue(); });
 startNextRoundBtn.addEventListener('click', handleStartNextRound);
 
+// Locked teams event listeners
+sessionTypeSelect.addEventListener('change', handleSessionTypeChange);
+lockedTeamsCheckbox.addEventListener('change', handleLockedTeamsToggle);
+addLockedTeamBtn.addEventListener('click', handleAddLockedTeam);
+
+// Add enter key support for team name inputs
+const teamPlayer1NameInput = document.getElementById('team-player1-name') as HTMLInputElement;
+const teamPlayer2NameInput = document.getElementById('team-player2-name') as HTMLInputElement;
+if (teamPlayer1NameInput) {
+  teamPlayer1NameInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      teamPlayer2NameInput.focus();
+    }
+  });
+}
+if (teamPlayer2NameInput) {
+  teamPlayer2NameInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddLockedTeam();
+    }
+  });
+}
+
 // Initialize theme
 initializeTheme();
+
+// Initialize locked teams visibility
+handleSessionTypeChange();
 
 // Functions
 function initializeTheme() {
@@ -176,45 +212,88 @@ function handleAddPlayer() {
 }
 
 function handleAddTestPlayers() {
-  const testNames = [
-    'James Anderson',
-    'Sarah Mitchell',
-    'Michael Chen',
-    'Emily Rodriguez',
-    'David Thompson',
-    'Jessica Williams',
-    'Christopher Lee',
-    'Amanda Martinez',
-    'Daniel Brown',
-    'Lauren Davis',
-    'Matthew Wilson',
-    'Ashley Garcia',
-    'Joshua Taylor',
-    'Rachel Johnson',
-    'Andrew Miller',
-    'Nicole White',
-    'Brandon Moore',
-    'Stephanie Harris'
-  ];
-  
-  // Clear existing players first
-  players = [];
-  bannedPairs = [];
-  
-  testNames.forEach(name => {
-    const player: Player = {
-      id: generateId(),
-      name,
-    };
-    players.push(player);
-  });
-  
-  renderPlayerList();
-  updateBannedPairSelects();
-  renderBannedPairs();
-  
-  // Show a confirmation message
-  alert('✅ Added 18 test players!');
+  // Check if we're in locked teams mode
+  if (lockedTeamsCheckbox.checked) {
+    // Add 9 teams
+    const teamNames = [
+      ['James Anderson', 'Sarah Mitchell'],
+      ['Michael Chen', 'Emily Rodriguez'],
+      ['David Thompson', 'Jessica Williams'],
+      ['Christopher Lee', 'Amanda Martinez'],
+      ['Daniel Brown', 'Lauren Davis'],
+      ['Matthew Wilson', 'Ashley Garcia'],
+      ['Joshua Taylor', 'Rachel Johnson'],
+      ['Andrew Miller', 'Nicole White'],
+      ['Brandon Moore', 'Stephanie Harris']
+    ];
+    
+    // Clear existing players and teams first
+    players = [];
+    lockedTeams = [];
+    bannedPairs = [];
+    
+    teamNames.forEach(([name1, name2]) => {
+      const player1: Player = {
+        id: generateId(),
+        name: name1,
+      };
+      
+      const player2: Player = {
+        id: generateId(),
+        name: name2,
+      };
+      
+      players.push(player1);
+      players.push(player2);
+      lockedTeams.push([player1.id, player2.id]);
+    });
+    
+    renderLockedTeams();
+    updateBannedPairSelects();
+    renderBannedPairs();
+    
+    alert('✅ Added 9 test teams!');
+  } else {
+    // Add 18 individual players
+    const testNames = [
+      'James Anderson',
+      'Sarah Mitchell',
+      'Michael Chen',
+      'Emily Rodriguez',
+      'David Thompson',
+      'Jessica Williams',
+      'Christopher Lee',
+      'Amanda Martinez',
+      'Daniel Brown',
+      'Lauren Davis',
+      'Matthew Wilson',
+      'Ashley Garcia',
+      'Joshua Taylor',
+      'Rachel Johnson',
+      'Andrew Miller',
+      'Nicole White',
+      'Brandon Moore',
+      'Stephanie Harris'
+    ];
+    
+    // Clear existing players first
+    players = [];
+    bannedPairs = [];
+    
+    testNames.forEach(name => {
+      const player: Player = {
+        id: generateId(),
+        name,
+      };
+      players.push(player);
+    });
+    
+    renderPlayerList();
+    updateBannedPairSelects();
+    renderBannedPairs();
+    
+    alert('✅ Added 18 test players!');
+  }
 }
 
 function handleRemovePlayer(playerId: string) {
@@ -360,10 +439,182 @@ function renderBannedPairs() {
   });
 }
 
-function handleStartSession() {
-  if (players.length < 2) {
-    alert('Please add at least 2 players to start a session');
+function handleSessionTypeChange() {
+  // Show/hide locked teams checkbox based on session type
+  if (sessionTypeSelect.value === 'doubles') {
+    lockedTeamsContainer.style.display = 'block';
+  } else {
+    lockedTeamsContainer.style.display = 'none';
+    lockedTeamsCheckbox.checked = false;
+    lockedTeamsSetup.classList.add('hidden');
+    document.getElementById('player-input-section')!.classList.remove('hidden');
+  }
+}
+
+function handleLockedTeamsToggle() {
+  if (lockedTeamsCheckbox.checked) {
+    // Show team input interface, hide individual player interface
+    lockedTeamsSetup.classList.remove('hidden');
+    document.getElementById('player-input-section')!.classList.add('hidden');
+    renderLockedTeams();
+  } else {
+    // Show individual player interface, hide team interface
+    lockedTeamsSetup.classList.add('hidden');
+    document.getElementById('player-input-section')!.classList.remove('hidden');
+    lockedTeams = [];
+    renderPlayerList();
+  }
+}
+
+// No longer needed - players are added directly as teams
+function updateTeamPlayerSelects() {
+  // Deprecated - kept for backwards compatibility
+}
+
+function handleAddLockedTeam() {
+  const player1Name = (document.getElementById('team-player1-name') as HTMLInputElement).value.trim();
+  const player2Name = (document.getElementById('team-player2-name') as HTMLInputElement).value.trim();
+  
+  if (!player1Name || !player2Name) {
+    alert('Please enter both player names');
     return;
+  }
+  
+  if (player1Name === player2Name) {
+    alert('Please enter two different player names');
+    return;
+  }
+  
+  // Create two new players
+  const player1: Player = {
+    id: generateId(),
+    name: player1Name,
+  };
+  
+  const player2: Player = {
+    id: generateId(),
+    name: player2Name,
+  };
+  
+  // Add to players array
+  players.push(player1);
+  players.push(player2);
+  
+  // Add to locked teams
+  lockedTeams.push([player1.id, player2.id]);
+  
+  // Clear inputs
+  (document.getElementById('team-player1-name') as HTMLInputElement).value = '';
+  (document.getElementById('team-player2-name') as HTMLInputElement).value = '';
+  
+  renderLockedTeams();
+  updateBannedPairSelects();
+}
+
+function handleRemoveLockedTeam(index: number) {
+  const team = lockedTeams[index];
+  
+  // Remove the team
+  lockedTeams.splice(index, 1);
+  
+  // Remove the players from the players array
+  players = players.filter(p => !team.includes(p.id));
+  
+  // Remove from banned pairs
+  team.forEach(playerId => {
+    for (let i = bannedPairs.length - 1; i >= 0; i--) {
+      if (bannedPairs[i][0] === playerId || bannedPairs[i][1] === playerId) {
+        bannedPairs.splice(i, 1);
+      }
+    }
+  });
+  
+  renderLockedTeams();
+  updateBannedPairSelects();
+  renderBannedPairs();
+}
+
+function renderLockedTeams() {
+  lockedTeamsList.innerHTML = '';
+  
+  if (lockedTeams.length === 0) {
+    lockedTeamsList.innerHTML = '<p style="color: var(--text-secondary); padding: 10px;">No teams added yet</p>';
+    return;
+  }
+  
+  // Create a numbered list
+  const list = document.createElement('ol');
+  list.style.paddingLeft = '0';
+  list.style.marginLeft = '20px';
+  list.style.color = 'var(--text-primary)';
+  list.style.columns = 'auto';
+  list.style.columnWidth = '300px';
+  list.style.columnGap = '30px';
+  list.style.listStylePosition = 'outside';
+  list.style.width = '100%';
+  
+  lockedTeams.forEach((team, index) => {
+    const player1 = players.find(p => p.id === team[0]);
+    const player2 = players.find(p => p.id === team[1]);
+    
+    if (player1 && player2) {
+      const item = document.createElement('li');
+      item.style.marginBottom = '8px';
+      item.style.display = 'list-item';
+      item.style.breakInside = 'avoid';
+      item.style.paddingLeft = '10px';
+      
+      // Alternate background colors for columns
+      const containerWidth = lockedTeamsList.offsetWidth || 1000;
+      const columnWidth = 300 + 30;
+      const numColumns = Math.max(1, Math.floor(containerWidth / columnWidth));
+      const itemsPerColumn = Math.ceil(lockedTeams.length / numColumns);
+      const columnIndex = Math.floor(index / itemsPerColumn);
+      const bgClass = columnIndex % 2 === 0 ? 'player-list-item-bg-0' : 'player-list-item-bg-1';
+      item.className = bgClass;
+      
+      const content = document.createElement('div');
+      content.style.display = 'flex';
+      content.style.justifyContent = 'space-between';
+      content.style.alignItems = 'center';
+      content.style.gap = '10px';
+      
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = `${player1.name} & ${player2.name}`;
+      nameSpan.style.flex = '1';
+      nameSpan.style.color = 'var(--text-primary)';
+      
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '×';
+      removeBtn.onclick = () => (window as any).removeLockedTeam(index);
+      removeBtn.style.cssText = 'margin-left: 10px; color: #dc3545; background: transparent; border: 1px solid #dc3545; padding: 2px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;';
+      
+      content.appendChild(nameSpan);
+      content.appendChild(removeBtn);
+      item.appendChild(content);
+      list.appendChild(item);
+    }
+  });
+  
+  lockedTeamsList.appendChild(list);
+  
+  // Update start button state
+  startSessionBtn.disabled = lockedTeams.length < 2;
+}
+
+function handleStartSession() {
+  // Validate locked teams if enabled
+  if (lockedTeamsCheckbox.checked) {
+    if (lockedTeams.length < 2) {
+      alert('Please create at least 2 locked teams to start a session');
+      return;
+    }
+  } else {
+    // Normal mode - just check player count
+    if (players.length < 2) {
+      alert('Please add at least 2 players to start a session');
+      return;
+    }
   }
   
   const config: SessionConfig = {
@@ -372,6 +623,7 @@ function handleStartSession() {
     players: [...players],
     courts: parseInt(numCourtsInput.value),
     bannedPairs: [...bannedPairs],
+    lockedTeams: lockedTeamsCheckbox.checked ? [...lockedTeams] : undefined,
   };
   
   const maxQueueSize = parseInt(setupMaxQueueSizeInput.value) || 100;
@@ -962,14 +1214,14 @@ function renderStats() {
 
 function handleEditSession() {
   if (!currentSession) return;
-  
+
   if (!confirm('This will end the current session but keep all players. You can then reconfigure and start a new session. Continue?')) {
     return;
   }
-  
+
   // Keep players but clear session
   currentSession = null;
-  
+
   // Show setup section, hide others
   setupSection.classList.remove('hidden');
   controlSection.classList.add('hidden');
@@ -977,12 +1229,17 @@ function handleEditSession() {
   statsSection.classList.add('hidden');
   matchHistorySection.classList.add('hidden');
   queueSection.classList.add('hidden'); // Hide queue when editing
-  
-  // Players are already in the players array, just re-render
-  renderPlayerList();
+
+  // Reset locked teams UI state if needed
+  if (lockedTeamsCheckbox.checked) {
+    renderLockedTeams();
+  } else {
+    // Players are already in the players array, just re-render
+    renderPlayerList();
+  }
   updateBannedPairSelects();
   renderBannedPairs();
-  
+
   alert('✅ Session ended. Players saved. You can now change settings and start a new session.');
 }
 
@@ -994,6 +1251,7 @@ function handleEndSession() {
   currentSession = null;
   players = [];
   bannedPairs = [];
+  lockedTeams = [];
   
   setupSection.classList.remove('hidden');
   controlSection.classList.add('hidden');
@@ -1005,11 +1263,13 @@ function handleEndSession() {
   renderPlayerList();
   updateBannedPairSelects();
   renderBannedPairs();
+  renderLockedTeams();
 }
 
 // Expose functions to window for onclick handlers
 (window as any).removePlayer = handleRemovePlayer;
 (window as any).removeBannedPair = handleRemoveBannedPair;
+(window as any).removeLockedTeam = handleRemoveLockedTeam;
 (window as any).removeSessionPlayer = handleRemoveSessionPlayer;
 (window as any).reactivatePlayer = (playerId: string) => {
   if (!currentSession) return;

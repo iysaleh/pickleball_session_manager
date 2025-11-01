@@ -1,4 +1,4 @@
-import type { Player, Session, Match, PlayerStats } from './types';
+import type { Player, Session, Match, PlayerStats, LockedTeam } from './types';
 import { generateId, isPairBanned } from './utils';
 
 /**
@@ -23,9 +23,14 @@ export function generateKingOfCourtRound(
   session: Session
 ): Match[] {
   const { config, playerStats, activePlayers, matches } = session;
-  const { courts, sessionType, bannedPairs } = config;
+  const { courts, sessionType, bannedPairs, lockedTeams } = config;
   const playersPerTeam = sessionType === 'singles' ? 1 : 2;
   const playersPerMatch = playersPerTeam * 2;
+  
+  // If locked teams mode, use special logic
+  if (lockedTeams && lockedTeams.length > 0) {
+    return generateLockedTeamsKingOfCourtRound(session);
+  }
   
   const activePlayerIds = Array.from(activePlayers);
   
@@ -387,4 +392,143 @@ function createKingOfCourtMatch(
     team2,
     status: 'waiting',
   };
+}
+
+/**
+ * Generate King of Court round with locked teams
+ */
+function generateLockedTeamsKingOfCourtRound(session: Session): Match[] {
+  const { config, playerStats, matches } = session;
+  const { courts, lockedTeams } = config;
+  
+  if (!lockedTeams || lockedTeams.length < 2) {
+    return [];
+  }
+  
+  // Get team stats (aggregate from individual players)
+  const teamStats = lockedTeams.map((team, idx) => {
+    const totalGames = team.reduce((sum, playerId) => {
+      const stats = playerStats.get(playerId);
+      return sum + (stats?.gamesPlayed || 0);
+    }, 0);
+    
+    const totalWaits = team.reduce((sum, playerId) => {
+      const stats = playerStats.get(playerId);
+      return sum + (stats?.gamesWaited || 0);
+    }, 0);
+    
+    const totalWins = team.reduce((sum, playerId) => {
+      const stats = playerStats.get(playerId);
+      return sum + (stats?.wins || 0);
+    }, 0);
+    
+    return {
+      teamIdx: idx,
+      team,
+      gamesPlayed: totalGames / team.length,
+      gamesWaited: totalWaits / team.length,
+      wins: totalWins / team.length,
+      winRate: totalGames > 0 ? totalWins / totalGames : 0.5,
+    };
+  });
+  
+  // Sort teams by priority (who needs to play)
+  const sortedTeams = teamStats.sort((a, b) => {
+    // Prioritize by waits
+    if (a.gamesWaited !== b.gamesWaited) {
+      return b.gamesWaited - a.gamesWaited;
+    }
+    // Then by games played
+    return a.gamesPlayed - b.gamesPlayed;
+  });
+  
+  // Track recent opponents
+  const recentOpponents = getRecentTeamOpponents(lockedTeams, matches, 2);
+  
+  const newMatches: Match[] = [];
+  const usedTeamIndices = new Set<number>();
+  
+  for (let courtNum = 1; courtNum <= courts; courtNum++) {
+    const availableTeams = sortedTeams.filter(t => !usedTeamIndices.has(t.teamIdx));
+    
+    if (availableTeams.length < 2) {
+      break;
+    }
+    
+    // Take first team
+    const team1Data = availableTeams[0];
+    
+    // Find best opponent for team1 (similar win rate, not recent opponent)
+    let bestOpponent = availableTeams[1];
+    let bestScore = Infinity;
+    
+    for (let i = 1; i < availableTeams.length; i++) {
+      const team2Data = availableTeams[i];
+      let score = 0;
+      
+      // Prefer balanced matchups (similar win rates)
+      score += Math.abs(team1Data.winRate - team2Data.winRate) * 100;
+      
+      // Avoid recent opponents
+      const oppKey = [team1Data.teamIdx, team2Data.teamIdx].sort().join('-');
+      if (recentOpponents.has(oppKey)) {
+        score += 500;
+      }
+      
+      if (score < bestScore) {
+        bestScore = score;
+        bestOpponent = team2Data;
+      }
+    }
+    
+    const match = createKingOfCourtMatch(
+      courtNum,
+      team1Data.team,
+      bestOpponent.team,
+      playerStats
+    );
+    
+    newMatches.push(match);
+    usedTeamIndices.add(team1Data.teamIdx);
+    usedTeamIndices.add(bestOpponent.teamIdx);
+  }
+  
+  return newMatches;
+}
+
+/**
+ * Get recent team opponent pairings
+ */
+function getRecentTeamOpponents(
+  lockedTeams: string[][],
+  matches: Match[],
+  rounds: number
+): Set<string> {
+  const opponents = new Set<string>();
+  const completedMatches = matches.filter(m => m.status === 'completed').reverse();
+  const recentRounds = getLastNRounds(completedMatches, rounds);
+  
+  // Create team lookup map
+  const teamIndexMap = new Map<string, number>();
+  lockedTeams.forEach((team, idx) => {
+    const key = [...team].sort().join(',');
+    teamIndexMap.set(key, idx);
+  });
+  
+  recentRounds.forEach(round => {
+    round.forEach(match => {
+      const team1Key = [...match.team1].sort().join(',');
+      const team2Key = [...match.team2].sort().join(',');
+      
+      const team1Idx = teamIndexMap.get(team1Key);
+      const team2Idx = teamIndexMap.get(team2Key);
+      
+      if (team1Idx !== undefined && team2Idx !== undefined) {
+        const oppKey = [team1Idx, team2Idx].sort().join('-');
+        opponents.add(oppKey);
+      }
+    });
+  });
+  
+  return opponents;
 }

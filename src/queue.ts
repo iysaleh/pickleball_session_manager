@@ -1,4 +1,4 @@
-import type { Player, TeamPair, PlayerStats, QueuedMatch, SessionType } from './types';
+import type { Player, TeamPair, PlayerStats, QueuedMatch, SessionType, LockedTeam } from './types';
 import { isPairBanned } from './utils';
 
 /**
@@ -9,8 +9,14 @@ export function generateRoundRobinQueue(
   players: Player[],
   sessionType: SessionType,
   bannedPairs: TeamPair[],
-  maxMatches?: number
+  maxMatches?: number,
+  lockedTeams?: LockedTeam[]
 ): QueuedMatch[] {
+  // If locked teams mode, use special generator
+  if (lockedTeams && lockedTeams.length > 0) {
+    return generateLockedTeamsRoundRobinQueue(lockedTeams, maxMatches);
+  }
+  
   const playersPerTeam = sessionType === 'singles' ? 1 : 2;
   const playersPerMatch = playersPerTeam * 2;
   
@@ -259,4 +265,110 @@ function isValidTeamConfiguration(
   }
   
   return true;
+}
+
+/**
+ * Generate round-robin matches for locked teams
+ * Teams stay together, only opponents change
+ */
+function generateLockedTeamsRoundRobinQueue(
+  lockedTeams: LockedTeam[],
+  maxMatches?: number
+): QueuedMatch[] {
+  const matches: QueuedMatch[] = [];
+  
+  if (lockedTeams.length < 2) {
+    return [];
+  }
+  
+  // Track which team pairings have been used
+  const usedPairings = new Set<string>();
+  const gamesPlayed = new Map<number, number>(); // team index -> games count
+  const opponentCount = new Map<number, Map<number, number>>(); // team -> opponent -> count
+  
+  lockedTeams.forEach((_, idx) => {
+    gamesPlayed.set(idx, 0);
+    opponentCount.set(idx, new Map());
+  });
+  
+  function getPairingKey(team1Idx: number, team2Idx: number): string {
+    return [team1Idx, team2Idx].sort().join('-');
+  }
+  
+  let iterations = 0;
+  const maxIterations = lockedTeams.length * lockedTeams.length * 10;
+  
+  while (iterations < maxIterations && (!maxMatches || matches.length < maxMatches)) {
+    // Score all possible pairings
+    const scoredPairings: Array<{ team1Idx: number; team2Idx: number; score: number }> = [];
+    
+    for (let i = 0; i < lockedTeams.length; i++) {
+      for (let j = i + 1; j < lockedTeams.length; j++) {
+        const pairingKey = getPairingKey(i, j);
+        
+        if (usedPairings.has(pairingKey)) {
+          continue;
+        }
+        
+        // Calculate score (lower is better)
+        let score = 0;
+        
+        // Prioritize teams with fewer games
+        score += (gamesPlayed.get(i) || 0) * 1000;
+        score += (gamesPlayed.get(j) || 0) * 1000;
+        
+        // Penalize teams that have played each other before
+        const prevOpponentCount = opponentCount.get(i)?.get(j) || 0;
+        score += prevOpponentCount * 500;
+        
+        scoredPairings.push({ team1Idx: i, team2Idx: j, score });
+      }
+    }
+    
+    if (scoredPairings.length === 0) {
+      break;
+    }
+    
+    // Sort by score and try to assign matches
+    scoredPairings.sort((a, b) => a.score - b.score);
+    
+    const usedTeamsThisRound = new Set<number>();
+    let addedMatchesThisRound = false;
+    
+    for (const pairing of scoredPairings) {
+      if (maxMatches && matches.length >= maxMatches) {
+        break;
+      }
+      
+      if (usedTeamsThisRound.has(pairing.team1Idx) || usedTeamsThisRound.has(pairing.team2Idx)) {
+        continue;
+      }
+      
+      matches.push({
+        team1: lockedTeams[pairing.team1Idx],
+        team2: lockedTeams[pairing.team2Idx],
+      });
+      
+      addedMatchesThisRound = true;
+      usedPairings.add(getPairingKey(pairing.team1Idx, pairing.team2Idx));
+      usedTeamsThisRound.add(pairing.team1Idx);
+      usedTeamsThisRound.add(pairing.team2Idx);
+      
+      // Update tracking
+      gamesPlayed.set(pairing.team1Idx, (gamesPlayed.get(pairing.team1Idx) || 0) + 1);
+      gamesPlayed.set(pairing.team2Idx, (gamesPlayed.get(pairing.team2Idx) || 0) + 1);
+      
+      const count = opponentCount.get(pairing.team1Idx)?.get(pairing.team2Idx) || 0;
+      opponentCount.get(pairing.team1Idx)?.set(pairing.team2Idx, count + 1);
+      opponentCount.get(pairing.team2Idx)?.set(pairing.team1Idx, count + 1);
+    }
+    
+    if (!addedMatchesThisRound) {
+      break;
+    }
+    
+    iterations++;
+  }
+  
+  return matches;
 }

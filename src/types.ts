@@ -3,11 +3,13 @@ export type Player = {
   name: string;
 };
 
-export type GameMode = 'king-of-court' | 'round-robin' | 'teams';
+export type GameMode = 'king-of-court' | 'round-robin';
 
 export type SessionType = 'doubles' | 'singles';
 
 export type TeamPair = [string, string]; // player IDs
+
+export type LockedTeam = string[]; // 2 player IDs for doubles
 
 export type Match = {
   id: string;
@@ -28,6 +30,7 @@ export type SessionConfig = {
   players: Player[];
   courts: number;
   bannedPairs: TeamPair[];
+  lockedTeams?: LockedTeam[]; // Optional locked teams for doubles only
 };
 
 export type QueuedMatch = {
