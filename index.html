@@ -788,6 +788,24 @@
           </div>
         </div>
         
+        <!-- Advanced Config Toggle -->
+        <div style="margin-top: 20px; margin-bottom: 10px;">
+          <button id="advanced-config-toggle" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); padding: 8px 15px; display: flex; align-items: center; gap: 8px; font-size: 0.9em;">
+            <span style="font-size: 1.2em;">⚙️</span>
+            <span>Advanced Configuration</span>
+          </button>
+        </div>
+        
+        <!-- Advanced Config Section (hidden by default) -->
+        <div id="advanced-config-section" class="hidden" style="padding: 15px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 15px;">
+          <h3 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 1.1em;">Advanced Settings</h3>
+          <div class="form-group">
+            <label for="setup-max-queue-size">Max Queue Size</label>
+            <input type="number" id="setup-max-queue-size" min="10" max="1000" value="100">
+            <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Maximum number of matches to pre-calculate in the queue</p>
+          </div>
+        </div>
+        
         <div class="form-group" style="margin-top: 20px;">
           <label for="player-name">Add Players</label>
           <div style="display: flex; gap: 10px;">
@@ -858,7 +876,9 @@
       <div id="queue-section" class="section hidden">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
           <h2 class="section-title" style="margin: 0;">📋 Match Queue</h2>
-          <div style="display: flex; gap: 10px; align-items: center;">
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <label for="max-queue-size" style="font-size: 0.9em;">Max queue size:</label>
+            <input type="number" id="max-queue-size" value="100" min="10" max="1000" style="width: 70px; text-align: center;">
             <label for="matches-per-page" style="font-size: 0.9em;">Matches per page:</label>
             <input type="number" id="matches-per-page" value="10" style="width: 60px; text-align: center;">
             <button id="apply-queue-pagination-btn">Apply</button>

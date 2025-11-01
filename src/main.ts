@@ -1,5 +1,5 @@
 import type { Session, Player, SessionConfig, Match } from './types';
-import { createSession, addPlayerToSession, removePlayerFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches, canStartNextRound, startNextRound } from './session';
+import { createSession, addPlayerToSession, removePlayerFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches, canStartNextRound, startNextRound, updateMaxQueueSize } from './session';
 import { generateId } from './utils';
 import { generateRoundRobinQueue } from './queue';
 
@@ -26,6 +26,7 @@ const playerList = document.getElementById('player-list') as HTMLElement;
 const gameModeSelect = document.getElementById('game-mode') as HTMLSelectElement;
 const sessionTypeSelect = document.getElementById('session-type') as HTMLSelectElement;
 const numCourtsInput = document.getElementById('num-courts') as HTMLInputElement;
+const setupMaxQueueSizeInput = document.getElementById('setup-max-queue-size') as HTMLInputElement;
 
 const bannedPlayer1Select = document.getElementById('banned-player1') as HTMLSelectElement;
 const bannedPlayer2Select = document.getElementById('banned-player2') as HTMLSelectElement;
@@ -50,10 +51,13 @@ const statsGrid = document.getElementById('stats-grid') as HTMLElement;
 const matchHistorySection = document.getElementById('match-history-section') as HTMLElement;
 const matchHistoryList = document.getElementById('match-history-list') as HTMLElement;
 const themeToggle = document.getElementById('theme-toggle') as HTMLButtonElement;
+const advancedConfigToggle = document.getElementById('advanced-config-toggle') as HTMLButtonElement;
+const advancedConfigSection = document.getElementById('advanced-config-section') as HTMLElement;
 
 const queueSection = document.getElementById('queue-section') as HTMLElement;
 const queueList = document.getElementById('queue-list') as HTMLElement;
 const showQueueBtn = document.getElementById('show-queue-btn') as HTMLButtonElement;
+const maxQueueSizeInput = document.getElementById('max-queue-size') as HTMLInputElement;
 const matchesPerPageInput = document.getElementById('matches-per-page') as HTMLInputElement;
 const applyQueuePaginationBtn = document.getElementById('apply-queue-pagination-btn') as HTMLButtonElement;
 const queuePrevBtn = document.getElementById('queue-prev-btn') as HTMLButtonElement;
@@ -95,6 +99,7 @@ sessionPlayerNameInput.addEventListener('keypress', (e) => {
 });
 applyLayoutBtn.addEventListener('click', handleApplyLayout);
 themeToggle.addEventListener('click', toggleTheme);
+advancedConfigToggle.addEventListener('click', toggleAdvancedConfig);
 showQueueBtn.addEventListener('click', toggleQueue);
 applyQueuePaginationBtn.addEventListener('click', handleApplyQueuePagination);
 queuePrevBtn.addEventListener('click', () => { queuePage = Math.max(0, queuePage - 1); renderQueue(); });
@@ -134,6 +139,10 @@ function toggleTheme() {
     themeToggle.textContent = '☀️';
     localStorage.setItem('theme', 'light');
   }
+}
+
+function toggleAdvancedConfig() {
+  advancedConfigSection.classList.toggle('hidden');
 }
 
 function handleApplyLayout() {
@@ -365,7 +374,11 @@ function handleStartSession() {
     bannedPairs: [...bannedPairs],
   };
   
-  currentSession = createSession(config);
+  const maxQueueSize = parseInt(setupMaxQueueSizeInput.value) || 100;
+  currentSession = createSession(config, maxQueueSize);
+  
+  // Sync the active session max queue size input with setup value
+  maxQueueSizeInput.value = setupMaxQueueSizeInput.value;
   // Automatically create initial matches
   currentSession = evaluateAndCreateMatches(currentSession);
   
@@ -1027,14 +1040,34 @@ function toggleQueue() {
 }
 
 function handleApplyQueuePagination() {
-  const value = parseInt(matchesPerPageInput.value);
-  if (value && value >= 5 && value <= 50) {
-    matchesPerPage = value;
+  const matchesValue = parseInt(matchesPerPageInput.value);
+  const maxQueueValue = parseInt(maxQueueSizeInput.value);
+  
+  let updated = false;
+  
+  // Update matches per page
+  if (matchesValue && matchesValue >= 5 && matchesValue <= 50) {
+    matchesPerPage = matchesValue;
     queuePage = 0;
-    renderQueue();
-  } else {
-    alert('Please enter a value between 5 and 50');
+    updated = true;
+  } else if (matchesValue) {
+    alert('Matches per page must be between 5 and 50');
     matchesPerPageInput.value = matchesPerPage.toString();
+  }
+  
+  // Update max queue size
+  if (maxQueueValue && maxQueueValue >= 10 && maxQueueValue <= 1000) {
+    if (currentSession) {
+      currentSession = updateMaxQueueSize(currentSession, maxQueueValue);
+      updated = true;
+    }
+  } else if (maxQueueValue) {
+    alert('Max queue size must be between 10 and 1000');
+    maxQueueSizeInput.value = currentSession?.maxQueueSize.toString() || '100';
+  }
+  
+  if (updated) {
+    renderQueue();
   }
 }
 

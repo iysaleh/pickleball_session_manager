@@ -3,7 +3,7 @@ import { generateId, createPlayerStats, getPlayersWhoWaitedMost } from './utils'
 import { selectPlayersForNextGame, createMatch } from './matchmaking';
 import { generateRoundRobinQueue } from './queue';
 
-export function createSession(config: SessionConfig): Session {
+export function createSession(config: SessionConfig, maxQueueSize: number = 100): Session {
   const playerStats = new Map<string, PlayerStats>();
   const activePlayers = new Set<string>();
   
@@ -14,7 +14,7 @@ export function createSession(config: SessionConfig): Session {
   
   // Generate match queue for round-robin mode
   const matchQueue = config.mode === 'round-robin'
-    ? generateRoundRobinQueue(config.players, config.sessionType, config.bannedPairs)
+    ? generateRoundRobinQueue(config.players, config.sessionType, config.bannedPairs, maxQueueSize)
     : [];
   
   return {
@@ -25,6 +25,7 @@ export function createSession(config: SessionConfig): Session {
     playerStats,
     activePlayers,
     matchQueue,
+    maxQueueSize,
   };
 }
 
@@ -52,7 +53,8 @@ export function addPlayerToSession(session: Session, player: Player): Session {
     updated.matchQueue = generateRoundRobinQueue(
       updated.config.players.filter(p => updated.activePlayers.has(p.id)),
       updated.config.sessionType,
-      updated.config.bannedPairs
+      updated.config.bannedPairs,
+      updated.maxQueueSize
     );
   }
   
@@ -179,12 +181,17 @@ export function evaluateAndCreateMatches(session: Session): Session {
       }
     });
     
-    return {
+    let updated = {
       ...session,
       matches: [...session.matches, ...newMatches],
       waitingPlayers: stillWaiting,
       matchQueue: updatedQueue,
     };
+    
+    // Check if we need to refill the queue
+    updated = refillQueueIfNeeded(updated);
+    
+    return updated;
   }
   
   // For teams mode, use the original logic
@@ -366,4 +373,60 @@ export function startNextRound(session: Session): Session {
   }
   
   return evaluateAndCreateMatches(session);
+}
+
+/**
+ * Refill the match queue if it's below 80% of maxQueueSize
+ */
+export function refillQueueIfNeeded(session: Session): Session {
+  if (session.config.mode !== 'round-robin') {
+    return session;
+  }
+  
+  const threshold = Math.floor(session.maxQueueSize * 0.8);
+  
+  if (session.matchQueue.length < threshold) {
+    // Get active players
+    const activePlayers = session.config.players.filter(p => session.activePlayers.has(p.id));
+    
+    // Generate more matches up to maxQueueSize
+    const additionalMatches = generateRoundRobinQueue(
+      activePlayers,
+      session.config.sessionType,
+      session.config.bannedPairs,
+      session.maxQueueSize
+    );
+    
+    // Append new matches to existing queue
+    return {
+      ...session,
+      matchQueue: [...session.matchQueue, ...additionalMatches],
+    };
+  }
+  
+  return session;
+}
+
+/**
+ * Update the maxQueueSize and regenerate queue if necessary
+ */
+export function updateMaxQueueSize(session: Session, newMaxSize: number): Session {
+  const updated = {
+    ...session,
+    maxQueueSize: newMaxSize,
+  };
+  
+  // If current queue is larger than new max, keep it
+  // If current queue is smaller and mode is round-robin, regenerate
+  if (session.config.mode === 'round-robin' && session.matchQueue.length < newMaxSize) {
+    const activePlayers = session.config.players.filter(p => session.activePlayers.has(p.id));
+    updated.matchQueue = generateRoundRobinQueue(
+      activePlayers,
+      session.config.sessionType,
+      session.config.bannedPairs,
+      newMaxSize
+    );
+  }
+  
+  return updated;
 }

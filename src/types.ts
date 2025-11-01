@@ -43,6 +43,7 @@ export type Session = {
   playerStats: Map<string, PlayerStats>;
   activePlayers: Set<string>; // player IDs currently active in session
   matchQueue: QueuedMatch[]; // Pre-generated matches for round-robin
+  maxQueueSize: number; // Maximum number of matches to pre-generate
 };
 
 export type PlayerStats = {

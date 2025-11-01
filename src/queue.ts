@@ -8,7 +8,8 @@ import { isPairBanned } from './utils';
 export function generateRoundRobinQueue(
   players: Player[],
   sessionType: SessionType,
-  bannedPairs: TeamPair[]
+  bannedPairs: TeamPair[],
+  maxMatches?: number
 ): QueuedMatch[] {
   const playersPerTeam = sessionType === 'singles' ? 1 : 2;
   const playersPerMatch = playersPerTeam * 2;
@@ -74,7 +75,7 @@ export function generateRoundRobinQueue(
   let iterations = 0;
   const maxIterations = allMatchups.length * 10; // Safety limit
   
-  while (iterations < maxIterations) {
+  while (iterations < maxIterations && (!maxMatches || matches.length < maxMatches)) {
     // Score each matchup based on partner diversity
     const scoredMatchups = allMatchups.map(matchup => {
       const { team1, team2, combo } = matchup;
