@@ -718,6 +718,24 @@
       font-size: 0.95em;
       color: var(--text-primary);
     }
+    
+    /* Player list column styling with manual background control */
+    .player-list-item-bg-0 {
+      background: transparent;
+    }
+    
+    .player-list-item-bg-1 {
+      background: rgba(102, 126, 234, 0.06);
+      border-radius: 4px;
+      margin-left: -5px;
+      padding-left: 5px;
+      margin-right: -5px;
+      padding-right: 5px;
+    }
+    
+    [data-theme="dark"] .player-list-item-bg-1 {
+      background: rgba(88, 166, 255, 0.1);
+    }
   </style>
 </head>
 <body>

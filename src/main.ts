@@ -242,12 +242,23 @@ function renderPlayerList() {
     list.style.listStylePosition = 'outside';
     list.style.width = '100%';
     
-    players.forEach(player => {
+    // Estimate number of columns based on container width
+    const containerWidth = playerList.offsetWidth || 1000;
+    const columnWidth = 250 + 30; // columnWidth + gap
+    const numColumns = Math.max(1, Math.floor(containerWidth / columnWidth));
+    const itemsPerColumn = Math.ceil(players.length / numColumns);
+    
+    players.forEach((player, idx) => {
       const item = document.createElement('li');
       item.style.marginBottom = '8px';
       item.style.display = 'list-item';
       item.style.breakInside = 'avoid';
       item.style.paddingLeft = '10px';
+      
+      // Calculate which column this item is in
+      const columnIndex = Math.floor(idx / itemsPerColumn);
+      const bgClass = columnIndex % 2 === 0 ? 'player-list-item-bg-0' : 'player-list-item-bg-1';
+      item.className = bgClass;
       
       const content = document.createElement('div');
       content.style.display = 'flex';
@@ -378,6 +389,7 @@ function handleStartSession() {
   
   renderSession();
   renderActivePlayers();
+  renderQueue(); // Render queue initially
 }
 
 function handleAddSessionPlayer() {
@@ -672,13 +684,24 @@ function renderActivePlayers() {
     list.style.listStylePosition = 'outside';
     list.style.width = '100%';
     
-    currentSession.config.players.forEach(player => {
+    // Estimate number of columns based on container width
+    const containerWidth = activePlayersList.offsetWidth || 1000;
+    const columnWidth = 250 + 30; // columnWidth + gap
+    const numColumns = Math.max(1, Math.floor(containerWidth / columnWidth));
+    const itemsPerColumn = Math.ceil(currentSession.config.players.length / numColumns);
+    
+    currentSession.config.players.forEach((player, idx) => {
       const isActive = currentSession!.activePlayers.has(player.id);
       const item = document.createElement('li');
       item.style.marginBottom = '8px';
       item.style.display = 'list-item';
       item.style.breakInside = 'avoid';
       item.style.paddingLeft = '10px';
+      
+      // Calculate which column this item is in
+      const columnIndex = Math.floor(idx / itemsPerColumn);
+      const bgClass = columnIndex % 2 === 0 ? 'player-list-item-bg-0' : 'player-list-item-bg-1';
+      item.className = bgClass;
       
       if (!isActive) {
         item.style.opacity = '0.5';
