@@ -400,10 +400,17 @@
     }
     
     /* Remove spinners from all number inputs */
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button,
     input[type="text"]::-webkit-outer-spin-button,
     input[type="text"]::-webkit-inner-spin-button {
       -webkit-appearance: none;
       margin: 0;
+    }
+    
+    input[type="number"] {
+      -moz-appearance: textfield;
+      appearance: textfield;
     }
     
     .vs-text {
@@ -817,7 +824,7 @@
           <h2 class="section-title" style="margin: 0;">Active Courts</h2>
           <div style="display: flex; gap: 10px; align-items: center;">
             <label for="courts-per-row" style="font-size: 0.9em;">Courts per row:</label>
-            <input type="text" id="courts-per-row" value="2" style="width: 60px; text-align: center; -moz-appearance: textfield; appearance: textfield;">
+            <input type="number" id="courts-per-row" value="2" style="width: 60px; text-align: center;">
             <button id="apply-courts-layout-btn" style="padding: 5px 15px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em;">Apply</button>
           </div>
         </div>
@@ -835,7 +842,7 @@
           <h2 class="section-title" style="margin: 0;">📋 Match Queue</h2>
           <div style="display: flex; gap: 10px; align-items: center;">
             <label for="matches-per-page" style="font-size: 0.9em;">Matches per page:</label>
-            <input type="text" id="matches-per-page" value="10" style="width: 60px; text-align: center; -moz-appearance: textfield; appearance: textfield;">
+            <input type="number" id="matches-per-page" value="10" style="width: 60px; text-align: center;">
             <button id="apply-queue-pagination-btn">Apply</button>
           </div>
         </div>
@@ -850,7 +857,7 @@
       </div>
       
       <!-- Match History Section -->
-      <div id="match-history-section" class="section">
+      <div id="match-history-section" class="section hidden">
         <h2 class="section-title">Match History</h2>
         <div id="match-history-list"></div>
       </div>

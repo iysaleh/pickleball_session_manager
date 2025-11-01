@@ -137,29 +137,38 @@ export function evaluateAndCreateMatches(session: Session): Session {
       return allPlayers.every(id => session.activePlayers.has(id));
     });
     
-    let queueIndex = 0;
+    const usedMatchIndices = new Set<number>();
+    
     for (const courtNum of availableCourts) {
-      if (queueIndex >= validQueueMatches.length) break;
+      // Find next available match in queue that doesn't have conflicting players
+      let foundMatch = false;
       
-      const queuedMatch = validQueueMatches[queueIndex];
-      const matchPlayers = [...queuedMatch.team1, ...queuedMatch.team2];
-      
-      // Check if any players in this queued match are already playing
-      if (matchPlayers.some(id => playingPlayers.has(id) || assignedPlayers.has(id))) {
-        // Skip to next queued match
-        queueIndex++;
-        continue;
+      for (let i = 0; i < validQueueMatches.length; i++) {
+        if (usedMatchIndices.has(i)) continue;
+        
+        const queuedMatch = validQueueMatches[i];
+        const matchPlayers = [...queuedMatch.team1, ...queuedMatch.team2];
+        
+        // Check if any players in this queued match are already playing
+        if (matchPlayers.some(id => playingPlayers.has(id) || assignedPlayers.has(id))) {
+          continue;
+        }
+        
+        // This match is valid - use it
+        const match = createMatch(courtNum, queuedMatch.team1, queuedMatch.team2, session.playerStats);
+        newMatches.push(match);
+        
+        matchPlayers.forEach(id => assignedPlayers.add(id));
+        usedMatchIndices.add(i);
+        foundMatch = true;
+        break;
       }
       
-      const match = createMatch(courtNum, queuedMatch.team1, queuedMatch.team2, session.playerStats);
-      newMatches.push(match);
-      
-      matchPlayers.forEach(id => assignedPlayers.add(id));
-      queueIndex++;
+      if (!foundMatch) break;
     }
     
-    // Remove used matches from queue
-    const updatedQueue = validQueueMatches.slice(queueIndex);
+    // Remove used matches from queue - rebuild without used indices
+    const updatedQueue = validQueueMatches.filter((_, idx) => !usedMatchIndices.has(idx));
     
     // Update waiting players stats
     const stillWaiting = availablePlayers.filter((id) => !assignedPlayers.has(id));

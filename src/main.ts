@@ -228,15 +228,51 @@ function handleRemovePlayer(playerId: string) {
 
 function renderPlayerList() {
   playerList.innerHTML = '';
-  players.forEach(player => {
-    const tag = document.createElement('div');
-    tag.className = 'player-tag';
-    tag.innerHTML = `
-      <span>${player.name}</span>
-      <button onclick="window.removePlayer('${player.id}')">×</button>
-    `;
-    playerList.appendChild(tag);
-  });
+  
+  if (players.length === 0) {
+    playerList.innerHTML = '<p style="color: var(--text-secondary); padding: 10px;">No players added yet</p>';
+  } else {
+    const list = document.createElement('ol');
+    list.style.paddingLeft = '0';
+    list.style.marginLeft = '20px';
+    list.style.color = 'var(--text-primary)';
+    list.style.columns = 'auto';
+    list.style.columnWidth = '250px';
+    list.style.columnGap = '30px';
+    list.style.listStylePosition = 'outside';
+    list.style.width = '100%';
+    
+    players.forEach(player => {
+      const item = document.createElement('li');
+      item.style.marginBottom = '8px';
+      item.style.display = 'list-item';
+      item.style.breakInside = 'avoid';
+      item.style.paddingLeft = '10px';
+      
+      const content = document.createElement('div');
+      content.style.display = 'flex';
+      content.style.justifyContent = 'space-between';
+      content.style.alignItems = 'center';
+      content.style.gap = '10px';
+      
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = player.name;
+      nameSpan.style.flex = '1';
+      nameSpan.style.color = 'var(--text-primary)';
+      
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '×';
+      removeBtn.onclick = () => (window as any).removePlayer(player.id);
+      removeBtn.style.cssText = 'margin-left: 10px; color: #dc3545; background: transparent; border: 1px solid #dc3545; padding: 2px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;';
+      
+      content.appendChild(nameSpan);
+      content.appendChild(removeBtn);
+      item.appendChild(content);
+      list.appendChild(item);
+    });
+    
+    playerList.appendChild(list);
+  }
   
   startSessionBtn.disabled = players.length < 2;
 }
@@ -332,10 +368,10 @@ function handleStartSession() {
   setupSection.classList.add('hidden');
   controlSection.classList.remove('hidden');
   courtsSection.classList.remove('hidden');
-  matchHistorySection.classList.remove('hidden'); // Show history by default
-  showHistoryBtn.textContent = 'Hide History'; // Update button text
   queueSection.classList.remove('hidden'); // Show queue by default
   showQueueBtn.textContent = 'Hide Queue'; // Update button text
+  matchHistorySection.classList.remove('hidden'); // Show history by default
+  showHistoryBtn.textContent = 'Hide History'; // Update button text
   
   // Apply initial layout
   updateCourtsGridLayout();
@@ -464,6 +500,11 @@ function renderSession() {
   
   // Always update match history (now always visible by default)
   renderMatchHistory();
+  
+  // Always update stats if visible
+  if (!statsSection.classList.contains('hidden')) {
+    renderStats();
+  }
   
   // Render courts - ALL courts in order, not just active ones
   courtsGrid.innerHTML = '';
@@ -618,20 +659,61 @@ function renderActivePlayers() {
   
   activePlayersList.innerHTML = '';
   
-  // Show all players with active status
-  currentSession.config.players.forEach(player => {
-    const isActive = currentSession!.activePlayers.has(player.id);
-    const tag = document.createElement('div');
-    tag.className = `player-tag ${isActive ? '' : 'inactive-player'}`;
-    tag.innerHTML = `
-      <span>${player.name}${isActive ? '' : ' (Inactive)'}</span>
-      ${isActive 
-        ? `<button onclick="window.removeSessionPlayer('${player.id}')">Remove</button>`
-        : `<button class="btn-success" onclick="window.reactivatePlayer('${player.id}')">Reactivate</button>`
+  if (currentSession.config.players.length === 0) {
+    activePlayersList.innerHTML = '<p style="color: var(--text-secondary); padding: 10px;">No players in session</p>';
+  } else {
+    const list = document.createElement('ol');
+    list.style.paddingLeft = '0';
+    list.style.marginLeft = '20px';
+    list.style.color = 'var(--text-primary)';
+    list.style.columns = 'auto';
+    list.style.columnWidth = '250px';
+    list.style.columnGap = '30px';
+    list.style.listStylePosition = 'outside';
+    list.style.width = '100%';
+    
+    currentSession.config.players.forEach(player => {
+      const isActive = currentSession!.activePlayers.has(player.id);
+      const item = document.createElement('li');
+      item.style.marginBottom = '8px';
+      item.style.display = 'list-item';
+      item.style.breakInside = 'avoid';
+      item.style.paddingLeft = '10px';
+      
+      if (!isActive) {
+        item.style.opacity = '0.5';
       }
-    `;
-    activePlayersList.appendChild(tag);
-  });
+      
+      const content = document.createElement('div');
+      content.style.display = 'flex';
+      content.style.justifyContent = 'space-between';
+      content.style.alignItems = 'center';
+      content.style.gap = '10px';
+      
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = player.name + (isActive ? '' : ' (Inactive)');
+      nameSpan.style.flex = '1';
+      nameSpan.style.color = 'var(--text-primary)';
+      
+      const actionBtn = document.createElement('button');
+      if (isActive) {
+        actionBtn.textContent = '×';
+        actionBtn.onclick = () => (window as any).removeSessionPlayer(player.id);
+        actionBtn.style.cssText = 'margin-left: 10px; color: #dc3545; background: transparent; border: 1px solid #dc3545; padding: 2px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;';
+      } else {
+        actionBtn.textContent = '↻';
+        actionBtn.onclick = () => (window as any).reactivatePlayer(player.id);
+        actionBtn.style.cssText = 'margin-left: 10px; color: #28a745; background: transparent; border: 1px solid #28a745; padding: 2px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;';
+      }
+      
+      content.appendChild(nameSpan);
+      content.appendChild(actionBtn);
+      item.appendChild(content);
+      list.appendChild(item);
+    });
+    
+    activePlayersList.appendChild(list);
+  }
 }
 
 function toggleStats() {
@@ -832,6 +914,7 @@ function handleEndSession() {
   courtsSection.classList.add('hidden');
   statsSection.classList.add('hidden');
   matchHistorySection.classList.add('hidden');
+  queueSection.classList.add('hidden'); // Hide queue when ending session
   
   renderPlayerList();
   updateBannedPairSelects();
@@ -937,7 +1020,8 @@ function renderQueue() {
   
   // For round-robin, show the match queue
   if (currentSession.config.mode === 'round-robin') {
-    // Just show what's in the actual queue
+    // Calculate how many matches we need to display on this page
+    // We need to account for already playing matches and show from the actual queue
     const displayQueue = [...currentSession.matchQueue];
     
     const startIdx = queuePage * matchesPerPage;
