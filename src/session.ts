@@ -2,6 +2,7 @@ import type { Session, SessionConfig, Match, Player, PlayerStats } from './types
 import { generateId, createPlayerStats, getPlayersWhoWaitedMost } from './utils';
 import { selectPlayersForNextGame, createMatch } from './matchmaking';
 import { generateRoundRobinQueue } from './queue';
+import { generateKingOfCourtRound } from './kingofcourt';
 
 export function createSession(config: SessionConfig, maxQueueSize: number = 100): Session {
   const playerStats = new Map<string, PlayerStats>();
@@ -94,7 +95,7 @@ export function removePlayerFromSession(session: Session, playerId: string): Ses
 }
 
 export function evaluateAndCreateMatches(session: Session): Session {
-  // King of the court doesn't auto-create matches - waits for rounds
+  // King of the court doesn't auto-create matches - waits for manual round start
   if (session.config.mode === 'king-of-court') {
     return session;
   }
@@ -299,19 +300,13 @@ export function completeMatch(
     if (stats) stats.losses++;
   });
   
-  // For king of the court mode, winners stay on court (only on first completion, not edits)
-  if (session.config.mode === 'king-of-court' && !isEdit) {
-    // Winners stay, losers go to waiting
-    const newWaiting = [...session.waitingPlayers, ...losingTeam];
-    
-    const updated = {
+  // For king of the court mode, don't auto-create next matches
+  // Wait for all games in round to complete, then start next round manually
+  if (session.config.mode === 'king-of-court') {
+    return {
       ...session,
       matches: updatedMatches,
-      waitingPlayers: newWaiting,
     };
-    
-    // Re-evaluate to create new matches
-    return evaluateAndCreateMatches(updated);
   }
   
   const updated = {
@@ -370,6 +365,33 @@ export function canStartNextRound(session: Session): boolean {
 export function startNextRound(session: Session): Session {
   if (!canStartNextRound(session)) {
     return session;
+  }
+  
+  // For King of Court mode, use special algorithm
+  if (session.config.mode === 'king-of-court') {
+    const newMatches = generateKingOfCourtRound(session);
+    
+    // Update waiting players stats for those not selected
+    const selectedPlayers = new Set<string>();
+    newMatches.forEach(match => {
+      [...match.team1, ...match.team2].forEach(id => selectedPlayers.add(id));
+    });
+    
+    const waitingPlayers = Array.from(session.activePlayers)
+      .filter(id => !selectedPlayers.has(id));
+    
+    waitingPlayers.forEach(id => {
+      const stats = session.playerStats.get(id);
+      if (stats) {
+        stats.gamesWaited++;
+      }
+    });
+    
+    return {
+      ...session,
+      matches: [...session.matches, ...newMatches],
+      waitingPlayers,
+    };
   }
   
   return evaluateAndCreateMatches(session);

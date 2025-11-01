@@ -70,3 +70,79 @@ This is great. Some improvements if you please:
 * For King of the court mode, we need to wait and see who wins and loses the current games before we can queue the next ones, so that logic needs to function differently. We don't want to queue a game as soon as one finishes, because we want this to function in more of a bracketed/rounds format.
 
 ### Revision 11
+*The player tags that you can add or remove still have black text on dark backgrounds, that still needs to be updated with a more visible color scheme.
+*The Match Queue currently renders above the Active Courts box, it should render below the Active Courts box.
+* Inside of the Active Courts box, the score boxes still have the up/down arrows, we don't need that, they can just be text input boxes like in the Match History box.
+* Matches per Page have the up/down arrows, we don't need those there either, just have it be a plain text input box.
+
+### Revision 12
+* The Active Courts box is now rendering below the match history and match queue elements. That's not good, Active Courts needs to be at the top, then Match Queue below it, then Match History below Match Queue, and Player Statistics all the way at the bottom...
+
+### Revision 13
+* When I click show Queue, the button doesn't change to "Hide Queue" -- it stays "Show Queue" -- make sure the toggle is working correctly, and the queue starts as visible
+* When I click Edit Session, Match Queue stays visible on the Session Setup page, that shouldn't happen.
+* Match queue is only showing 3 games for round robin -- it can technically show infinite sessions, so please calculate up to the max needed to fill the specified Matches per Page configuration (which is 10 by default). For this reason, Page x of x doesn't make sense, it should just show the current page number.
+ 
+### Revision 14
+* In the match queue, games number 1 & 6 have the same players, also 2 & 7 have the same players. The round robin queue system is clearly not calculating the queue correctly. 
+
+### Revision 15
+* When I click end session the match queue is visible on the session setup, but there is no longer an active session, so there shouldn't be any match queue!
+* Instead of having the added players appear as floating tiles/buttons/elements, the added players should display as a numbered list (we still need to be able to remove them by pressing the red X next to their name)
+* Player statistics needs to update automatically every time a game completes -- currently, it only updates when I hide and show statistics.
+
+### Revision 15.5
+* For the players list on the session setup page, please make sure each entry in the list has a visible number, EG 1. James Anderson
+* If possible, please make the numbered list span multiple columns so it doesn't take so much space.
+* The players list should display as a multi-column list on the Active Session page the same way that it shows up in the Session Setup Page
+
+### Revision 15.6
+* Not quite there yet, There are no visible numbers next to the play names. I just see names like "James Anderson" or "Sarah Mitchell", but it should be a numbered list, EG "1. James Anderson" "2. Sarah Mitchell". 
+* Also, it's all just one long list, I need it to span multiple columns, lets do 3 columns.
+
+### Revision 15.7
+* It is now multi-column, but it still doesn't have numbers displayed next to the name yet. Also, the 3 columns only
+   take up like half the page, it should auto fill the space it has -- if possible, maybe make it a variable number of
+   columns depending on the width.
+   
+   
+### Revision 16
+* When I press start session, the Match Queue shows empty. It doesn't render until I click Next and then Previous.
+* The columns are a little bit tough to distinguish, Please add some styling so that every other column has some sligthly different shading to differentiate them.
+
+### Revision 17
+* We calculate a ton of queued matches at the start, which makes loading a new session or adding a player pretty slow. Can we limit it so that we only calculate 100 matches in advance and then stop (make this 100 matches configurable in the UI). We should recalculate again once we add or remove a player or the number of matches in queue reaches 80% of the 100 configured number.
+
+### Revision 17.1
+* Perfect! The Max Queue Size configuration needs to be on the Session Setup page as well.
+
+### Revision 17.2
+* It's kind of an advanced / admin control. Can we have a separate "Advanced Config" subpage that we open by pressing a button on the Session Setup page? It should just be an icon that only pro users know to click.
+
+### Revision 18
+* The round robin algorithm doesn't seem like it maximizes the amount of different players people play with as soon as possible. Instead, players seem to play with the same other players with minimal variations. Please create a test suite and test cases for the round robin algorithm used so that we get as much variation as in as few games as possible. Make sure the function used in the test suite are the same functions used in the actual code.
+
+### Revision 18.1
+* I see this, 1st game court 1: Team1: "James Anderson" "Sarah Mitchell" Team 2: "Michael Chen" "Emily Rodrigues", Then 4th game in Queue is: Team 1: "James Anderson" "Michael Chen" Team 2: "Sarah Mitchell" "Emily Rodrigues"  --- There are 18 players in this session, there is no reason why These same 4 people should be playing again so soon, just with a little variation in the teams. Please improve the tests and algorithm to ensure more player diversity early on.
+
+### Revision 18.2
+* Ooof this is bad, in an 18 player game with 2 courts available, player #17 and #18 don't play until Game #21... Something is still seriously wrong with this algorithm. 
+
+
+### Revision 19
+* Please now build tests for the king of the court algorithm, make sure the algorithm attempts to have :
+** Equal play time: Every player should get roughly the same number of games (no one sitting too long).
+** Avoid long idle times: The algorithm should minimize players waiting multiple rounds in a row.
+** Variety of opponents: Players should face as many different people as possible (not the same group repeatedly). -- but winning opponents should face winning opponents as much as possible.
+** Partner diversity (for doubles): Try to maximize the variety of partners over the session.
+** Promotion and demotion logic: Winners move up, losers move down (classic King of the Court format) -- there can be some leeway in this to achieve other algorithm goals.
+** Graceful handling of uneven outcomes: If a player sits out or leaves, the algorithm should rebalance smoothly.
+** Deterministic scheduling: Given the same results, it should produce the same next-round assignments.
+
+#### Revision 19.1
+* Please tune and fix the king of the court algorithm...  If we need for matches to finish before we can determine the next
+    round, make sure we add support for that logic.
+
+
+# Useful Commands:
+npx vitest run roundrobin.test.ts
