@@ -3,7 +3,7 @@ import { isPairBanned } from './utils';
 
 /**
  * Generate all possible round-robin matches for a set of players
- * Optimizes for maximum partner diversity
+ * Optimizes for maximum partner and opponent diversity
  */
 export function generateRoundRobinQueue(
   players: Player[],
@@ -21,21 +21,29 @@ export function generateRoundRobinQueue(
   const matches: QueuedMatch[] = [];
   const playerIds = players.map(p => p.id);
   
-  // Track partnerships for diversity
+  // Track partnerships and opponent interactions for diversity
   const partnershipCount = new Map<string, Map<string, number>>();
+  const opponentCount = new Map<string, Map<string, number>>();
+  const fourPlayerGroupCount = new Map<string, number>(); // Track when same 4 players meet
+  const gamesPlayed = new Map<string, number>(); // Track total games per player
+  
   playerIds.forEach(id => {
     partnershipCount.set(id, new Map());
+    opponentCount.set(id, new Map());
+    gamesPlayed.set(id, 0);
   });
   
   // Track which exact matchups have been used (to avoid duplicates)
   const usedMatchups = new Set<string>();
   
   function getMatchupKey(team1: string[], team2: string[]): string {
-    // Create a unique key for this matchup regardless of team order
     const sorted1 = [...team1].sort().join(',');
     const sorted2 = [...team2].sort().join(',');
-    // Sort the two teams to ensure [A,B] vs [C,D] is same as [C,D] vs [A,B]
     return [sorted1, sorted2].sort().join('|');
+  }
+  
+  function getFourPlayerGroupKey(team1: string[], team2: string[]): string {
+    return [...team1, ...team2].sort().join(',');
   }
   
   // Generate all possible combinations
@@ -45,9 +53,7 @@ export function generateRoundRobinQueue(
   const allMatchups: Array<{ team1: string[], team2: string[], combo: string[] }> = [];
   
   for (const combo of allCombinations) {
-    // For doubles/teams, we need to consider all ways to split the combo into two teams
     if (playersPerTeam === 2) {
-      // Generate all ways to partition 4 players into two teams of 2
       const partitions = [
         { team1: [combo[0], combo[1]], team2: [combo[2], combo[3]] },
         { team1: [combo[0], combo[2]], team2: [combo[1], combo[3]] },
@@ -62,7 +68,6 @@ export function generateRoundRobinQueue(
         });
       }
     } else {
-      // Singles - only one way to split
       allMatchups.push({
         team1: [combo[0]],
         team2: [combo[1]],
@@ -71,22 +76,18 @@ export function generateRoundRobinQueue(
     }
   }
   
-  // Continue generating matches until we've exhausted all unique matchups
   let iterations = 0;
-  const maxIterations = allMatchups.length * 10; // Safety limit
+  const maxIterations = allMatchups.length * 10;
   
   while (iterations < maxIterations && (!maxMatches || matches.length < maxMatches)) {
-    // Score each matchup based on partner diversity
     const scoredMatchups = allMatchups.map(matchup => {
       const { team1, team2, combo } = matchup;
       
-      // Check if this exact matchup was already used
       const matchupKey = getMatchupKey(team1, team2);
       if (usedMatchups.has(matchupKey)) {
         return { ...matchup, score: -1 };
       }
       
-      // Check if valid (no banned pairs)
       if (!isValidTeamConfiguration(team1, team2, bannedPairs)) {
         return { ...matchup, score: -1 };
       }
@@ -94,44 +95,61 @@ export function generateRoundRobinQueue(
       // Calculate diversity score (lower is better)
       let score = 0;
       
-      // Score team partnerships (penalize repeat partnerships)
+      // PRIORITIZE players who have played fewer games (most important factor)
+      const allPlayersInMatch = [...team1, ...team2];
+      const totalGamesForPlayers = allPlayersInMatch.reduce((sum, id) => sum + (gamesPlayed.get(id) || 0), 0);
+      score += totalGamesForPlayers * 1000;
+      
+      // HEAVILY penalize same 4-player groups meeting again soon
+      const groupKey = getFourPlayerGroupKey(team1, team2);
+      const groupCount = fourPlayerGroupCount.get(groupKey) || 0;
+      score += groupCount * 500; // Heavy penalty
+      
+      // Penalize repeat partnerships
       for (let i = 0; i < team1.length; i++) {
         for (let j = i + 1; j < team1.length; j++) {
           const count = partnershipCount.get(team1[i])?.get(team1[j]) || 0;
-          score += count * 10;
+          score += count * 100;
         }
       }
       
       for (let i = 0; i < team2.length; i++) {
         for (let j = i + 1; j < team2.length; j++) {
           const count = partnershipCount.get(team2[i])?.get(team2[j]) || 0;
-          score += count * 10;
+          score += count * 100;
+        }
+      }
+      
+      // Penalize repeat opponent matchups (but less than partnerships)
+      for (const p1 of team1) {
+        for (const p2 of team2) {
+          const count = opponentCount.get(p1)?.get(p2) || 0;
+          score += count * 50;
         }
       }
       
       return { ...matchup, score };
     });
     
-    // Sort by score and select matches for this round
     const validMatchups = scoredMatchups
       .filter(m => m.score >= 0)
       .sort((a, b) => a.score - b.score);
     
     if (validMatchups.length === 0) {
-      // No more valid matchups available
       break;
     }
     
-    // Build one round of matches
     const usedPlayersThisRound = new Set<string>();
     let addedMatchesThisRound = false;
     
     for (const matchup of validMatchups) {
-      // Check if any players in this match are already used this round
+      if (maxMatches && matches.length >= maxMatches) {
+        break;
+      }
+      
       const hasUsedPlayer = matchup.combo.some(id => usedPlayersThisRound.has(id));
       if (hasUsedPlayer) continue;
       
-      // Add match
       matches.push({
         team1: matchup.team1,
         team2: matchup.team2
@@ -139,11 +157,17 @@ export function generateRoundRobinQueue(
       
       addedMatchesThisRound = true;
       
-      // Mark this matchup as used permanently
       usedMatchups.add(getMatchupKey(matchup.team1, matchup.team2));
-      
-      // Mark players as used this round
       matchup.combo.forEach(id => usedPlayersThisRound.add(id));
+      
+      // Update games played count
+      matchup.combo.forEach(id => {
+        gamesPlayed.set(id, (gamesPlayed.get(id) || 0) + 1);
+      });
+      
+      // Update 4-player group count
+      const groupKey = getFourPlayerGroupKey(matchup.team1, matchup.team2);
+      fourPlayerGroupCount.set(groupKey, (fourPlayerGroupCount.get(groupKey) || 0) + 1);
       
       // Update partnership counts
       for (let i = 0; i < matchup.team1.length; i++) {
@@ -165,10 +189,23 @@ export function generateRoundRobinQueue(
           partnershipCount.get(p2)?.set(p1, count + 1);
         }
       }
+      
+      // Update opponent counts
+      for (const p1 of matchup.team1) {
+        for (const p2 of matchup.team2) {
+          const count1 = opponentCount.get(p1)?.get(p2) || 0;
+          const count2 = opponentCount.get(p2)?.get(p1) || 0;
+          opponentCount.get(p1)?.set(p2, count1 + 1);
+          opponentCount.get(p2)?.set(p1, count2 + 1);
+        }
+      }
     }
     
     if (!addedMatchesThisRound) {
-      // No matches could be added this round
+      break;
+    }
+    
+    if (maxMatches && matches.length >= maxMatches) {
       break;
     }
     

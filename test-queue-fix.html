@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Queue Test - 18 Players</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #e0e0e0;
+    }
+    h1 { color: #4CAF50; }
+    .game {
+      margin: 10px 0;
+      padding: 10px;
+      background: #2a2a2a;
+      border-left: 3px solid #4CAF50;
+    }
+    .stats {
+      margin-top: 30px;
+      padding: 15px;
+      background: #2a2a2a;
+      border-radius: 5px;
+    }
+    .player-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .early { color: #4CAF50; }
+    .late { color: #f44336; }
+  </style>
+</head>
+<body>
+  <h1>Round Robin Queue Test - 18 Players</h1>
+  <div id="games"></div>
+  <div class="stats">
+    <h2>Player Statistics (First 20 Games)</h2>
+    <div id="stats"></div>
+  </div>
+  
+  <script type="module">
+    import { generateRoundRobinQueue } from './src/queue.ts';
+    
+    const players = Array.from({length: 18}, (_, i) => ({
+      id: `player${i + 1}`,
+      name: `Player ${i + 1}`
+    }));
+    
+    const matches = generateRoundRobinQueue(players, 'doubles', [], 50);
+    
+    // Display first 20 games
+    const gamesDiv = document.getElementById('games');
+    matches.slice(0, 20).forEach((match, i) => {
+      const gameDiv = document.createElement('div');
+      gameDiv.className = 'game';
+      gameDiv.innerHTML = `
+        <strong>Game ${i + 1}:</strong> 
+        Team 1: ${match.team1.join(', ')} 
+        vs 
+        Team 2: ${match.team2.join(', ')}
+      `;
+      gamesDiv.appendChild(gameDiv);
+    });
+    
+    // Calculate stats
+    const firstGameMap = new Map();
+    const gamesCount = new Map();
+    players.forEach(p => gamesCount.set(p.id, 0));
+    
+    matches.forEach((match, i) => {
+      [...match.team1, ...match.team2].forEach(playerId => {
+        if (!firstGameMap.has(playerId)) {
+          firstGameMap.set(playerId, i + 1);
+        }
+      });
+    });
+    
+    matches.slice(0, 20).forEach(match => {
+      [...match.team1, ...match.team2].forEach(playerId => {
+        gamesCount.set(playerId, gamesCount.get(playerId) + 1);
+      });
+    });
+    
+    // Display stats
+    const statsDiv = document.getElementById('stats');
+    const statsGrid = document.createElement('div');
+    statsGrid.className = 'player-stats';
+    
+    players.forEach(p => {
+      const firstGame = firstGameMap.get(p.id);
+      const totalGames = gamesCount.get(p.id);
+      const isEarly = firstGame <= 5;
+      
+      const statDiv = document.createElement('div');
+      statDiv.innerHTML = `
+        <strong class="${isEarly ? 'early' : 'late'}">${p.name}</strong><br>
+        First game: ${firstGame}<br>
+        Games in first 20: ${totalGames}
+      `;
+      statsGrid.appendChild(statDiv);
+    });
+    
+    statsDiv.appendChild(statsGrid);
+    
+    // Log summary
+    console.log('Player 17 first plays in game:', firstGameMap.get('player17'));
+    console.log('Player 18 first plays in game:', firstGameMap.get('player18'));
+  </script>
+</body>
+</html>
