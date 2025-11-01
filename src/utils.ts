@@ -34,6 +34,8 @@ export function createPlayerStats(playerId: string): PlayerStats {
     losses: 0,
     partnersPlayed: new Set(),
     opponentsPlayed: new Set(),
+    totalPointsFor: 0,
+    totalPointsAgainst: 0,
   };
 }
 
@@ -83,4 +85,61 @@ export function calculatePartnerDiversity(
     stats1.partnersPlayed.has(player2Id) || stats2.partnersPlayed.has(player1Id);
   
   return hasPlayedTogether ? -1 : 1;
+}
+
+export function calculatePlayerRankings(
+  playerIds: string[],
+  statsMap: Map<string, PlayerStats>
+): Array<{ playerId: string; rank: number; wins: number; losses: number; avgPointDifferential: number }> {
+  // Calculate rankings for players
+  const playerData = playerIds
+    .map(playerId => {
+      const stats = statsMap.get(playerId);
+      if (!stats) return null;
+      
+      // Calculate average point differential
+      const totalGames = stats.gamesPlayed;
+      const avgPointDifferential = totalGames > 0
+        ? (stats.totalPointsFor - stats.totalPointsAgainst) / totalGames
+        : 0;
+      
+      return {
+        playerId,
+        wins: stats.wins,
+        losses: stats.losses,
+        avgPointDifferential,
+      };
+    })
+    .filter((data): data is NonNullable<typeof data> => data !== null);
+  
+  // Sort by wins (descending), then by average point differential (descending)
+  playerData.sort((a, b) => {
+    if (b.wins !== a.wins) {
+      return b.wins - a.wins;
+    }
+    return b.avgPointDifferential - a.avgPointDifferential;
+  });
+  
+  // Assign ranks (handle ties)
+  const rankedPlayers: Array<{ playerId: string; rank: number; wins: number; losses: number; avgPointDifferential: number }> = [];
+  
+  for (let i = 0; i < playerData.length; i++) {
+    const player = playerData[i];
+    let rank = i + 1;
+    
+    // Check if tied with previous player
+    if (i > 0) {
+      const prev = rankedPlayers[i - 1];
+      if (prev.wins === player.wins && prev.avgPointDifferential === player.avgPointDifferential) {
+        rank = prev.rank; // Same rank as previous
+      }
+    }
+    
+    rankedPlayers.push({
+      ...player,
+      rank,
+    });
+  }
+  
+  return rankedPlayers;
 }

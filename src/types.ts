@@ -57,4 +57,14 @@ export type PlayerStats = {
   losses: number;
   partnersPlayed: Set<string>; // player IDs
   opponentsPlayed: Set<string>; // player IDs
+  totalPointsFor: number; // Total points scored
+  totalPointsAgainst: number; // Total points allowed
+};
+
+export type PlayerRanking = {
+  playerId: string;
+  rank: number;
+  wins: number;
+  losses: number;
+  avgPointDifferential: number; // Average point differential per game
 };

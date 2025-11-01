@@ -479,6 +479,110 @@
       transition: color 0.3s ease;
     }
     
+    /* Rankings Styles */
+    #rankings-list {
+      margin-top: 20px;
+    }
+    
+    .ranking-item {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 15px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: 10px;
+      transition: all 0.3s ease;
+    }
+    
+    .ranking-item:hover {
+      box-shadow: 0 4px 12px var(--shadow-hover);
+      transform: translateY(-2px);
+    }
+    
+    .rank-badge {
+      font-size: 1.5em;
+      font-weight: bold;
+      min-width: 50px;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      color: white;
+      flex-shrink: 0;
+    }
+    
+    .rank-badge.rank-1 {
+      background: linear-gradient(135deg, #ffd700, #ffed4e);
+      color: #000;
+      font-size: 1.8em;
+    }
+    
+    .rank-badge.rank-2 {
+      background: linear-gradient(135deg, #c0c0c0, #e8e8e8);
+      color: #000;
+      font-size: 1.7em;
+    }
+    
+    .rank-badge.rank-3 {
+      background: linear-gradient(135deg, #cd7f32, #e6a85c);
+      color: #fff;
+      font-size: 1.6em;
+    }
+    
+    .ranking-info {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    
+    .ranking-name {
+      font-size: 1.1em;
+      font-weight: 600;
+      color: var(--text-primary);
+      min-width: 150px;
+    }
+    
+    .ranking-stats {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    
+    .ranking-stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 5px 15px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+    }
+    
+    .ranking-stat-label {
+      font-size: 0.75em;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    
+    .ranking-stat-value {
+      font-size: 1.1em;
+      font-weight: bold;
+      color: var(--text-primary);
+    }
+    
+    .ranking-stat-value.positive {
+      color: #28a745;
+    }
+    
+    .ranking-stat-value.negative {
+      color: #dc3545;
+    }
+    
     .controls {
       display: flex;
       gap: 10px;
@@ -877,6 +981,7 @@
         <div class="controls">
           <button id="show-queue-btn">Show Queue</button>
           <button id="start-next-round-btn" class="hidden">Start Next Round</button>
+          <button id="show-rankings-btn">Show Rankings</button>
           <button id="show-stats-btn">Show Statistics</button>
           <button id="show-history-btn">Show History</button>
           <button id="edit-session-btn" class="btn-warning">Edit Session</button>
@@ -928,6 +1033,12 @@
       <div id="match-history-section" class="section hidden">
         <h2 class="section-title">Match History</h2>
         <div id="match-history-list"></div>
+      </div>
+      
+      <!-- Rankings Section -->
+      <div id="rankings-section" class="section hidden">
+        <h2 class="section-title">🏆 Current Rankings</h2>
+        <div id="rankings-list"></div>
       </div>
       
       <!-- Statistics Section -->

@@ -1,6 +1,6 @@
 import type { Session, Player, SessionConfig, Match } from './types';
 import { createSession, addPlayerToSession, removePlayerFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches, canStartNextRound, startNextRound, updateMaxQueueSize } from './session';
-import { generateId } from './utils';
+import { generateId, calculatePlayerRankings } from './utils';
 import { generateRoundRobinQueue } from './queue';
 
 let currentSession: Session | null = null;
@@ -35,10 +35,13 @@ const addBannedPairBtn = document.getElementById('add-banned-pair-btn') as HTMLB
 const bannedPairsList = document.getElementById('banned-pairs-list') as HTMLElement;
 
 const startSessionBtn = document.getElementById('start-session-btn') as HTMLButtonElement;
+const showRankingsBtn = document.getElementById('show-rankings-btn') as HTMLButtonElement;
 const showStatsBtn = document.getElementById('show-stats-btn') as HTMLButtonElement;
 const showHistoryBtn = document.getElementById('show-history-btn') as HTMLButtonElement;
 const editSessionBtn = document.getElementById('edit-session-btn') as HTMLButtonElement;
 const endSessionBtn = document.getElementById('end-session-btn') as HTMLButtonElement;
+const rankingsSection = document.getElementById('rankings-section') as HTMLElement;
+const rankingsList = document.getElementById('rankings-list') as HTMLElement;
 const activePlayersList = document.getElementById('active-players-list') as HTMLElement;
 const sessionPlayerNameInput = document.getElementById('session-player-name') as HTMLInputElement;
 const addSessionPlayerBtn = document.getElementById('add-session-player-btn') as HTMLButtonElement;
@@ -97,6 +100,7 @@ if (isTestMode && testModeContainer) {
 
 addBannedPairBtn.addEventListener('click', handleAddBannedPair);
 startSessionBtn.addEventListener('click', handleStartSession);
+showRankingsBtn.addEventListener('click', toggleRankings);
 showStatsBtn.addEventListener('click', toggleStats);
 showHistoryBtn.addEventListener('click', toggleHistory);
 editSessionBtn.addEventListener('click', handleEditSession);
@@ -773,6 +777,21 @@ function handleCompleteMatch(matchId: string, team1Score: number, team2Score: nu
     renderQueue();
   }
   
+  // Always update rankings if visible
+  if (!rankingsSection.classList.contains('hidden')) {
+    renderRankings();
+  }
+  
+  // Always update stats if visible
+  if (!statsSection.classList.contains('hidden')) {
+    renderStats();
+  }
+  
+  // Always update history if visible
+  if (!matchHistorySection.classList.contains('hidden')) {
+    renderMatchHistory();
+  }
+  
   // Update start round button for king-of-court (in case not all matches complete)
   updateStartRoundButton();
   
@@ -1054,6 +1073,77 @@ function renderActivePlayers() {
   }
 }
 
+function toggleRankings() {
+  if (rankingsSection.classList.contains('hidden')) {
+    renderRankings();
+    rankingsSection.classList.remove('hidden');
+    showRankingsBtn.textContent = 'Hide Rankings';
+  } else {
+    rankingsSection.classList.add('hidden');
+    showRankingsBtn.textContent = 'Show Rankings';
+  }
+}
+
+function renderRankings() {
+  if (!currentSession) return;
+  
+  rankingsList.innerHTML = '';
+  
+  const playerIds = currentSession.config.players.map(p => p.id);
+  const rankings = calculatePlayerRankings(playerIds, currentSession.playerStats);
+  
+  if (rankings.length === 0) {
+    rankingsList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No rankings yet. Complete some games to see rankings!</p>';
+    return;
+  }
+  
+  rankings.forEach(ranking => {
+    const player = currentSession!.config.players.find(p => p.id === ranking.playerId);
+    if (!player) return;
+    
+    const item = document.createElement('div');
+    item.className = 'ranking-item';
+    
+    // Determine rank badge class
+    let rankClass = '';
+    if (ranking.rank === 1) rankClass = 'rank-1';
+    else if (ranking.rank === 2) rankClass = 'rank-2';
+    else if (ranking.rank === 3) rankClass = 'rank-3';
+    
+    // Determine color class for point differential
+    let diffClass = '';
+    if (ranking.avgPointDifferential > 0) diffClass = 'positive';
+    else if (ranking.avgPointDifferential < 0) diffClass = 'negative';
+    
+    const diffSign = ranking.avgPointDifferential >= 0 ? '+' : '';
+    
+    item.innerHTML = `
+      <div class="rank-badge ${rankClass}">
+        ${ranking.rank === 1 ? '🥇' : ranking.rank === 2 ? '🥈' : ranking.rank === 3 ? '🥉' : ranking.rank}
+      </div>
+      <div class="ranking-info">
+        <div class="ranking-name">${player.name}</div>
+        <div class="ranking-stats">
+          <div class="ranking-stat">
+            <div class="ranking-stat-label">Wins</div>
+            <div class="ranking-stat-value">${ranking.wins}</div>
+          </div>
+          <div class="ranking-stat">
+            <div class="ranking-stat-label">Losses</div>
+            <div class="ranking-stat-value">${ranking.losses}</div>
+          </div>
+          <div class="ranking-stat">
+            <div class="ranking-stat-label">Avg Pt Diff</div>
+            <div class="ranking-stat-value ${diffClass}">${diffSign}${ranking.avgPointDifferential.toFixed(1)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    rankingsList.appendChild(item);
+  });
+}
+
 function toggleStats() {
   if (statsSection.classList.contains('hidden')) {
     renderStats();
@@ -1227,6 +1317,7 @@ function handleEditSession() {
   controlSection.classList.add('hidden');
   courtsSection.classList.add('hidden');
   statsSection.classList.add('hidden');
+  rankingsSection.classList.add('hidden');
   matchHistorySection.classList.add('hidden');
   queueSection.classList.add('hidden'); // Hide queue when editing
 
@@ -1257,6 +1348,7 @@ function handleEndSession() {
   controlSection.classList.add('hidden');
   courtsSection.classList.add('hidden');
   statsSection.classList.add('hidden');
+  rankingsSection.classList.add('hidden');
   matchHistorySection.classList.add('hidden');
   queueSection.classList.add('hidden'); // Hide queue when ending session
   
@@ -1332,8 +1424,22 @@ function handleEndSession() {
   }
   
   currentSession = completeMatch(currentSession, matchId, score1, score2);
-  renderStats();
-  renderMatchHistory();
+  
+  // Always update rankings if visible
+  if (!rankingsSection.classList.contains('hidden')) {
+    renderRankings();
+  }
+  
+  // Always update stats if visible
+  if (!statsSection.classList.contains('hidden')) {
+    renderStats();
+  }
+  
+  // Always update history if visible
+  if (!matchHistorySection.classList.contains('hidden')) {
+    renderMatchHistory();
+  }
+  
   alert('Score updated successfully!');
 };
 

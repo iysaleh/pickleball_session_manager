@@ -273,6 +273,23 @@ export function completeMatch(
       const stats = session.playerStats.get(playerId);
       if (stats) stats.losses--;
     });
+    
+    // Revert point differential
+    match.team1.forEach((playerId) => {
+      const stats = session.playerStats.get(playerId);
+      if (stats) {
+        stats.totalPointsFor -= match.score!.team1Score;
+        stats.totalPointsAgainst -= match.score!.team2Score;
+      }
+    });
+    
+    match.team2.forEach((playerId) => {
+      const stats = session.playerStats.get(playerId);
+      if (stats) {
+        stats.totalPointsFor -= match.score!.team2Score;
+        stats.totalPointsAgainst -= match.score!.team1Score;
+      }
+    });
   }
   
   // Update match
@@ -299,6 +316,23 @@ export function completeMatch(
   losingTeam.forEach((playerId) => {
     const stats = session.playerStats.get(playerId);
     if (stats) stats.losses++;
+  });
+  
+  // Update point differential
+  match.team1.forEach((playerId) => {
+    const stats = session.playerStats.get(playerId);
+    if (stats) {
+      stats.totalPointsFor += team1Score;
+      stats.totalPointsAgainst += team2Score;
+    }
+  });
+  
+  match.team2.forEach((playerId) => {
+    const stats = session.playerStats.get(playerId);
+    if (stats) {
+      stats.totalPointsFor += team2Score;
+      stats.totalPointsAgainst += team1Score;
+    }
   });
   
   // For king of the court mode, don't auto-create next matches
