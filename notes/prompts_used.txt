@@ -33,3 +33,40 @@ Great start! Some major changes are required. We need to be able to see a list o
    scores of those historical games if there was a mistake. Also, for the courts being displayed, can we have Team 1 be
     boxed in the left, Team 2 being boxed on the right, and the controls & score input in the middle between them?
    Right now it's top to bottom which is a little weird.
+   
+### Revision 4
+
+It's a little annoying entering a bunch of test player names everytime I want to try this out, can you give me a
+   special button if I access the site with a query param like ?test=true , the special button adds 18 players with
+   first and last names.
+   
+### Revision 5
+
+This is great. Some improvements if you please:
+* Everytime you complete a game on a court, all the court positions change, they should stay static, and always numbers logically in ascending order.
+* We need to see the history of every game that was every played on each court, not just the last game on a court
+* The team boxes aren't always rendering correctly in the Court box, they are overflowing -- can you fix that?
+
+### Revision 6
+* If I click End session, all the players are lost -- we need an Edit session button as well, that lets us keep the players that we already added, but just change the mode or court configuration that we're playing.
+
+### Revision 7
+* It's hard to see the numbers in the score boxes, make the score font smaller. 
+* Scores like 5-5 are not valid, but I am allowed to submit them and it shows a winner/loser. A winner must have a score higher than the loser.
+* If I add a player after the session started, that player never gets rotated in. They should actually be the first rotation in!
+
+### Revision 8
+* Scores in the history are hard to see, they should just be a text box, don't render the up-down arrow to increase/decrease.
+* If I show history and finish a game, I need to hide & show history again for it to redraw -- fix it so that it auto redraws history.
+* Make sure that history is chronological -- the game that most recently finished should be at the top.
+* Make it so that history is shown by default. 
+
+### Revision 9
+* Please add a dark mode/light mode toggle, and make dark mode the default.
+
+### Revision 10
+* The text is a little hard to read -- black on very dark grey doesn't work. Use a more visible dark color scheme...
+* Round robin mode is very deterministic -- We should be able to know exactly what games we have scheduled once we start a session --- and when we add a player, we should be able to recalculate all the future sessions immediately. Add a show queue button that shows the next scheduled games -- it should show the next 10 by default for round robin (and maybe even make it a paged area so a user can go forward or backwards by clicking arrow buttons). Make the number of games that it shows on page configurable, like the number of courts per row is configurable.
+* For King of the court mode, we need to wait and see who wins and loses the current games before we can queue the next ones, so that logic needs to function differently. We don't want to queue a game as soon as one finishes, because we want this to function in more of a bracketed/rounds format.
+
+### Revision 11

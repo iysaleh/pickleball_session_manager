@@ -1,5 +1,5 @@
 import type { Session, Player, SessionConfig, Match } from './types';
-import { createSession, addPlayerToSession, removePlayerFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches } from './session';
+import { createSession, addPlayerToSession, removePlayerFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches, canStartNextRound, startNextRound } from './session';
 import { generateId } from './utils';
 
 let currentSession: Session | null = null;
@@ -50,11 +50,25 @@ const matchHistorySection = document.getElementById('match-history-section') as 
 const matchHistoryList = document.getElementById('match-history-list') as HTMLElement;
 const themeToggle = document.getElementById('theme-toggle') as HTMLButtonElement;
 
+const queueSection = document.getElementById('queue-section') as HTMLElement;
+const queueList = document.getElementById('queue-list') as HTMLElement;
+const showQueueBtn = document.getElementById('show-queue-btn') as HTMLButtonElement;
+const matchesPerPageInput = document.getElementById('matches-per-page') as HTMLInputElement;
+const applyQueuePaginationBtn = document.getElementById('apply-queue-pagination-btn') as HTMLButtonElement;
+const queuePrevBtn = document.getElementById('queue-prev-btn') as HTMLButtonElement;
+const queueNextBtn = document.getElementById('queue-next-btn') as HTMLButtonElement;
+const queuePageInfo = document.getElementById('queue-page-info') as HTMLElement;
+const startNextRoundBtn = document.getElementById('start-next-round-btn') as HTMLButtonElement;
+
 // Court layout state
 let courtsPerRow = 2;
 
 // Theme state
 let isDarkMode = true; // Default to dark mode
+
+// Queue state
+let queuePage = 0;
+let matchesPerPage = 10;
 
 // Event Listeners
 addPlayerBtn.addEventListener('click', handleAddPlayer);
@@ -80,6 +94,11 @@ sessionPlayerNameInput.addEventListener('keypress', (e) => {
 });
 applyLayoutBtn.addEventListener('click', handleApplyLayout);
 themeToggle.addEventListener('click', toggleTheme);
+showQueueBtn.addEventListener('click', toggleQueue);
+applyQueuePaginationBtn.addEventListener('click', handleApplyQueuePagination);
+queuePrevBtn.addEventListener('click', () => { queuePage = Math.max(0, queuePage - 1); renderQueue(); });
+queueNextBtn.addEventListener('click', () => { queuePage++; renderQueue(); });
+startNextRoundBtn.addEventListener('click', handleStartNextRound);
 
 // Initialize theme
 initializeTheme();
@@ -398,13 +417,20 @@ function handleCompleteMatch(matchId: string, team1Score: number, team2Score: nu
   }
   
   currentSession = completeMatch(currentSession, matchId, team1Score, team2Score);
+
+  // Auto-start any new matches created by evaluation (not for king-of-court)
+  if (currentSession.config.mode !== 'king-of-court') {
+    currentSession.matches.forEach(match => {
+      if (match.status === 'waiting') {
+        currentSession = startMatch(currentSession!, match.id);
+      }
+    });
+  }
   
-  // Auto-start any new matches created by evaluation
-  currentSession.matches.forEach(match => {
-    if (match.status === 'waiting') {
-      currentSession = startMatch(currentSession!, match.id);
-    }
-  });
+  // Update queue if visible
+  if (!queueSection.classList.contains('hidden')) {
+    renderQueue();
+  }
   
   renderSession();
   renderActivePlayers();
@@ -525,6 +551,9 @@ function renderSession() {
   } else {
     waitingArea.style.display = 'none';
   }
+  
+  // Update start round button for king-of-court
+  updateStartRoundButton();
 }
 
 function renderEmptyCourt(courtNum: number) {
@@ -865,6 +894,103 @@ function handleEndSession() {
   renderMatchHistory();
   alert('Score updated successfully!');
 };
+
+function toggleQueue() {
+  queueSection.classList.toggle('hidden');
+  if (!queueSection.classList.contains('hidden')) {
+    queuePage = 0;
+    renderQueue();
+  }
+}
+
+function handleApplyQueuePagination() {
+  matchesPerPage = parseInt(matchesPerPageInput.value) || 10;
+  queuePage = 0;
+  renderQueue();
+}
+
+function renderQueue() {
+  if (!currentSession) return;
+  
+  // For round-robin, show the match queue
+  if (currentSession.config.mode === 'round-robin') {
+    const startIdx = queuePage * matchesPerPage;
+    const endIdx = startIdx + matchesPerPage;
+    const pageMatches = currentSession.matchQueue.slice(startIdx, endIdx);
+    
+    const totalPages = Math.ceil(currentSession.matchQueue.length / matchesPerPage);
+    queuePageInfo.textContent = `Page ${queuePage + 1} of ${totalPages || 1} (${currentSession.matchQueue.length} matches total)`;
+    
+    queuePrevBtn.disabled = queuePage === 0;
+    queueNextBtn.disabled = endIdx >= currentSession.matchQueue.length;
+    
+    if (pageMatches.length === 0) {
+      queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">No queued matches</p>';
+      return;
+    }
+    
+    queueList.innerHTML = pageMatches.map((match, idx) => {
+      const matchNumber = startIdx + idx + 1;
+      const team1Players = match.team1.map(id => {
+        const player = currentSession!.config.players.find(p => p.id === id);
+        return player ? player.name : 'Unknown';
+      });
+      const team2Players = match.team2.map(id => {
+        const player = currentSession!.config.players.find(p => p.id === id);
+        return player ? player.name : 'Unknown';
+      });
+      
+      return `
+        <div class="queue-match">
+          <div class="queue-match-number">#${matchNumber}</div>
+          <div class="queue-teams">
+            <div class="queue-team">
+              ${team1Players.map(name => `<div class="queue-player">🎾 ${name}</div>`).join('')}
+            </div>
+            <div class="vs-text">VS</div>
+            <div class="queue-team">
+              ${team2Players.map(name => `<div class="queue-player">🎾 ${name}</div>`).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } else {
+    queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">Queue is only available for Round-Robin mode</p>';
+    queuePageInfo.textContent = '';
+    queuePrevBtn.disabled = true;
+    queueNextBtn.disabled = true;
+  }
+}
+
+function handleStartNextRound() {
+  if (!currentSession) return;
+  
+  currentSession = startNextRound(currentSession);
+  
+  // Auto-start new matches
+  currentSession.matches.forEach(match => {
+    if (match.status === 'waiting') {
+      currentSession = startMatch(currentSession!, match.id);
+    }
+  });
+  
+  renderSession();
+  updateStartRoundButton();
+}
+
+function updateStartRoundButton() {
+  if (!currentSession || currentSession.config.mode !== 'king-of-court') {
+    startNextRoundBtn.classList.add('hidden');
+    return;
+  }
+  
+  if (canStartNextRound(currentSession)) {
+    startNextRoundBtn.classList.remove('hidden');
+  } else {
+    startNextRoundBtn.classList.add('hidden');
+  }
+}
 
 // Initialize
 renderPlayerList();

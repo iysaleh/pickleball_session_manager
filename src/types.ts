@@ -29,6 +29,11 @@ export type SessionConfig = {
   bannedPairs: TeamPair[];
 };
 
+export type QueuedMatch = {
+  team1: string[]; // player IDs
+  team2: string[]; // player IDs
+};
+
 export type Session = {
   id: string;
   config: SessionConfig;
@@ -36,6 +41,7 @@ export type Session = {
   waitingPlayers: string[]; // player IDs
   playerStats: Map<string, PlayerStats>;
   activePlayers: Set<string>; // player IDs currently active in session
+  matchQueue: QueuedMatch[]; // Pre-generated matches for round-robin
 };
 
 export type PlayerStats = {

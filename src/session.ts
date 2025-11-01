@@ -1,6 +1,7 @@
 import type { Session, SessionConfig, Match, Player, PlayerStats } from './types';
 import { generateId, createPlayerStats, getPlayersWhoWaitedMost } from './utils';
 import { selectPlayersForNextGame, createMatch } from './matchmaking';
+import { generateRoundRobinQueue } from './queue';
 
 export function createSession(config: SessionConfig): Session {
   const playerStats = new Map<string, PlayerStats>();
@@ -11,6 +12,11 @@ export function createSession(config: SessionConfig): Session {
     activePlayers.add(player.id);
   });
   
+  // Generate match queue for round-robin mode
+  const matchQueue = config.mode === 'round-robin'
+    ? generateRoundRobinQueue(config.players, config.sessionType, config.bannedPairs)
+    : [];
+  
   return {
     id: generateId(),
     config,
@@ -18,6 +24,7 @@ export function createSession(config: SessionConfig): Session {
     waitingPlayers: [],
     playerStats,
     activePlayers,
+    matchQueue,
   };
 }
 
@@ -39,6 +46,15 @@ export function addPlayerToSession(session: Session, player: Player): Session {
     },
     activePlayers: newActivePlayers,
   };
+  
+  // For round-robin, regenerate the entire queue
+  if (updated.config.mode === 'round-robin') {
+    updated.matchQueue = generateRoundRobinQueue(
+      updated.config.players.filter(p => updated.activePlayers.has(p.id)),
+      updated.config.sessionType,
+      updated.config.bannedPairs
+    );
+  }
   
   // Automatically try to create new matches with the new player
   return evaluateAndCreateMatches(updated);
@@ -76,6 +92,11 @@ export function removePlayerFromSession(session: Session, playerId: string): Ses
 }
 
 export function evaluateAndCreateMatches(session: Session): Session {
+  // King of the court doesn't auto-create matches - waits for rounds
+  if (session.config.mode === 'king-of-court') {
+    return session;
+  }
+  
   const playersPerTeam = session.config.sessionType === 'singles' ? 1 : 2;
   
   // Get all active players not currently playing
@@ -108,7 +129,56 @@ export function evaluateAndCreateMatches(session: Session): Session {
     }
   }
   
-  // Assign matches to available courts in order
+  // For round-robin, use the queue
+  if (session.config.mode === 'round-robin') {
+    // Filter queue to only include matches with all active players
+    const validQueueMatches = session.matchQueue.filter(qm => {
+      const allPlayers = [...qm.team1, ...qm.team2];
+      return allPlayers.every(id => session.activePlayers.has(id));
+    });
+    
+    let queueIndex = 0;
+    for (const courtNum of availableCourts) {
+      if (queueIndex >= validQueueMatches.length) break;
+      
+      const queuedMatch = validQueueMatches[queueIndex];
+      const matchPlayers = [...queuedMatch.team1, ...queuedMatch.team2];
+      
+      // Check if any players in this queued match are already playing
+      if (matchPlayers.some(id => playingPlayers.has(id) || assignedPlayers.has(id))) {
+        // Skip to next queued match
+        queueIndex++;
+        continue;
+      }
+      
+      const match = createMatch(courtNum, queuedMatch.team1, queuedMatch.team2, session.playerStats);
+      newMatches.push(match);
+      
+      matchPlayers.forEach(id => assignedPlayers.add(id));
+      queueIndex++;
+    }
+    
+    // Remove used matches from queue
+    const updatedQueue = validQueueMatches.slice(queueIndex);
+    
+    // Update waiting players stats
+    const stillWaiting = availablePlayers.filter((id) => !assignedPlayers.has(id));
+    stillWaiting.forEach((id) => {
+      const stats = session.playerStats.get(id);
+      if (stats) {
+        stats.gamesWaited++;
+      }
+    });
+    
+    return {
+      ...session,
+      matches: [...session.matches, ...newMatches],
+      waitingPlayers: stillWaiting,
+      matchQueue: updatedQueue,
+    };
+  }
+  
+  // For teams mode, use the original logic
   for (const courtNum of availableCourts) {
     const stillAvailable = availablePlayers.filter((id) => !assignedPlayers.has(id));
     
@@ -261,7 +331,7 @@ export function checkForAvailableCourts(session: Session): number[] {
   
   for (let courtNum = 1; courtNum <= session.config.courts; courtNum++) {
     const courtBusy = session.matches.some(
-      (m) => m.courtNumber === courtNum && m.status !== 'completed'
+      (m) => m.courtNumber === courtNum && m.status !== 'completed' && m.status !== 'forfeited'
     );
     
     if (!courtBusy) {
@@ -270,4 +340,20 @@ export function checkForAvailableCourts(session: Session): number[] {
   }
   
   return availableCourts;
+}
+
+export function canStartNextRound(session: Session): boolean {
+  // Check if all courts are either completed or forfeited
+  const activeMatches = session.matches.filter(
+    m => m.status === 'in-progress' || m.status === 'waiting'
+  );
+  return activeMatches.length === 0;
+}
+
+export function startNextRound(session: Session): Session {
+  if (!canStartNextRound(session)) {
+    return session;
+  }
+  
+  return evaluateAndCreateMatches(session);
 }

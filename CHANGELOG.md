@@ -1,17 +1,30 @@
 # Changelog
 
-## Version 2.2 - Court Stability & Improvements (Current)
+## Version 2.3 - Queue System & King of the Court Rounds (Current)
 
 ### New Features
 
+#### 📋 Round-Robin Match Queue
+- **NEW**: Pre-generated match queue for round-robin mode
+- Shows all scheduled matches in advance
+- Deterministic match generation with partner diversity optimization
+- Paginated view (configurable matches per page, default 10)
+- Auto-recalculates when players are added/removed
+- Queue updates automatically as matches complete
+
+#### 👑 King of the Court Rounds
+- **CHANGED**: King of the Court now works in rounds instead of continuous
+- "Start Next Round" button appears when all matches are complete
+- Prevents automatic match creation until round is complete
+- Better supports bracketed tournament-style play
+
 #### 🌙 Dark Mode / Light Mode Toggle
-- **NEW**: Theme toggle button in header
-- Dark mode is default
+- Theme toggle button in header
+- Dark mode is default (GitHub-inspired with better contrast)
+- Improved readability with lighter text on dark backgrounds
 - Light mode available with sun icon (☀️)
 - Preference saved in localStorage
 - Smooth transitions between themes
-- All components themed (cards, inputs, buttons, etc.)
-- Professional dark theme with proper contrast
 
 ### Bug Fixes & Improvements
 
