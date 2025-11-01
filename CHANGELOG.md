@@ -2,6 +2,17 @@
 
 ## Version 2.2 - Court Stability & Improvements (Current)
 
+### New Features
+
+#### 🌙 Dark Mode / Light Mode Toggle
+- **NEW**: Theme toggle button in header
+- Dark mode is default
+- Light mode available with sun icon (☀️)
+- Preference saved in localStorage
+- Smooth transitions between themes
+- All components themed (cards, inputs, buttons, etc.)
+- Professional dark theme with proper contrast
+
 ### Bug Fixes & Improvements
 
 #### 📜 Match History Improvements

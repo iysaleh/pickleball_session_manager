@@ -48,9 +48,13 @@ const waitingPlayers = document.getElementById('waiting-players') as HTMLElement
 const statsGrid = document.getElementById('stats-grid') as HTMLElement;
 const matchHistorySection = document.getElementById('match-history-section') as HTMLElement;
 const matchHistoryList = document.getElementById('match-history-list') as HTMLElement;
+const themeToggle = document.getElementById('theme-toggle') as HTMLButtonElement;
 
 // Court layout state
 let courtsPerRow = 2;
+
+// Theme state
+let isDarkMode = true; // Default to dark mode
 
 // Event Listeners
 addPlayerBtn.addEventListener('click', handleAddPlayer);
@@ -75,8 +79,43 @@ sessionPlayerNameInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') handleAddSessionPlayer();
 });
 applyLayoutBtn.addEventListener('click', handleApplyLayout);
+themeToggle.addEventListener('click', toggleTheme);
+
+// Initialize theme
+initializeTheme();
 
 // Functions
+function initializeTheme() {
+  // Check localStorage first, otherwise default to dark
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme) {
+    isDarkMode = savedTheme === 'dark';
+  }
+  
+  // Apply theme
+  if (isDarkMode) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    themeToggle.textContent = '🌙';
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    themeToggle.textContent = '☀️';
+  }
+}
+
+function toggleTheme() {
+  isDarkMode = !isDarkMode;
+  
+  if (isDarkMode) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    themeToggle.textContent = '🌙';
+    localStorage.setItem('theme', 'dark');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    themeToggle.textContent = '☀️';
+    localStorage.setItem('theme', 'light');
+  }
+}
+
 function handleApplyLayout() {
   const value = parseInt(courtsPerRowInput.value);
   if (value && value >= 1 && value <= 6) {

@@ -19,6 +19,7 @@ A client-side TypeScript web application for managing pickleball play sessions w
 - ✅ **Player Status**: Mark players as inactive (they leave early) or reactivate them
 - ✅ **Match History**: View all completed/forfeited matches
 - ✅ **Edit Match Scores**: Correct mistakes in historical match scores
+- ✅ **Dark/Light Mode**: Toggle theme with moon (🌙) / sun (☀️) button in header
 - ✅ Multiple court support
 - ✅ Intelligent waiting queue system
 - ✅ Fair rotation ensuring everyone plays

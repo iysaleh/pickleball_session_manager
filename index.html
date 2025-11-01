@@ -5,6 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pickleball Session Manager</title>
   <style>
+    :root {
+      /* Light mode colors */
+      --bg-primary: #ffffff;
+      --bg-secondary: #f8f9fa;
+      --bg-tertiary: #e9ecef;
+      --text-primary: #333333;
+      --text-secondary: #555555;
+      --text-tertiary: #777777;
+      --border-color: #ddd;
+      --border-light: #e0e0e0;
+      --shadow: rgba(0, 0, 0, 0.1);
+      --shadow-hover: rgba(0, 0, 0, 0.15);
+      --input-bg: #ffffff;
+      --input-border: #ddd;
+      --disabled-bg: #f5f5f5;
+      --disabled-text: #999;
+      --card-bg: #ffffff;
+      --gradient-start: #667eea;
+      --gradient-end: #764ba2;
+      --header-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    [data-theme="dark"] {
+      /* Dark mode colors */
+      --bg-primary: #1e1e1e;
+      --bg-secondary: #2d2d2d;
+      --bg-tertiary: #3a3a3a;
+      --text-primary: #e0e0e0;
+      --text-secondary: #b0b0b0;
+      --text-tertiary: #888888;
+      --border-color: #444;
+      --border-light: #3a3a3a;
+      --shadow: rgba(0, 0, 0, 0.4);
+      --shadow-hover: rgba(0, 0, 0, 0.6);
+      --input-bg: #2d2d2d;
+      --input-border: #444;
+      --disabled-bg: #2d2d2d;
+      --disabled-text: #666;
+      --card-bg: #2d2d2d;
+      --gradient-start: #667eea;
+      --gradient-end: #764ba2;
+      --header-bg: linear-gradient(135deg, #556bd8 0%, #64398e 100%);
+    }
+    
     * {
       margin: 0;
       padding: 0;
@@ -13,25 +57,48 @@
     
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
       min-height: 100vh;
       padding: 20px;
+      transition: background 0.3s ease;
     }
     
     .container {
       max-width: 1400px;
       margin: 0 auto;
-      background: white;
+      background: var(--bg-primary);
       border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 8px 32px var(--shadow);
       overflow: hidden;
+      transition: background 0.3s ease, box-shadow 0.3s ease;
     }
     
     header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: var(--header-bg);
       color: white;
       padding: 30px;
       text-align: center;
+      position: relative;
+    }
+    
+    .theme-toggle-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      color: white;
+      padding: 10px 15px;
+      border-radius: 25px;
+      cursor: pointer;
+      font-size: 1.2em;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+    }
+    
+    .theme-toggle-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: scale(1.05);
     }
     
     h1 {
@@ -51,16 +118,18 @@
     .section {
       margin-bottom: 30px;
       padding: 20px;
-      background: #f8f9fa;
+      background: var(--bg-secondary);
       border-radius: 8px;
+      transition: background 0.3s ease;
     }
     
     .section-title {
       font-size: 1.5em;
       margin-bottom: 15px;
-      color: #333;
-      border-bottom: 2px solid #667eea;
+      color: var(--text-primary);
+      border-bottom: 2px solid var(--gradient-start);
       padding-bottom: 10px;
+      transition: color 0.3s ease;
     }
     
     .form-group {
@@ -71,13 +140,17 @@
       display: block;
       margin-bottom: 5px;
       font-weight: 600;
-      color: #555;
+      color: var(--text-secondary);
+      transition: color 0.3s ease;
     }
     
     input, select, button {
       padding: 10px 15px;
-      border: 1px solid #ddd;
+      border: 1px solid var(--input-border);
       border-radius: 6px;
+      background: var(--input-bg);
+      color: var(--text-primary);
+      transition: all 0.3s ease;
       font-size: 1em;
     }
     
@@ -87,12 +160,12 @@
     }
     
     button {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
       color: white;
       border: none;
       cursor: pointer;
       font-weight: 600;
-      transition: transform 0.2s, box-shadow 0.2s;
+      transition: all 0.3s, transform 0.2s;
     }
     
     button:hover {
@@ -101,7 +174,8 @@
     }
     
     button:disabled {
-      background: #ccc;
+      background: var(--disabled-bg);
+      color: var(--disabled-text);
       cursor: not-allowed;
       transform: none;
     }
@@ -136,13 +210,15 @@
     }
     
     .player-tag {
-      background: white;
+      background: var(--bg-tertiary);
       padding: 8px 15px;
       border-radius: 20px;
       display: flex;
       align-items: center;
       gap: 8px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 2px 4px var(--shadow);
+      border: 1px solid var(--border-light);
+      transition: background 0.3s ease;
     }
     
     .player-tag button {
@@ -154,7 +230,7 @@
     
     .inactive-player {
       opacity: 0.5;
-      background: #f0f0f0;
+      background: var(--bg-tertiary);
     }
     
     .inactive-player button {
@@ -175,21 +251,23 @@
     }
     
     .court {
-      background: white;
-      border: 2px solid #667eea;
+      background: var(--card-bg);
+      border: 2px solid var(--gradient-start);
       border-radius: 8px;
       padding: 20px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 12px var(--shadow);
       display: flex;
       flex-direction: column;
+      transition: all 0.3s ease;
     }
     
     .court-header {
       font-size: 1.3em;
       font-weight: 700;
-      color: #667eea;
+      color: var(--gradient-start);
       margin-bottom: 15px;
       text-align: center;
+      transition: color 0.3s ease;
     }
     
     .court-content {
@@ -236,12 +314,13 @@
     
     .team {
       padding: 15px;
-      background: #f8f9fa;
+      background: var(--bg-tertiary);
       border-radius: 6px;
       flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
+      transition: background 0.3s ease;
       justify-content: center;
       min-height: 100px;
     }
@@ -313,7 +392,7 @@
     
     .vs-text {
       font-weight: 700;
-      color: #666;
+      color: var(--text-secondary);
       font-size: 1.1em;
     }
     
@@ -331,18 +410,20 @@
     }
     
     .waiting-area {
-      background: #fff3cd;
+      background: var(--bg-tertiary);
       border: 2px solid #ffc107;
       border-radius: 8px;
       padding: 20px;
       margin-top: 20px;
+      transition: background 0.3s ease;
     }
     
     .waiting-title {
       font-size: 1.3em;
       font-weight: 700;
-      color: #856404;
+      color: var(--text-primary);
       margin-bottom: 10px;
+      transition: color 0.3s ease;
     }
     
     .stats-grid {
@@ -353,15 +434,17 @@
     }
     
     .stat-card {
-      background: white;
+      background: var(--card-bg);
       padding: 15px;
       border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 2px 8px var(--shadow);
+      transition: all 0.3s ease;
     }
     
     .stat-card h4 {
-      color: #667eea;
+      color: var(--gradient-start);
       margin-bottom: 10px;
+      transition: color 0.3s ease;
     }
     
     .stat-line {
@@ -369,6 +452,8 @@
       justify-content: space-between;
       margin: 5px 0;
       font-size: 0.9em;
+      color: var(--text-secondary);
+      transition: color 0.3s ease;
     }
     
     .controls {
@@ -422,11 +507,12 @@
     }
     
     .history-card {
-      background: white;
-      border: 1px solid #ddd;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
       border-radius: 8px;
       padding: 15px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      box-shadow: 0 2px 8px var(--shadow);
+      transition: all 0.3s ease;
     }
     
     .history-header {
@@ -527,30 +613,34 @@
     
     .empty-message {
       font-size: 1.2em;
-      color: #666;
+      color: var(--text-secondary);
       margin-bottom: 15px;
+      transition: color 0.3s ease;
     }
     
     .court-history {
       width: 100%;
-      background: #f8f9fa;
+      background: var(--bg-tertiary);
       border-radius: 6px;
       padding: 12px;
       margin-top: 10px;
+      transition: background 0.3s ease;
     }
     
     .court-history-header {
       font-weight: 700;
-      color: #667eea;
+      color: var(--gradient-start);
       margin-bottom: 8px;
       font-size: 0.9em;
+      transition: color 0.3s ease;
     }
     
     .history-item {
       padding: 6px 0;
       font-size: 0.85em;
-      color: #555;
-      border-bottom: 1px solid #e0e0e0;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-light);
+      transition: color 0.3s ease, border-color 0.3s ease;
     }
     
     .history-item:last-child {
@@ -560,14 +650,16 @@
     .history-more {
       padding: 6px 0;
       font-size: 0.8em;
-      color: #999;
+      color: var(--text-tertiary);
       font-style: italic;
+      transition: color 0.3s ease;
     }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
+      <button class="theme-toggle-btn" id="theme-toggle" title="Toggle dark/light mode">🌙</button>
       <h1>🎾 Pickleball Session Manager</h1>
       <p class="subtitle">Organize your games with ease</p>
     </header>
