@@ -4,6 +4,14 @@
 
 ### Quality of Life Improvements
 
+#### 🎛️ Court Layout Controls
+- **NEW**: Manually control courts per row (1-6)
+- Input field and "Apply" button in Active Courts header
+- Defaults to 2 courts per row
+- Dynamically adjusts grid layout
+- Responsive: Auto-stacks on mobile
+- Perfect for different screen sizes and preferences
+
 #### 🔄 Edit Session Feature
 - **NEW**: "Edit Session" button in session controls
 - Keeps all players when ending session
@@ -42,6 +50,8 @@
 - Added `renderEmptyCourt()` function for empty court display
 - Updated court rendering to show ALL courts (not just active)
 - Enhanced CSS for overflow protection and empty court styling
+- Added `updateCourtsGridLayout()` for dynamic grid adjustment
+- Changed CSS from auto-fit to fixed column count
 
 ---
 

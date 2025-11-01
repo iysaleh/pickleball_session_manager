@@ -41,11 +41,16 @@ const sessionPlayerNameInput = document.getElementById('session-player-name') as
 const addSessionPlayerBtn = document.getElementById('add-session-player-btn') as HTMLButtonElement;
 
 const courtsGrid = document.getElementById('courts-grid') as HTMLElement;
+const courtsPerRowInput = document.getElementById('courts-per-row') as HTMLInputElement;
+const applyLayoutBtn = document.getElementById('apply-courts-layout-btn') as HTMLButtonElement;
 const waitingArea = document.getElementById('waiting-area') as HTMLElement;
 const waitingPlayers = document.getElementById('waiting-players') as HTMLElement;
 const statsGrid = document.getElementById('stats-grid') as HTMLElement;
 const matchHistorySection = document.getElementById('match-history-section') as HTMLElement;
 const matchHistoryList = document.getElementById('match-history-list') as HTMLElement;
+
+// Court layout state
+let courtsPerRow = 2;
 
 // Event Listeners
 addPlayerBtn.addEventListener('click', handleAddPlayer);
@@ -69,8 +74,24 @@ addSessionPlayerBtn.addEventListener('click', handleAddSessionPlayer);
 sessionPlayerNameInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') handleAddSessionPlayer();
 });
+applyLayoutBtn.addEventListener('click', handleApplyLayout);
 
 // Functions
+function handleApplyLayout() {
+  const value = parseInt(courtsPerRowInput.value);
+  if (value && value >= 1 && value <= 6) {
+    courtsPerRow = value;
+    updateCourtsGridLayout();
+    renderSession();
+  } else {
+    alert('Please enter a value between 1 and 6');
+  }
+}
+
+function updateCourtsGridLayout() {
+  courtsGrid.style.gridTemplateColumns = `repeat(${courtsPerRow}, 1fr)`;
+}
+
 function handleAddPlayer() {
   const name = playerNameInput.value.trim();
   if (!name) return;
@@ -252,6 +273,9 @@ function handleStartSession() {
   setupSection.classList.add('hidden');
   controlSection.classList.remove('hidden');
   courtsSection.classList.remove('hidden');
+  
+  // Apply initial layout
+  updateCourtsGridLayout();
   
   renderSession();
   renderActivePlayers();
