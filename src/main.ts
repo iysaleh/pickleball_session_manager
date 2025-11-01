@@ -400,9 +400,22 @@ function handleStartSession() {
   // Apply initial layout
   updateCourtsGridLayout();
   
+  // For king-of-court, start the first round immediately
+  if (currentSession.config.mode === 'king-of-court') {
+    currentSession = startNextRound(currentSession);
+    
+    // Auto-start all matches
+    currentSession.matches.forEach(match => {
+      if (match.status === 'waiting') {
+        currentSession = startMatch(currentSession!, match.id);
+      }
+    });
+  }
+  
   renderSession();
   renderActivePlayers();
   renderQueue(); // Render queue initially
+  updateStartRoundButton();
 }
 
 function handleAddSessionPlayer() {
@@ -482,8 +495,20 @@ function handleCompleteMatch(matchId: string, team1Score: number, team2Score: nu
   
   currentSession = completeMatch(currentSession, matchId, team1Score, team2Score);
 
-  // Auto-start any new matches created by evaluation (not for king-of-court)
-  if (currentSession.config.mode !== 'king-of-court') {
+  // For king-of-court mode, automatically start next round if all matches are complete
+  if (currentSession.config.mode === 'king-of-court') {
+    if (canStartNextRound(currentSession)) {
+      currentSession = startNextRound(currentSession);
+      
+      // Auto-start new matches
+      currentSession.matches.forEach(match => {
+        if (match.status === 'waiting') {
+          currentSession = startMatch(currentSession!, match.id);
+        }
+      });
+    }
+  } else {
+    // Auto-start any new matches created by evaluation (for non-king-of-court modes)
     currentSession.matches.forEach(match => {
       if (match.status === 'waiting') {
         currentSession = startMatch(currentSession!, match.id);
@@ -495,6 +520,9 @@ function handleCompleteMatch(matchId: string, team1Score: number, team2Score: nu
   if (!queueSection.classList.contains('hidden')) {
     renderQueue();
   }
+  
+  // Update start round button for king-of-court (in case not all matches complete)
+  updateStartRoundButton();
   
   renderSession();
   renderActivePlayers();
@@ -509,12 +537,34 @@ function handleForfeitMatch(matchId: string) {
   
   currentSession = forfeitMatch(currentSession, matchId);
   
-  // Auto-start any new matches created by evaluation
-  currentSession.matches.forEach(match => {
-    if (match.status === 'waiting') {
-      currentSession = startMatch(currentSession!, match.id);
+  // For king-of-court mode, automatically start next round if all matches are complete
+  if (currentSession.config.mode === 'king-of-court') {
+    if (canStartNextRound(currentSession)) {
+      currentSession = startNextRound(currentSession);
+      
+      // Auto-start new matches
+      currentSession.matches.forEach(match => {
+        if (match.status === 'waiting') {
+          currentSession = startMatch(currentSession!, match.id);
+        }
+      });
     }
-  });
+  } else {
+    // Auto-start any new matches created by evaluation (for non-king-of-court modes)
+    currentSession.matches.forEach(match => {
+      if (match.status === 'waiting') {
+        currentSession = startMatch(currentSession!, match.id);
+      }
+    });
+  }
+  
+  // Update queue if visible
+  if (!queueSection.classList.contains('hidden')) {
+    renderQueue();
+  }
+  
+  // Update start round button for king-of-court (in case not all matches complete)
+  updateStartRoundButton();
   
   renderSession();
   renderActivePlayers();
@@ -1120,8 +1170,18 @@ function renderQueue() {
         </div>
       `;
     }).join('');
+  } else if (currentSession.config.mode === 'king-of-court') {
+    // For king-of-court, show next potential matches (if all courts are free)
+    if (canStartNextRound(currentSession)) {
+      queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">⏱️ All matches complete. Click "Start Next Round" to continue.</p>';
+    } else {
+      queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">⏳ Waiting for current matches to finish before generating next round...</p>';
+    }
+    queuePageInfo.textContent = '';
+    queuePrevBtn.disabled = true;
+    queueNextBtn.disabled = true;
   } else {
-    queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">Queue is only available for Round-Robin mode</p>';
+    queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">Queue display not available for this mode</p>';
     queuePageInfo.textContent = '';
     queuePrevBtn.disabled = true;
     queueNextBtn.disabled = true;
@@ -1139,6 +1199,11 @@ function handleStartNextRound() {
       currentSession = startMatch(currentSession!, match.id);
     }
   });
+  
+  // Update queue if visible
+  if (!queueSection.classList.contains('hidden')) {
+    renderQueue();
+  }
   
   renderSession();
   updateStartRoundButton();
