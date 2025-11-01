@@ -110,6 +110,16 @@
       background: #6c757d;
     }
     
+    .btn-warning {
+      background: #ffc107;
+      color: #000;
+      font-weight: 600;
+    }
+    
+    .btn-warning:hover {
+      background: #e0a800;
+    }
+    
     .btn-danger {
       background: #dc3545;
     }
@@ -213,6 +223,11 @@
       color: white;
     }
     
+    .status-empty {
+      background: #6c757d;
+      color: white;
+    }
+    
     .team {
       padding: 15px;
       background: #f8f9fa;
@@ -249,6 +264,8 @@
       flex-direction: column;
       gap: 8px;
       align-items: center;
+      width: 100%;
+      overflow: hidden;
     }
     
     .player-name {
@@ -257,6 +274,11 @@
       border-radius: 15px;
       font-size: 0.9em;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: center;
     }
     
     .match-controls {
@@ -472,6 +494,60 @@
     .btn-small:hover {
       background: #5568d3;
     }
+    
+    /* Empty Court Styles */
+    .empty-court {
+      opacity: 0.7;
+      border-color: #ccc;
+    }
+    
+    .empty-court-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 150px;
+      padding: 20px;
+    }
+    
+    .empty-message {
+      font-size: 1.2em;
+      color: #666;
+      margin-bottom: 15px;
+    }
+    
+    .court-history {
+      width: 100%;
+      background: #f8f9fa;
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    
+    .court-history-header {
+      font-weight: 700;
+      color: #667eea;
+      margin-bottom: 8px;
+      font-size: 0.9em;
+    }
+    
+    .history-item {
+      padding: 6px 0;
+      font-size: 0.85em;
+      color: #555;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .history-item:last-child {
+      border-bottom: none;
+    }
+    
+    .history-more {
+      padding: 6px 0;
+      font-size: 0.8em;
+      color: #999;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -485,6 +561,19 @@
       <!-- Setup Section -->
       <div id="setup-section" class="section">
         <h2 class="section-title">Session Setup</h2>
+        
+        <!-- Test Mode Container (hidden by default) -->
+        <div id="test-mode-container" style="display: none; margin-bottom: 20px;">
+          <div style="padding: 15px; background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px;">
+            <h3 style="margin: 0 0 10px 0; color: #856404;">🧪 Test Mode Active</h3>
+            <p style="margin: 0 0 10px 0; color: #856404; font-size: 0.9em;">
+              Quick setup for testing - adds 18 players automatically
+            </p>
+            <button id="add-test-players-btn" style="background: #ffc107; color: #000; font-weight: 600;">
+              ⚡ Add 18 Test Players
+            </button>
+          </div>
+        </div>
         
         <div class="config-grid">
           <div class="form-group">
@@ -551,6 +640,7 @@
         <div class="controls">
           <button id="show-stats-btn">Show Statistics</button>
           <button id="show-history-btn">Show History</button>
+          <button id="edit-session-btn" class="btn-warning">Edit Session</button>
           <button id="end-session-btn" class="btn-danger">End Session</button>
         </div>
       </div>

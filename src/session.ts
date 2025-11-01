@@ -92,14 +92,24 @@ export function evaluateAndCreateMatches(session: Session): Session {
   const newMatches: Match[] = [];
   const assignedPlayers = new Set<string>();
   
-  // Create matches for available courts
+  // Create matches for available courts IN ORDER (1, 2, 3, ...)
+  const occupiedCourts = new Set<number>();
+  session.matches.forEach((match) => {
+    if (match.status === 'in-progress' || match.status === 'waiting') {
+      occupiedCourts.add(match.courtNumber);
+    }
+  });
+  
+  // Find available courts in ascending order
+  const availableCourts: number[] = [];
   for (let courtNum = 1; courtNum <= session.config.courts; courtNum++) {
-    const courtBusy = session.matches.some(
-      (m) => m.courtNumber === courtNum && (m.status === 'in-progress' || m.status === 'waiting')
-    );
-    
-    if (courtBusy) continue;
-    
+    if (!occupiedCourts.has(courtNum)) {
+      availableCourts.push(courtNum);
+    }
+  }
+  
+  // Assign matches to available courts in order
+  for (const courtNum of availableCourts) {
     const stillAvailable = availablePlayers.filter((id) => !assignedPlayers.has(id));
     
     const selectedPlayers = selectPlayersForNextGame(

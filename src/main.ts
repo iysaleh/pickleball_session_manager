@@ -3,14 +3,20 @@ import { createSession, addPlayerToSession, removePlayerFromSession, startMatch,
 import { generateId } from './utils';
 
 let currentSession: Session | null = null;
-const players: Player[] = [];
-const bannedPairs: [string, string][] = [];
+let players: Player[] = [];
+let bannedPairs: [string, string][] = [];
+
+// Check for test mode
+const urlParams = new URLSearchParams(window.location.search);
+const isTestMode = urlParams.get('test') === 'true';
 
 // DOM Elements
 const setupSection = document.getElementById('setup-section') as HTMLElement;
 const controlSection = document.getElementById('control-section') as HTMLElement;
 const courtsSection = document.getElementById('courts-section') as HTMLElement;
 const statsSection = document.getElementById('stats-section') as HTMLElement;
+const testModeContainer = document.getElementById('test-mode-container') as HTMLElement;
+const addTestPlayersBtn = document.getElementById('add-test-players-btn') as HTMLButtonElement;
 
 const playerNameInput = document.getElementById('player-name') as HTMLInputElement;
 const addPlayerBtn = document.getElementById('add-player-btn') as HTMLButtonElement;
@@ -27,6 +33,8 @@ const bannedPairsList = document.getElementById('banned-pairs-list') as HTMLElem
 
 const startSessionBtn = document.getElementById('start-session-btn') as HTMLButtonElement;
 const showStatsBtn = document.getElementById('show-stats-btn') as HTMLButtonElement;
+const showHistoryBtn = document.getElementById('show-history-btn') as HTMLButtonElement;
+const editSessionBtn = document.getElementById('edit-session-btn') as HTMLButtonElement;
 const endSessionBtn = document.getElementById('end-session-btn') as HTMLButtonElement;
 const activePlayersList = document.getElementById('active-players-list') as HTMLElement;
 const sessionPlayerNameInput = document.getElementById('session-player-name') as HTMLInputElement;
@@ -38,7 +46,6 @@ const waitingPlayers = document.getElementById('waiting-players') as HTMLElement
 const statsGrid = document.getElementById('stats-grid') as HTMLElement;
 const matchHistorySection = document.getElementById('match-history-section') as HTMLElement;
 const matchHistoryList = document.getElementById('match-history-list') as HTMLElement;
-const showHistoryBtn = document.getElementById('show-history-btn') as HTMLButtonElement;
 
 // Event Listeners
 addPlayerBtn.addEventListener('click', handleAddPlayer);
@@ -46,10 +53,17 @@ playerNameInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') handleAddPlayer();
 });
 
+// Test mode
+if (isTestMode && testModeContainer) {
+  testModeContainer.style.display = 'block';
+  addTestPlayersBtn.addEventListener('click', handleAddTestPlayers);
+}
+
 addBannedPairBtn.addEventListener('click', handleAddBannedPair);
 startSessionBtn.addEventListener('click', handleStartSession);
 showStatsBtn.addEventListener('click', toggleStats);
 showHistoryBtn.addEventListener('click', toggleHistory);
+editSessionBtn.addEventListener('click', handleEditSession);
 endSessionBtn.addEventListener('click', handleEndSession);
 addSessionPlayerBtn.addEventListener('click', handleAddSessionPlayer);
 sessionPlayerNameInput.addEventListener('keypress', (e) => {
@@ -70,6 +84,48 @@ function handleAddPlayer() {
   playerNameInput.value = '';
   renderPlayerList();
   updateBannedPairSelects();
+}
+
+function handleAddTestPlayers() {
+  const testNames = [
+    'James Anderson',
+    'Sarah Mitchell',
+    'Michael Chen',
+    'Emily Rodriguez',
+    'David Thompson',
+    'Jessica Williams',
+    'Christopher Lee',
+    'Amanda Martinez',
+    'Daniel Brown',
+    'Lauren Davis',
+    'Matthew Wilson',
+    'Ashley Garcia',
+    'Joshua Taylor',
+    'Rachel Johnson',
+    'Andrew Miller',
+    'Nicole White',
+    'Brandon Moore',
+    'Stephanie Harris'
+  ];
+  
+  // Clear existing players first
+  players = [];
+  bannedPairs = [];
+  
+  testNames.forEach(name => {
+    const player: Player = {
+      id: generateId(),
+      name,
+    };
+    players.push(player);
+  });
+  
+  renderPlayerList();
+  updateBannedPairSelects();
+  renderBannedPairs();
+  
+  // Show a confirmation message
+  alert('✅ Added 18 test players!');
 }
 
 function handleRemovePlayer(playerId: string) {
@@ -285,14 +341,22 @@ function handleForfeitMatch(matchId: string) {
 function renderSession() {
   if (!currentSession) return;
   
-  // Render courts
+  // Render courts - ALL courts in order, not just active ones
   courtsGrid.innerHTML = '';
   
-  const activeMatches = currentSession.matches.filter(
-    m => m.status === 'in-progress' || m.status === 'waiting'
-  );
-  
-  activeMatches.forEach(match => {
+  // Render each court from 1 to numCourts
+  for (let courtNum = 1; courtNum <= currentSession.config.courts; courtNum++) {
+    const activeMatch = currentSession.matches.find(
+      m => m.courtNumber === courtNum && (m.status === 'in-progress' || m.status === 'waiting')
+    );
+    
+    if (!activeMatch) {
+      // Show empty court
+      renderEmptyCourt(courtNum);
+      continue;
+    }
+    
+    const match = activeMatch;
     const courtDiv = document.createElement('div');
     courtDiv.className = 'court';
     
@@ -345,7 +409,7 @@ function renderSession() {
     `;
     
     courtsGrid.appendChild(courtDiv);
-  });
+  }
   
   // Render waiting players
   if (currentSession.waitingPlayers.length > 0) {
@@ -364,6 +428,62 @@ function renderSession() {
   } else {
     waitingArea.style.display = 'none';
   }
+}
+
+function renderEmptyCourt(courtNum: number) {
+  if (!currentSession) return;
+  
+  const courtDiv = document.createElement('div');
+  courtDiv.className = 'court empty-court';
+  
+  // Get history for this court
+  const courtHistory = currentSession.matches.filter(
+    m => m.courtNumber === courtNum && (m.status === 'completed' || m.status === 'forfeited')
+  );
+  
+  let historyHtml = '';
+  if (courtHistory.length > 0) {
+    const recentMatches = courtHistory.slice(-3).reverse(); // Show last 3 matches
+    historyHtml = `
+      <div class="court-history">
+        <div class="court-history-header">Recent Matches:</div>
+        ${recentMatches.map(match => {
+          const team1Names = match.team1.map(id => {
+            const player = currentSession!.config.players.find(p => p.id === id);
+            return player?.name.split(' ')[0] || '?'; // First name only
+          }).join(' & ');
+          
+          const team2Names = match.team2.map(id => {
+            const player = currentSession!.config.players.find(p => p.id === id);
+            return player?.name.split(' ')[0] || '?';
+          }).join(' & ');
+          
+          if (match.status === 'forfeited') {
+            return `<div class="history-item">❌ ${team1Names} vs ${team2Names} (Forfeited)</div>`;
+          } else if (match.score) {
+            return `<div class="history-item">✓ ${team1Names} ${match.score.team1Score}-${match.score.team2Score} ${team2Names}</div>`;
+          }
+          return '';
+        }).join('')}
+        ${courtHistory.length > 3 ? `<div class="history-more">+${courtHistory.length - 3} more...</div>` : ''}
+      </div>
+    `;
+  }
+  
+  courtDiv.innerHTML = `
+    <div class="court-header">
+      Court ${courtNum}
+      <span class="match-status status-empty">Available</span>
+    </div>
+    <div class="empty-court-content">
+      <div class="empty-message">
+        ${courtHistory.length === 0 ? '🎾 Waiting for players...' : '🎾 Ready for next match'}
+      </div>
+      ${historyHtml}
+    </div>
+  `;
+  
+  courtsGrid.appendChild(courtDiv);
 }
 
 function renderActivePlayers() {
@@ -541,17 +661,45 @@ function renderStats() {
   });
 }
 
+function handleEditSession() {
+  if (!currentSession) return;
+  
+  if (!confirm('This will end the current session but keep all players. You can then reconfigure and start a new session. Continue?')) {
+    return;
+  }
+  
+  // Keep players but clear session
+  currentSession = null;
+  
+  // Show setup section, hide others
+  setupSection.classList.remove('hidden');
+  controlSection.classList.add('hidden');
+  courtsSection.classList.add('hidden');
+  statsSection.classList.add('hidden');
+  matchHistorySection.classList.add('hidden');
+  
+  // Players are already in the players array, just re-render
+  renderPlayerList();
+  updateBannedPairSelects();
+  renderBannedPairs();
+  
+  alert('✅ Session ended. Players saved. You can now change settings and start a new session.');
+}
+
 function handleEndSession() {
-  if (!confirm('Are you sure you want to end this session?')) return;
+  if (!confirm('Are you sure you want to end the session? All data (including players) will be lost.')) {
+    return;
+  }
   
   currentSession = null;
-  players.length = 0;
-  bannedPairs.length = 0;
+  players = [];
+  bannedPairs = [];
   
   setupSection.classList.remove('hidden');
   controlSection.classList.add('hidden');
   courtsSection.classList.add('hidden');
   statsSection.classList.add('hidden');
+  matchHistorySection.classList.add('hidden');
   
   renderPlayerList();
   updateBannedPairSelects();

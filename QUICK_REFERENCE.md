@@ -30,6 +30,8 @@
 | Remove Player | Click "Remove" → Confirm | Active matches forfeited, player marked inactive |
 | View History | Click "Show History" | All matches displayed |
 | View Stats | Click "Show Statistics" | Player stats cards shown |
+| Edit Session | Click "Edit Session" → Confirm | Players kept, return to setup, change settings |
+| End Session | Click "End Session" → Confirm | Everything cleared, fresh start |
 
 ## 🎨 Visual Indicators
 

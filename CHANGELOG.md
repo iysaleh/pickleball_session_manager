@@ -1,8 +1,60 @@
 # Changelog
 
-## Version 2.1 - Match History & UI Improvements (Current)
+## Version 2.2 - Court Stability & Improvements (Current)
+
+### Quality of Life Improvements
+
+#### 🔄 Edit Session Feature
+- **NEW**: "Edit Session" button in session controls
+- Keeps all players when ending session
+- Returns to setup screen with players preserved
+- Change game mode, courts, or banned pairs
+- Start fresh session without re-entering players
+- Separate from "End Session" which clears everything
+
+## Version 2.2 - Court Stability & Improvements
+
+### Major Improvements
+
+#### 🎯 Static Court Positions
+- **FIXED**: Courts now maintain their positions and numbers
+- Courts render in ascending order (1, 2, 3...) always
+- Empty courts displayed with "Available" status
+- No more jumping around when matches complete
+- Easy to map on-screen courts to physical courts
+
+#### 📜 Per-Court Match History
+- **NEW**: Each court shows its last 3 completed matches
+- Displays right in the court card when empty
+- Shows scores, team names, and match status
+- Indicates if more matches exist ("+5 more...")
+- Great for tracking court utilization
+
+#### 🔧 Fixed Team Box Overflow
+- **FIXED**: Long player names no longer break layout
+- Added text truncation with ellipsis
+- Proper overflow handling
+- Centered text alignment
+- Professional appearance maintained
+
+### Technical Changes
+- Modified `evaluateAndCreateMatches()` to assign courts in order
+- Added `renderEmptyCourt()` function for empty court display
+- Updated court rendering to show ALL courts (not just active)
+- Enhanced CSS for overflow protection and empty court styling
+
+---
+
+## Version 2.1 - Match History & UI Improvements
 
 ### New Features
+
+#### 🧪 Test Mode
+- **NEW**: Access with `?test=true` query parameter
+- Displays special "Add 18 Test Players" button
+- Instantly adds 18 players with realistic names
+- Perfect for development and testing
+- Clears existing players when used
 
 #### 📜 Match History
 - **NEW**: "Show History" button to view all completed/forfeited matches

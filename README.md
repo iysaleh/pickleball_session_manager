@@ -66,6 +66,16 @@ npx -y vite@latest
 
 The application will start and be accessible at `http://localhost:5173`.
 
+#### Test Mode
+
+For quick testing, you can enable test mode with a query parameter:
+
+```
+http://localhost:5173/?test=true
+```
+
+This displays a special "Add 18 Test Players" button that instantly adds 18 players with realistic first and last names. Perfect for testing the application without manually entering names each time!
+
 ### Running Tests
 
 ```bash
@@ -123,8 +133,16 @@ npx -y vite@latest preview
   - Wins, losses, win rates
   - Partner and opponent diversity
 
-### 4. End Session
-- Click "End Session" to finish and reset
+### 4. Edit or End Session
+- **Edit Session**: Keeps players but lets you change mode/courts
+  - Click "Edit Session"
+  - Players and banned pairs preserved
+  - Returns to setup screen
+  - Reconfigure and start new session
+- **End Session**: Clears everything and starts fresh
+  - Click "End Session"
+  - All data (players, matches, stats) lost
+  - Returns to setup screen
 
 ## Project Structure
 
