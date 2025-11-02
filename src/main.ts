@@ -39,6 +39,7 @@ const showRankingsBtn = document.getElementById('show-rankings-btn') as HTMLButt
 const showStatsBtn = document.getElementById('show-stats-btn') as HTMLButtonElement;
 const showHistoryBtn = document.getElementById('show-history-btn') as HTMLButtonElement;
 const editSessionBtn = document.getElementById('edit-session-btn') as HTMLButtonElement;
+const clearSessionBtn = document.getElementById('clear-session-btn') as HTMLButtonElement;
 const endSessionBtn = document.getElementById('end-session-btn') as HTMLButtonElement;
 const rankingsSection = document.getElementById('rankings-section') as HTMLElement;
 const rankingsList = document.getElementById('rankings-list') as HTMLElement;
@@ -109,6 +110,7 @@ showRankingsBtn.addEventListener('click', toggleRankings);
 showStatsBtn.addEventListener('click', toggleStats);
 showHistoryBtn.addEventListener('click', toggleHistory);
 editSessionBtn.addEventListener('click', handleEditSession);
+clearSessionBtn.addEventListener('click', handleClearSessionData);
 endSessionBtn.addEventListener('click', handleEndSession);
 addSessionPlayerBtn.addEventListener('click', handleAddSessionPlayer);
 sessionPlayerNameInput.addEventListener('keypress', (e) => {
@@ -167,6 +169,9 @@ initializeTheme();
 // Initialize locked teams visibility
 handleSessionTypeChange();
 
+// Load saved state from localStorage
+loadStateFromLocalStorage();
+
 // Functions
 function initializeTheme() {
   // Check localStorage first, otherwise default to dark
@@ -203,6 +208,148 @@ function toggleAdvancedConfig() {
   advancedConfigSection.classList.toggle('hidden');
 }
 
+// LocalStorage functions
+function saveStateToLocalStorage() {
+  try {
+    const state = {
+      currentSession: currentSession ? serializeSession(currentSession) : null,
+      players: players,
+      bannedPairs: bannedPairs,
+      lockedTeams: lockedTeams,
+      courtsPerRow: courtsPerRow,
+      queuePage: queuePage,
+      matchesPerPage: matchesPerPage,
+      timestamp: Date.now()
+    };
+    localStorage.setItem('pickleballSessionState', JSON.stringify(state));
+  } catch (error) {
+    console.error('Failed to save state to localStorage:', error);
+  }
+}
+
+function loadStateFromLocalStorage() {
+  try {
+    const savedState = localStorage.getItem('pickleballSessionState');
+    if (!savedState) return;
+    
+    const state = JSON.parse(savedState);
+    
+    // Restore setup state
+    if (state.players) {
+      players = state.players;
+      renderPlayerList();
+      updateBannedPairSelects();
+    }
+    
+    if (state.bannedPairs) {
+      bannedPairs = state.bannedPairs;
+      renderBannedPairs();
+    }
+    
+    if (state.lockedTeams) {
+      lockedTeams = state.lockedTeams;
+      renderLockedTeams();
+    }
+    
+    if (state.courtsPerRow) {
+      courtsPerRow = state.courtsPerRow;
+      courtsPerRowInput.value = courtsPerRow.toString();
+    }
+    
+    if (state.matchesPerPage) {
+      matchesPerPage = state.matchesPerPage;
+      matchesPerPageInput.value = matchesPerPage.toString();
+    }
+    
+    if (state.queuePage !== undefined) {
+      queuePage = state.queuePage;
+    }
+    
+    // Restore active session
+    if (state.currentSession) {
+      currentSession = deserializeSession(state.currentSession);
+      
+      // Switch to control view
+      setupSection.classList.add('hidden');
+      controlSection.classList.remove('hidden');
+      courtsSection.classList.remove('hidden');
+      queueSection.classList.remove('hidden');
+      showQueueBtn.textContent = 'Hide Queue';
+      matchHistorySection.classList.remove('hidden');
+      showHistoryBtn.textContent = 'Hide History';
+      
+      // Apply layout
+      updateCourtsGridLayout();
+      
+      // Render everything
+      renderSession();
+      renderActivePlayers();
+      renderQueue();
+      updateStartRoundButton();
+      
+      // Sync max queue size input
+      if (currentSession) {
+        maxQueueSizeInput.value = currentSession.maxQueueSize.toString();
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load state from localStorage:', error);
+  }
+}
+
+function serializeSession(session: Session): any {
+  return {
+    id: session.id,
+    config: session.config,
+    matches: session.matches,
+    waitingPlayers: session.waitingPlayers,
+    playerStats: Array.from(session.playerStats.entries()).map(([id, stats]) => ({
+      playerId: stats.playerId,
+      gamesPlayed: stats.gamesPlayed,
+      gamesWaited: stats.gamesWaited,
+      wins: stats.wins,
+      losses: stats.losses,
+      partnersPlayed: Array.from(stats.partnersPlayed),
+      opponentsPlayed: Array.from(stats.opponentsPlayed),
+      totalPointsFor: stats.totalPointsFor,
+      totalPointsAgainst: stats.totalPointsAgainst,
+    })),
+    activePlayers: Array.from(session.activePlayers),
+    matchQueue: session.matchQueue,
+    maxQueueSize: session.maxQueueSize,
+  };
+}
+
+function deserializeSession(data: any): Session {
+  const playerStats = new Map();
+  data.playerStats.forEach((stats: any) => {
+    playerStats.set(stats.playerId, {
+      ...stats,
+      partnersPlayed: new Set(stats.partnersPlayed),
+      opponentsPlayed: new Set(stats.opponentsPlayed),
+    });
+  });
+  
+  return {
+    id: data.id,
+    config: data.config,
+    matches: data.matches,
+    waitingPlayers: data.waitingPlayers,
+    playerStats: playerStats,
+    activePlayers: new Set(data.activePlayers),
+    matchQueue: data.matchQueue,
+    maxQueueSize: data.maxQueueSize,
+  };
+}
+
+function clearLocalStorageState() {
+  try {
+    localStorage.removeItem('pickleballSessionState');
+  } catch (error) {
+    console.error('Failed to clear localStorage:', error);
+  }
+}
+
 function handleApplyLayout() {
   const value = parseInt(courtsPerRowInput.value);
   if (value && value >= 1 && value <= 6) {
@@ -231,6 +378,7 @@ function handleAddPlayer() {
   playerNameInput.value = '';
   renderPlayerList();
   updateBannedPairSelects();
+  saveStateToLocalStorage();
 }
 
 function handleAddTestPlayers() {
@@ -333,6 +481,7 @@ function handleRemovePlayer(playerId: string) {
     renderPlayerList();
     updateBannedPairSelects();
     renderBannedPairs();
+    saveStateToLocalStorage();
   }
 }
 
@@ -436,11 +585,13 @@ function handleAddBannedPair() {
   
   bannedPairs.push([player1, player2]);
   renderBannedPairs();
+  saveStateToLocalStorage();
 }
 
 function handleRemoveBannedPair(index: number) {
   bannedPairs.splice(index, 1);
   renderBannedPairs();
+  saveStateToLocalStorage();
 }
 
 function renderBannedPairs() {
@@ -531,6 +682,7 @@ function handleAddLockedTeam() {
   
   renderLockedTeams();
   updateBannedPairSelects();
+  saveStateToLocalStorage();
 }
 
 function handleRemoveLockedTeam(index: number) {
@@ -554,6 +706,7 @@ function handleRemoveLockedTeam(index: number) {
   renderLockedTeams();
   updateBannedPairSelects();
   renderBannedPairs();
+  saveStateToLocalStorage();
 }
 
 function renderLockedTeams() {
@@ -690,6 +843,7 @@ function handleStartSession() {
   renderActivePlayers();
   renderQueue(); // Render queue initially
   updateStartRoundButton();
+  saveStateToLocalStorage();
 }
 
 function handleAddSessionPlayer() {
@@ -718,6 +872,7 @@ function handleAddSessionPlayer() {
   
   renderSession();
   renderActivePlayers();
+  saveStateToLocalStorage();
 }
 
 function handleAddSessionTeam() {
@@ -754,6 +909,7 @@ function handleAddSessionTeam() {
   
   renderSession();
   renderActivePlayers();
+  saveStateToLocalStorage();
 }
 
 function handleRemoveSessionPlayer(playerId: string) {
@@ -774,6 +930,7 @@ function handleRemoveSessionPlayer(playerId: string) {
   
   renderSession();
   renderActivePlayers();
+  saveStateToLocalStorage();
 }
 
 function handleRemoveSessionTeam(player1Id: string, player2Id: string) {
@@ -794,6 +951,7 @@ function handleRemoveSessionTeam(player1Id: string, player2Id: string) {
   
   renderSession();
   renderActivePlayers();
+  saveStateToLocalStorage();
 }
 
 function handleCompleteMatch(matchId: string, team1Score: number, team2Score: number) {
@@ -858,6 +1016,7 @@ function handleCompleteMatch(matchId: string, team1Score: number, team2Score: nu
   
   renderSession();
   renderActivePlayers();
+  saveStateToLocalStorage();
 }
 
 function handleForfeitMatch(matchId: string) {
@@ -900,6 +1059,7 @@ function handleForfeitMatch(matchId: string) {
   
   renderSession();
   renderActivePlayers();
+  saveStateToLocalStorage();
 }
 
 function renderSession() {
@@ -1539,6 +1699,16 @@ function handleEditSession() {
   renderBannedPairs();
 
   alert('✅ Session ended. Players saved. You can now change settings and start a new session.');
+  saveStateToLocalStorage();
+}
+
+function handleClearSessionData() {
+  if (!confirm('This will clear all saved session data from your browser. Your current session will remain active. Continue?')) {
+    return;
+  }
+  
+  clearLocalStorageState();
+  alert('✅ Session data cleared from browser storage.');
 }
 
 function handleEndSession() {
@@ -1563,6 +1733,7 @@ function handleEndSession() {
   updateBannedPairSelects();
   renderBannedPairs();
   renderLockedTeams();
+  clearLocalStorageState();
 }
 
 // Expose functions to window for onclick handlers
@@ -1590,6 +1761,7 @@ function handleEndSession() {
   
   renderSession();
   renderActivePlayers();
+  saveStateToLocalStorage();
 };
 (window as any).reactivateTeam = (player1Id: string, player2Id: string) => {
   if (!currentSession) return;
@@ -1611,6 +1783,7 @@ function handleEndSession() {
   
   renderSession();
   renderActivePlayers();
+  saveStateToLocalStorage();
 };
 (window as any).completeMatch = (matchId: string) => {
   const score1Input = document.getElementById(`score1-${matchId}`) as HTMLInputElement;
@@ -1669,6 +1842,7 @@ function handleEndSession() {
     renderMatchHistory();
   }
   
+  saveStateToLocalStorage();
   alert('Score updated successfully!');
 };
 
@@ -1713,6 +1887,7 @@ function handleApplyQueuePagination() {
   
   if (updated) {
     renderQueue();
+    saveStateToLocalStorage();
   }
 }
 
@@ -1802,6 +1977,7 @@ function handleStartNextRound() {
   
   renderSession();
   updateStartRoundButton();
+  saveStateToLocalStorage();
 }
 
 function updateStartRoundButton() {
