@@ -1,5 +1,5 @@
 import type { Session, Player, SessionConfig, Match } from './types';
-import { createSession, addPlayerToSession, removePlayerFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches, canStartNextRound, startNextRound, updateMaxQueueSize } from './session';
+import { createSession, addPlayerToSession, removePlayerFromSession, addTeamToSession, removeTeamFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches, canStartNextRound, startNextRound, updateMaxQueueSize } from './session';
 import { generateId, calculatePlayerRankings, calculateTeamRankings } from './utils';
 import { generateRoundRobinQueue } from './queue';
 
@@ -45,6 +45,11 @@ const rankingsList = document.getElementById('rankings-list') as HTMLElement;
 const activePlayersList = document.getElementById('active-players-list') as HTMLElement;
 const sessionPlayerNameInput = document.getElementById('session-player-name') as HTMLInputElement;
 const addSessionPlayerBtn = document.getElementById('add-session-player-btn') as HTMLButtonElement;
+const sessionPlayerControls = document.getElementById('session-player-controls') as HTMLElement;
+const sessionTeamControls = document.getElementById('session-team-controls') as HTMLElement;
+const sessionTeamPlayer1Input = document.getElementById('session-team-player1-name') as HTMLInputElement;
+const sessionTeamPlayer2Input = document.getElementById('session-team-player2-name') as HTMLInputElement;
+const addSessionTeamBtn = document.getElementById('add-session-team-btn') as HTMLButtonElement;
 
 const courtsGrid = document.getElementById('courts-grid') as HTMLElement;
 const courtsPerRowInput = document.getElementById('courts-per-row') as HTMLInputElement;
@@ -108,6 +113,19 @@ endSessionBtn.addEventListener('click', handleEndSession);
 addSessionPlayerBtn.addEventListener('click', handleAddSessionPlayer);
 sessionPlayerNameInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') handleAddSessionPlayer();
+});
+addSessionTeamBtn.addEventListener('click', handleAddSessionTeam);
+sessionTeamPlayer1Input.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sessionTeamPlayer2Input.focus();
+  }
+});
+sessionTeamPlayer2Input.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    handleAddSessionTeam();
+  }
 });
 applyLayoutBtn.addEventListener('click', handleApplyLayout);
 themeToggle.addEventListener('click', toggleTheme);
@@ -688,18 +706,41 @@ function handleAddSessionPlayer() {
   currentSession = addPlayerToSession(currentSession, player);
   sessionPlayerNameInput.value = '';
   
-  // New players should be prioritized - set their gamesWaited to high value
-  // so they're selected first when creating new matches
-  const stats = currentSession.playerStats.get(player.id);
-  if (stats) {
-    // Get max gamesWaited from all players and add a lot to it
-    let maxWaited = 0;
-    currentSession.playerStats.forEach(s => {
-      if (s.gamesWaited > maxWaited) maxWaited = s.gamesWaited;
-    });
-    // Set new player to have waited more than anyone else
-    stats.gamesWaited = maxWaited + 100;
-  }
+  // Evaluate to create new matches if courts available
+  currentSession = evaluateAndCreateMatches(currentSession);
+  
+  // Auto-start any new matches
+  currentSession.matches.forEach(match => {
+    if (match.status === 'waiting') {
+      currentSession = startMatch(currentSession!, match.id);
+    }
+  });
+  
+  renderSession();
+  renderActivePlayers();
+}
+
+function handleAddSessionTeam() {
+  if (!currentSession) return;
+  
+  const name1 = sessionTeamPlayer1Input.value.trim();
+  const name2 = sessionTeamPlayer2Input.value.trim();
+  
+  if (!name1 || !name2) return;
+  
+  const player1: Player = {
+    id: generateId(),
+    name: name1,
+  };
+  
+  const player2: Player = {
+    id: generateId(),
+    name: name2,
+  };
+  
+  currentSession = addTeamToSession(currentSession, player1, player2);
+  sessionTeamPlayer1Input.value = '';
+  sessionTeamPlayer2Input.value = '';
   
   // Evaluate to create new matches if courts available
   currentSession = evaluateAndCreateMatches(currentSession);
@@ -723,6 +764,26 @@ function handleRemoveSessionPlayer(playerId: string) {
   }
   
   currentSession = removePlayerFromSession(currentSession, playerId);
+  
+  // Auto-start any new matches
+  currentSession.matches.forEach(match => {
+    if (match.status === 'waiting') {
+      currentSession = startMatch(currentSession!, match.id);
+    }
+  });
+  
+  renderSession();
+  renderActivePlayers();
+}
+
+function handleRemoveSessionTeam(player1Id: string, player2Id: string) {
+  if (!currentSession) return;
+  
+  if (!confirm('Remove this team from the session? Any active matches will be forfeited.')) {
+    return;
+  }
+  
+  currentSession = removeTeamFromSession(currentSession, player1Id, player2Id);
   
   // Auto-start any new matches
   currentSession.matches.forEach(match => {
@@ -1005,8 +1066,18 @@ function renderActivePlayers() {
   
   activePlayersList.innerHTML = '';
   
+  // Update controls visibility based on locked teams mode
+  const isLockedTeamsMode = currentSession.config.lockedTeams && currentSession.config.lockedTeams.length > 0;
+  if (isLockedTeamsMode) {
+    sessionPlayerControls.style.display = 'none';
+    sessionTeamControls.style.display = 'flex';
+  } else {
+    sessionPlayerControls.style.display = 'flex';
+    sessionTeamControls.style.display = 'none';
+  }
+  
   // For locked teams, show teams instead of individual players
-  if (currentSession.config.lockedTeams && currentSession.config.lockedTeams.length > 0) {
+  if (isLockedTeamsMode) {
     if (currentSession.config.lockedTeams.length === 0) {
       activePlayersList.innerHTML = '<p style="color: var(--text-secondary); padding: 10px;">No teams in session</p>';
       return;
@@ -1061,7 +1132,19 @@ function renderActivePlayers() {
       nameSpan.style.flex = '1';
       nameSpan.style.color = 'var(--text-primary)';
       
+      const actionBtn = document.createElement('button');
+      if (isActive) {
+        actionBtn.textContent = '×';
+        actionBtn.onclick = () => (window as any).removeSessionTeam(player1.id, player2.id);
+        actionBtn.style.cssText = 'margin-left: 10px; color: #dc3545; background: transparent; border: 1px solid #dc3545; padding: 2px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;';
+      } else {
+        actionBtn.textContent = '↻';
+        actionBtn.onclick = () => (window as any).reactivateTeam(player1.id, player2.id);
+        actionBtn.style.cssText = 'margin-left: 10px; color: #28a745; background: transparent; border: 1px solid #28a745; padding: 2px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;';
+      }
+      
       content.appendChild(nameSpan);
+      content.appendChild(actionBtn);
       item.appendChild(content);
       list.appendChild(item);
     });
@@ -1487,10 +1570,32 @@ function handleEndSession() {
 (window as any).removeBannedPair = handleRemoveBannedPair;
 (window as any).removeLockedTeam = handleRemoveLockedTeam;
 (window as any).removeSessionPlayer = handleRemoveSessionPlayer;
+(window as any).removeSessionTeam = handleRemoveSessionTeam;
 (window as any).reactivatePlayer = (playerId: string) => {
   if (!currentSession) return;
   const newActivePlayers = new Set(currentSession.activePlayers);
   newActivePlayers.add(playerId);
+  currentSession = {
+    ...currentSession,
+    activePlayers: newActivePlayers,
+  };
+  currentSession = evaluateAndCreateMatches(currentSession);
+  
+  // Auto-start new matches
+  currentSession.matches.forEach(match => {
+    if (match.status === 'waiting') {
+      currentSession = startMatch(currentSession!, match.id);
+    }
+  });
+  
+  renderSession();
+  renderActivePlayers();
+};
+(window as any).reactivateTeam = (player1Id: string, player2Id: string) => {
+  if (!currentSession) return;
+  const newActivePlayers = new Set(currentSession.activePlayers);
+  newActivePlayers.add(player1Id);
+  newActivePlayers.add(player2Id);
   currentSession = {
     ...currentSession,
     activePlayers: newActivePlayers,

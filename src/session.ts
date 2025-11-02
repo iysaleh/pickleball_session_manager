@@ -38,7 +38,18 @@ export function addPlayerToSession(session: Session, player: Player): Session {
   const updatedPlayers = [...session.config.players, player];
   const newActivePlayers = new Set(session.activePlayers);
   newActivePlayers.add(player.id);
-  session.playerStats.set(player.id, createPlayerStats(player.id));
+  
+  // Create player stats with wait time set to max waited + 1
+  const newStats = createPlayerStats(player.id);
+  let maxWaited = 0;
+  session.playerStats.forEach(stats => {
+    if (stats.gamesWaited > maxWaited) {
+      maxWaited = stats.gamesWaited;
+    }
+  });
+  newStats.gamesWaited = maxWaited + 1;
+  
+  session.playerStats.set(player.id, newStats);
   
   const updated = {
     ...session,
@@ -77,6 +88,98 @@ export function removePlayerFromSession(session: Session, playerId: string): Ses
   const updatedMatches = session.matches.map((match) => {
     if (match.status === 'in-progress' || match.status === 'waiting') {
       const hasPlayer = [...match.team1, ...match.team2].includes(playerId);
+      if (hasPlayer) {
+        return { ...match, status: 'forfeited' as const };
+      }
+    }
+    return match;
+  });
+  
+  const updated = {
+    ...session,
+    waitingPlayers: updatedWaiting,
+    matches: updatedMatches,
+    activePlayers: newActivePlayers,
+  };
+  
+  // Re-evaluate to fill courts
+  return evaluateAndCreateMatches(updated);
+}
+
+export function addTeamToSession(session: Session, player1: Player, player2: Player): Session {
+  // Check if either player already exists
+  const player1Exists = session.config.players.some((p) => p.id === player1.id);
+  const player2Exists = session.config.players.some((p) => p.id === player2.id);
+  
+  if (player1Exists || player2Exists) {
+    return session; // Don't add if either player already exists
+  }
+  
+  const updatedPlayers = [...session.config.players, player1, player2];
+  const newActivePlayers = new Set(session.activePlayers);
+  newActivePlayers.add(player1.id);
+  newActivePlayers.add(player2.id);
+  
+  // Create player stats with wait time set to max waited + 1 for both players
+  const newStats1 = createPlayerStats(player1.id);
+  const newStats2 = createPlayerStats(player2.id);
+  let maxWaited = 0;
+  session.playerStats.forEach(stats => {
+    if (stats.gamesWaited > maxWaited) {
+      maxWaited = stats.gamesWaited;
+    }
+  });
+  newStats1.gamesWaited = maxWaited + 1;
+  newStats2.gamesWaited = maxWaited + 1;
+  
+  session.playerStats.set(player1.id, newStats1);
+  session.playerStats.set(player2.id, newStats2);
+  
+  // Add to locked teams
+  const updatedLockedTeams = [...(session.config.lockedTeams || []), [player1.id, player2.id]];
+  
+  const updated = {
+    ...session,
+    config: {
+      ...session.config,
+      players: updatedPlayers,
+      lockedTeams: updatedLockedTeams,
+    },
+    activePlayers: newActivePlayers,
+  };
+  
+  // For round-robin, regenerate the entire queue
+  if (updated.config.mode === 'round-robin') {
+    updated.matchQueue = generateRoundRobinQueue(
+      updated.config.players.filter(p => updated.activePlayers.has(p.id)),
+      updated.config.sessionType,
+      updated.config.bannedPairs,
+      updated.maxQueueSize,
+      updated.config.lockedTeams
+    );
+  }
+  
+  // Automatically try to create new matches with the new team
+  return evaluateAndCreateMatches(updated);
+}
+
+export function removeTeamFromSession(session: Session, player1Id: string, player2Id: string): Session {
+  // Mark both players as inactive
+  const newActivePlayers = new Set(session.activePlayers);
+  newActivePlayers.delete(player1Id);
+  newActivePlayers.delete(player2Id);
+  
+  // Remove from waiting list
+  const updatedWaiting = session.waitingPlayers.filter(
+    (id) => id !== player1Id && id !== player2Id
+  );
+  
+  // Forfeit any matches where either player is currently playing
+  const updatedMatches = session.matches.map((match) => {
+    if (match.status === 'in-progress' || match.status === 'waiting') {
+      const hasPlayer = [...match.team1, ...match.team2].some(
+        id => id === player1Id || id === player2Id
+      );
       if (hasPlayer) {
         return { ...match, status: 'forfeited' as const };
       }

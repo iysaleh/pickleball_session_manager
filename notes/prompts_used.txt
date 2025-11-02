@@ -139,10 +139,35 @@ This is great. Some improvements if you please:
 ** Graceful handling of uneven outcomes: If a player sits out or leaves, the algorithm should rebalance smoothly.
 ** Deterministic scheduling: Given the same results, it should produce the same next-round assignments.
 
-#### Revision 19.1
+### Revision 19.1
 * Please tune and fix the king of the court algorithm...  If we need for matches to finish before we can determine the next
     round, make sure we add support for that logic.
 
+### Revision 20
+* When I start a King of the Court match, my courts just sit there "Waiting for Players..." Something isn't working right... Also, it says "Queue is only available for Round-Robin mode... But there should be a queue for king of the court, it's just not 100% predetermined.
+
+### Revision 20.1
+* After I input all the scores, I have to click "Start Next Round" --- Can we have it automatically start the next round when all the scores are inputted for that round?
+
+### Revision 21
+* Teams is considered a game mode, but really you can have Team Round Robin and Team King of the Court. Rework Team logic, make sure you can add 2 players as a team when doing Team Round Robin or Team King of the Court --- If algorithm reuse for round robin and king of the court is possible, we should try to implement that --- Also, verify all the existing tests work after this change.
+
+### Revision 21.1
+* This logic works, but it's clunky... Adding players then making them a team is tedious, When Locked Teams is selected, make it so that we add players as a team (IE Two inputs for players that will be together). -- With this way of working, we don't need players displayed and teams displayed in two different areas, we just need the teams displayed.
+
+### Revision 21.2
+* Give me a test function, like "Add 18 Test Players", but instead have it be "Add 9 Teams".
+
+### Revision 22
+* Add a current rankings button during a session that ranks all the players from best to worst... First rank players by total number of wins -- handle ties by giving a higher rank to the player with the better average point differential in all their games. 
+* Make sure you also write tests for these ranking features.
+
+### Revision 23
+* For locked team sessions, make sure the Current Session page shows the locked teams rather than individual players -- The same as it is in the SEssion Setup Page
+* For team sessions, A team gets 1st, 2nd, 3rd --- not the individual players -- make sure the ranking component updates to show the team together, not the player.
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts
+# Run local webserver
+npx -y vite@latest
+http://localhost:5173?test=true 

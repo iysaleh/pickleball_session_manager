@@ -971,9 +971,16 @@
         
         <div class="form-group">
           <label>Active Players</label>
-          <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+          <div id="session-player-controls" style="display: flex; gap: 10px; margin-bottom: 10px;">
             <input type="text" id="session-player-name" placeholder="Add player to session">
             <button id="add-session-player-btn">Add Player</button>
+          </div>
+          <div id="session-team-controls" style="display: none; gap: 10px; margin-bottom: 10px; flex-direction: column;">
+            <div style="display: flex; gap: 10px;">
+              <input type="text" id="session-team-player1-name" placeholder="Player 1 name">
+              <input type="text" id="session-team-player2-name" placeholder="Player 2 name">
+              <button id="add-session-team-btn">Add Team</button>
+            </div>
           </div>
           <div class="player-list" id="active-players-list"></div>
         </div>
