@@ -235,6 +235,53 @@ function getPlayTogetherCount(
 }
 
 /**
+ * Count how many times two players have been partners (on same team)
+ */
+function getPartnershipCount(
+  player1Id: string,
+  player2Id: string,
+  matches: Match[]
+): number {
+  let count = 0;
+  const completedMatches = matches.filter(m => m.status === 'completed');
+  
+  completedMatches.forEach(match => {
+    const onTeam1 = match.team1.includes(player1Id) && match.team1.includes(player2Id);
+    const onTeam2 = match.team2.includes(player1Id) && match.team2.includes(player2Id);
+    if (onTeam1 || onTeam2) {
+      count++;
+    }
+  });
+  
+  return count;
+}
+
+/**
+ * Count how many times two players have been opponents (on different teams)
+ */
+function getOpponentCount(
+  player1Id: string,
+  player2Id: string,
+  matches: Match[]
+): number {
+  let count = 0;
+  const completedMatches = matches.filter(m => m.status === 'completed');
+  
+  completedMatches.forEach(match => {
+    const p1Team1 = match.team1.includes(player1Id);
+    const p1Team2 = match.team2.includes(player1Id);
+    const p2Team1 = match.team1.includes(player2Id);
+    const p2Team2 = match.team2.includes(player2Id);
+    
+    if ((p1Team1 && p2Team2) || (p1Team2 && p2Team1)) {
+      count++;
+    }
+  });
+  
+  return count;
+}
+
+/**
  * Determine if we should wait for more courts to finish before scheduling (ranking-based)
  */
 function shouldWaitForRankBasedMatchups(
@@ -260,24 +307,24 @@ function shouldWaitForRankBasedMatchups(
   const consecutiveWaits = countConsecutiveWaits(availablePlayerIds, matches);
   const maxConsecutiveWaits = Math.max(...Array.from(consecutiveWaits.values()));
   
-  // Never wait if someone has already waited 2+ times
-  if (maxConsecutiveWaits >= 2) {
+  // Never wait if someone has already waited 1+ times (reduced from 2)
+  if (maxConsecutiveWaits >= 1) {
     return false;
   }
   
-  // Don't wait if we have enough players for multiple good matches
-  if (availableRankings.length >= playersPerMatch * 3) {
+  // Don't wait if we have enough players for multiple matches (reduced from 3x to 2x)
+  if (availableRankings.length >= playersPerMatch * 2) {
     return false;
   }
   
-  // Need at least 8 completed matches to make meaningful ranking decisions
+  // Need at least 12 completed matches to make meaningful ranking decisions (increased from 8)
   const completedMatches = matches.filter(m => m.status === 'completed');
-  if (completedMatches.length < 8) {
+  if (completedMatches.length < 12) {
     return false;
   }
   
-  // Only consider waiting if we have at least 2 busy courts
-  if (numBusyCourts < 2) {
+  // Only consider waiting if we have at least 3 busy courts (increased from 2)
+  if (numBusyCourts < 3) {
     return false;
   }
   
@@ -288,13 +335,9 @@ function shouldWaitForRankBasedMatchups(
     playersPerMatch
   );
   
-  // HARD LOCK: If we can't make a valid match, WAIT (no override)
-  // Only exception is if someone has waited 3+ times (extreme case)
+  // If we can't make a valid match at all, don't wait - just accept what we have
   if (!canMakeValidMatch) {
-    if (maxConsecutiveWaits >= 3) {
-      return false; // Allow override only after 3 consecutive waits
-    }
-    return true; // Otherwise, WAIT for better matchups
+    return false;
   }
   
   // CRITICAL CHECK: Detect if we're in a "single court loop" scenario
@@ -306,24 +349,12 @@ function shouldWaitForRankBasedMatchups(
     playersPerMatch
   );
   
-  // If we're in a single court loop, WAIT for other courts to finish
-  if (inSingleCourtLoop) {
+  // If we're in a single court loop AND have many busy courts, WAIT for other courts to finish
+  if (inSingleCourtLoop && numBusyCourts >= 4) {
     return true;
   }
   
-  // Check if we have good close-rank matchup opportunities
-  const hasGoodMatchups = hasCloseRankMatchups(
-    availableRankings,
-    totalActivePlayers,
-    matches,
-    playersPerMatch
-  );
-  
-  // If we don't have good matchups and courts are busy, wait for better options
-  if (!hasGoodMatchups && numBusyCourts >= 2) {
-    return true;
-  }
-  
+  // Generally prefer to fill courts rather than wait for perfect matchups
   return false;
 }
 
@@ -561,7 +592,11 @@ function selectPlayersForRankMatch(
     return null;
   }
   
-  // Strategy 1: Try to find a group of closely-ranked players (within 4 ranks)
+  // Calculate soft preference frequency (used for scoring)
+  // Try to avoid same person more than once per (totalPlayers/6) games, but don't hard block
+  const softRepetitionFrequency = Math.max(3, Math.floor(totalActivePlayers / 6));
+  
+  // Strategy 1: Try to find a group of closely-ranked players (within 4 ranks) with variety constraints
   for (let i = 0; i < availableRankings.length; i++) {
     const anchor = availableRankings[i];
     const closeGroup: PlayerRating[] = [anchor];
@@ -593,15 +628,16 @@ function selectPlayersForRankMatch(
       const groupPlayerIds = closeGroup.map(r => r.playerId);
       const varietyScore = calculateGroupVarietyScore(groupPlayerIds, matches);
       const closenessScore = calculateGroupClosenessScore(closeGroup);
+      const repetitionScore = calculateGroupRepetitionScore(groupPlayerIds, matches, playerStats, softRepetitionFrequency);
       
-      // If this is a good group, use it
-      if (varietyScore > 0.5 || closenessScore < 3) {
+      // If this is a good group (good variety OR close ranks AND reasonable repetition), use it
+      if ((varietyScore > 0.5 || closenessScore < 3) && repetitionScore < 0.8) {
         return groupPlayerIds.slice(0, playersPerMatch);
       }
     }
   }
   
-  // Strategy 2: Find any valid group that meets STRICT rank constraints
+  // Strategy 2: Find any valid group that meets STRICT rank constraints and variety caps
   for (let i = 0; i < availableRankings.length; i++) {
     const anchor = availableRankings[i];
     const validGroup: PlayerRating[] = [anchor];
@@ -666,13 +702,107 @@ function selectPlayersForRankMatch(
       }
       
       if (allPairsValid) {
-        return validGroup.slice(0, playersPerMatch).map(r => r.playerId);
+        const groupPlayerIds = validGroup.slice(0, playersPerMatch).map(r => r.playerId);
+        
+        // Prefer groups with better variety, but don't hard block
+        const repetitionScore = calculateGroupRepetitionScore(groupPlayerIds, matches, playerStats, softRepetitionFrequency);
+        
+        // Accept if repetition is not extreme (less than 90% of pairs are over-repeated)
+        if (repetitionScore < 0.9) {
+          return groupPlayerIds;
+        }
       }
+    }
+  }
+  
+  // Last resort: if we have ANY valid rank-constrained group, use it (even with repetition)
+  // This prevents empty courts
+  for (let i = 0; i < availableRankings.length; i++) {
+    const anchor = availableRankings[i];
+    const validGroup: PlayerRating[] = [anchor];
+    
+    for (let j = 0; j < availableRankings.length; j++) {
+      if (i === j) continue;
+      const candidate = availableRankings[j];
+      
+      let canJoin = true;
+      for (const member of validGroup) {
+        if (!canPlayTogether(
+          member.rank,
+          candidate.rank,
+          totalActivePlayers,
+          member.isProvisional,
+          candidate.isProvisional
+        )) {
+          canJoin = false;
+          break;
+        }
+      }
+      
+      if (canJoin) {
+        validGroup.push(candidate);
+      }
+      
+      if (validGroup.length >= playersPerMatch) {
+        break;
+      }
+    }
+    
+    if (validGroup.length >= playersPerMatch) {
+      return validGroup.slice(0, playersPerMatch).map(r => r.playerId);
     }
   }
   
   // HARD CONSTRAINT: Return null if no valid rank-constrained match exists
   return null;
+}
+
+/**
+ * Calculate a repetition score for a group (0 = fresh matchups, 1 = all pairs over-repeated)
+ * This is a soft preference, not a hard block
+ * 
+ * Example with 18 players (frequency = 3):
+ * - Prefer not to play with same person more than once per 3 games
+ * - But allow it if necessary to keep courts full
+ */
+function calculateGroupRepetitionScore(
+  playerIds: string[],
+  matches: Match[],
+  playerStats: Map<string, PlayerStats>,
+  targetFrequency: number
+): number {
+  let totalPairs = 0;
+  let overRepeatedPairs = 0;
+  
+  // Check each pair of players in the group
+  for (let i = 0; i < playerIds.length; i++) {
+    const player1Stats = playerStats.get(playerIds[i]);
+    if (!player1Stats) continue;
+    
+    const player1Games = player1Stats.gamesPlayed;
+    
+    for (let j = i + 1; j < playerIds.length; j++) {
+      const player2Stats = playerStats.get(playerIds[j]);
+      if (!player2Stats) continue;
+      
+      totalPairs++;
+      
+      const player2Games = player2Stats.gamesPlayed;
+      const minGamesPlayed = Math.min(player1Games, player2Games);
+      
+      // Calculate ideal max plays together based on target frequency
+      const idealMaxPlays = Math.floor(minGamesPlayed / targetFrequency) + 1;
+      
+      // Check if they've played together more than ideal
+      const playTogetherCount = getPlayTogetherCount(playerIds[i], playerIds[j], matches);
+      
+      if (playTogetherCount > idealMaxPlays) {
+        overRepeatedPairs++;
+      }
+    }
+  }
+  
+  return totalPairs > 0 ? overRepeatedPairs / totalPairs : 0;
 }
 
 /**
@@ -777,9 +907,6 @@ function assignTeams(
   }
   
   // Doubles: try different configurations
-  const recentPartnerships = getRecentPartnerships(players, matches, 1);
-  const recentOpponents = getRecentOpponents(players, matches, 2);
-  
   const configurations: Array<{ team1: string[]; team2: string[] }> = [
     { team1: [players[0], players[1]], team2: [players[2], players[3]] },
     { team1: [players[0], players[2]], team2: [players[1], players[3]] },
@@ -795,22 +922,25 @@ function assignTeams(
     
     let score = 0;
     
-    // Penalize recent partnerships
-    if (recentPartnerships.has(`${config.team1[0]}-${config.team1[1]}`)) {
-      score += 100;
-    }
-    if (recentPartnerships.has(`${config.team2[0]}-${config.team2[1]}`)) {
-      score += 100;
-    }
+    // Count actual partnership frequencies (all-time, not just recent)
+    const team1PartnerCount = getPartnershipCount(config.team1[0], config.team1[1], matches);
+    const team2PartnerCount = getPartnershipCount(config.team2[0], config.team2[1], matches);
     
-    // Penalize recent opponents
+    // Moderate penalty for repeated partnerships (reduced from 150 to 80)
+    score += team1PartnerCount * 80;
+    score += team2PartnerCount * 80;
+    
+    // Count actual opponent frequencies (all-time, not just recent)
+    let totalOpponentCount = 0;
     for (const p1 of config.team1) {
       for (const p2 of config.team2) {
-        if (recentOpponents.has(`${p1}-${p2}`) || recentOpponents.has(`${p2}-${p1}`)) {
-          score += 30;
-        }
+        const opponentCount = getOpponentCount(p1, p2, matches);
+        totalOpponentCount += opponentCount;
       }
     }
+    
+    // Lighter penalty for repeated opponent matchups (reduced from 50 to 25)
+    score += totalOpponentCount * 25;
     
     // Prefer balanced teams (similar win rates)
     const team1WinRate = config.team1.reduce((sum, id) => {
