@@ -2,6 +2,7 @@ import type { Session, Player, SessionConfig, Match } from './types';
 import { createSession, addPlayerToSession, removePlayerFromSession, addTeamToSession, removeTeamFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches, updateMaxQueueSize } from './session';
 import { generateId, calculatePlayerRankings, calculateTeamRankings } from './utils';
 import { generateRoundRobinQueue } from './queue';
+import { calculatePlayerRating } from './kingofcourt';
 
 let currentSession: Session | null = null;
 let players: Player[] = [];
@@ -1525,58 +1526,147 @@ function renderRankings() {
   } else {
     // Individual player rankings
     const playerIds = currentSession.config.players.map(p => p.id);
-    const rankings = calculatePlayerRankings(playerIds, currentSession.playerStats);
     
-    if (rankings.length === 0) {
-      rankingsList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No rankings yet. Complete some games to see rankings!</p>';
-      return;
-    }
+    // For King of Court, use ELO-style rating; otherwise use win-based ranking
+    const isKingOfCourt = currentSession.config.mode === 'king-of-court';
     
-    rankings.forEach(ranking => {
-      const player = currentSession!.config.players.find(p => p.id === ranking.playerId);
-      if (!player) return;
+    if (isKingOfCourt) {
+      // Calculate KOC ratings and sort by rating
+      const kocRankings = playerIds
+        .map(playerId => {
+          const stats = currentSession!.playerStats.get(playerId);
+          if (!stats) return null;
+          
+          const rating = calculatePlayerRating(stats);
+          const avgPointDifferential = stats.gamesPlayed > 0
+            ? (stats.totalPointsFor - stats.totalPointsAgainst) / stats.gamesPlayed
+            : 0;
+          
+          return {
+            playerId,
+            rating,
+            wins: stats.wins,
+            losses: stats.losses,
+            avgPointDifferential,
+            gamesPlayed: stats.gamesPlayed,
+          };
+        })
+        .filter((data): data is NonNullable<typeof data> => data !== null)
+        .sort((a, b) => b.rating - a.rating); // Sort by rating descending
       
-      const item = document.createElement('div');
-      item.className = 'ranking-item';
+      if (kocRankings.length === 0) {
+        rankingsList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No rankings yet. Complete some games to see rankings!</p>';
+        return;
+      }
       
-      // Determine rank badge class
-      let rankClass = '';
-      if (ranking.rank === 1) rankClass = 'rank-1';
-      else if (ranking.rank === 2) rankClass = 'rank-2';
-      else if (ranking.rank === 3) rankClass = 'rank-3';
-      
-      // Determine color class for point differential
-      let diffClass = '';
-      if (ranking.avgPointDifferential > 0) diffClass = 'positive';
-      else if (ranking.avgPointDifferential < 0) diffClass = 'negative';
-      
-      const diffSign = ranking.avgPointDifferential >= 0 ? '+' : '';
-      
-      item.innerHTML = `
-        <div class="rank-badge ${rankClass}">
-          ${ranking.rank === 1 ? '🥇' : ranking.rank === 2 ? '🥈' : ranking.rank === 3 ? '🥉' : ranking.rank}
-        </div>
-        <div class="ranking-info">
-          <div class="ranking-name">${player.name}</div>
-          <div class="ranking-stats">
-            <div class="ranking-stat">
-              <div class="ranking-stat-label">Wins</div>
-              <div class="ranking-stat-value">${ranking.wins}</div>
-            </div>
-            <div class="ranking-stat">
-              <div class="ranking-stat-label">Losses</div>
-              <div class="ranking-stat-value">${ranking.losses}</div>
-            </div>
-            <div class="ranking-stat">
-              <div class="ranking-stat-label">Avg Pt Diff</div>
-              <div class="ranking-stat-value ${diffClass}">${diffSign}${ranking.avgPointDifferential.toFixed(1)}</div>
+      kocRankings.forEach((ranking, index) => {
+        const player = currentSession!.config.players.find(p => p.id === ranking.playerId);
+        if (!player) return;
+        
+        const rank = index + 1;
+        const item = document.createElement('div');
+        item.className = 'ranking-item';
+        
+        // Determine rank badge class
+        let rankClass = '';
+        if (rank === 1) rankClass = 'rank-1';
+        else if (rank === 2) rankClass = 'rank-2';
+        else if (rank === 3) rankClass = 'rank-3';
+        
+        // Determine color class for point differential
+        let diffClass = '';
+        if (ranking.avgPointDifferential > 0) diffClass = 'positive';
+        else if (ranking.avgPointDifferential < 0) diffClass = 'negative';
+        
+        const diffSign = ranking.avgPointDifferential >= 0 ? '+' : '';
+        
+        // Provisional badge for new players (< 3 games)
+        const provisionalBadge = ranking.gamesPlayed < 3 ? '<span style="font-size: 10px; color: var(--text-secondary); margin-left: 5px;">(Provisional)</span>' : '';
+        
+        item.innerHTML = `
+          <div class="rank-badge ${rankClass}">
+            ${rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank}
+          </div>
+          <div class="ranking-info">
+            <div class="ranking-name">${player.name}${provisionalBadge}</div>
+            <div class="ranking-stats">
+              <div class="ranking-stat">
+                <div class="ranking-stat-label">Rating</div>
+                <div class="ranking-stat-value">${Math.round(ranking.rating)}</div>
+              </div>
+              <div class="ranking-stat">
+                <div class="ranking-stat-label">Wins</div>
+                <div class="ranking-stat-value">${ranking.wins}</div>
+              </div>
+              <div class="ranking-stat">
+                <div class="ranking-stat-label">Losses</div>
+                <div class="ranking-stat-value">${ranking.losses}</div>
+              </div>
+              <div class="ranking-stat">
+                <div class="ranking-stat-label">Avg Pt Diff</div>
+                <div class="ranking-stat-value ${diffClass}">${diffSign}${ranking.avgPointDifferential.toFixed(1)}</div>
+              </div>
             </div>
           </div>
-        </div>
-      `;
+        `;
+        
+        rankingsList.appendChild(item);
+      });
+    } else {
+      // Standard win-based rankings
+      const rankings = calculatePlayerRankings(playerIds, currentSession.playerStats);
       
-      rankingsList.appendChild(item);
-    });
+      if (rankings.length === 0) {
+        rankingsList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No rankings yet. Complete some games to see rankings!</p>';
+        return;
+      }
+      
+      rankings.forEach(ranking => {
+        const player = currentSession!.config.players.find(p => p.id === ranking.playerId);
+        if (!player) return;
+        
+        const item = document.createElement('div');
+        item.className = 'ranking-item';
+        
+        // Determine rank badge class
+        let rankClass = '';
+        if (ranking.rank === 1) rankClass = 'rank-1';
+        else if (ranking.rank === 2) rankClass = 'rank-2';
+        else if (ranking.rank === 3) rankClass = 'rank-3';
+        
+        // Determine color class for point differential
+        let diffClass = '';
+        if (ranking.avgPointDifferential > 0) diffClass = 'positive';
+        else if (ranking.avgPointDifferential < 0) diffClass = 'negative';
+        
+        const diffSign = ranking.avgPointDifferential >= 0 ? '+' : '';
+        
+        item.innerHTML = `
+          <div class="rank-badge ${rankClass}">
+            ${ranking.rank === 1 ? '🥇' : ranking.rank === 2 ? '🥈' : ranking.rank === 3 ? '🥉' : ranking.rank}
+          </div>
+          <div class="ranking-info">
+            <div class="ranking-name">${player.name}</div>
+            <div class="ranking-stats">
+              <div class="ranking-stat">
+                <div class="ranking-stat-label">Wins</div>
+                <div class="ranking-stat-value">${ranking.wins}</div>
+              </div>
+              <div class="ranking-stat">
+                <div class="ranking-stat-label">Losses</div>
+                <div class="ranking-stat-value">${ranking.losses}</div>
+              </div>
+              <div class="ranking-stat">
+                <div class="ranking-stat-label">Avg Pt Diff</div>
+                <div class="ranking-stat-value ${diffClass}">${diffSign}${ranking.avgPointDifferential.toFixed(1)}</div>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        rankingsList.appendChild(item);
+      });
+    }
   }
 }
 

@@ -278,7 +278,10 @@ This is great. Some improvements if you please:
 * In King of the Court mode, There's an extra waiting players section within the Match Queue -- sometimes players correctly show up there, but not in the "Waiting Players" Area. There shouldn't be a second waiting players section within the Match Queue, "Waiting Players" should be updated with king of the court waiting players logic when another needs to finish before the next games can be scheduled.
 
 ### Revision 36
-* For king of the court, We can still run into a situation where players that are similarly skilled can continually play games against or with each other... This is no fun. Put a hard cap at playing 1 game with the same players (on the same team) for every (total-players/4) games. Put the same cap for the against each other portion.
+* For king of the court, We can still run into a situation where players that are similarly skilled can continually play games against or with each other... This is no fun. Put a hard cap at playing 1 game with the same players (on the same team) for every (total-players/4) games. We can wait for other courts to finish to get more games (assuming there are other courts). Put the same cap for the against each other portion. (or is there another solution you can think of to make this better?)
+
+### Revision 36.1
+* We have too many empty courts at any one time now, and it's possible to make it impossible to meet these new strict match conditions. We need to ease up the requirements.
 
 ### Revision TODO
 * King of the Court doesn't really make sense for 4 players, but I tried it anyways. After 3 games, there were no more games to play and all 4 players just sat there waiting. Is something wrong with the algorithm? Shouldn't it never end, regardless of the configuration?

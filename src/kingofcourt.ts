@@ -36,8 +36,9 @@ interface PlayerRating {
 
 /**
  * Calculate ELO-style rating for a player based on their match history
+ * Exported for use in rankings display
  */
-function calculatePlayerRating(stats: PlayerStats): number {
+export function calculatePlayerRating(stats: PlayerStats): number {
   if (stats.gamesPlayed === 0) {
     return BASE_RATING; // New players start at base rating
   }
