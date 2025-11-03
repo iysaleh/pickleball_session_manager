@@ -1,5 +1,5 @@
 import type { Session, Player, SessionConfig, Match } from './types';
-import { createSession, addPlayerToSession, removePlayerFromSession, addTeamToSession, removeTeamFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches, canStartNextRound, startNextRound, updateMaxQueueSize } from './session';
+import { createSession, addPlayerToSession, removePlayerFromSession, addTeamToSession, removeTeamFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches, updateMaxQueueSize } from './session';
 import { generateId, calculatePlayerRankings, calculateTeamRankings } from './utils';
 import { generateRoundRobinQueue } from './queue';
 
@@ -75,7 +75,6 @@ const applyQueuePaginationBtn = document.getElementById('apply-queue-pagination-
 const queuePrevBtn = document.getElementById('queue-prev-btn') as HTMLButtonElement;
 const queueNextBtn = document.getElementById('queue-next-btn') as HTMLButtonElement;
 const queuePageInfo = document.getElementById('queue-page-info') as HTMLElement;
-const startNextRoundBtn = document.getElementById('start-next-round-btn') as HTMLButtonElement;
 
 // Locked teams elements
 const lockedTeamsCheckbox = document.getElementById('locked-teams-checkbox') as HTMLInputElement;
@@ -150,7 +149,6 @@ showQueueBtn.addEventListener('click', toggleQueue);
 applyQueuePaginationBtn.addEventListener('click', handleApplyQueuePagination);
 queuePrevBtn.addEventListener('click', () => { queuePage = Math.max(0, queuePage - 1); renderQueue(); });
 queueNextBtn.addEventListener('click', () => { queuePage++; renderQueue(); });
-startNextRoundBtn.addEventListener('click', handleStartNextRound);
 
 // Locked teams event listeners
 sessionTypeSelect.addEventListener('change', handleSessionTypeChange);
@@ -299,7 +297,6 @@ function loadStateFromLocalStorage() {
       renderSession();
       renderActivePlayers();
       renderQueue();
-      updateStartRoundButton();
       
       // Sync max queue size input
       if (currentSession) {
@@ -827,6 +824,7 @@ function handleStartSession() {
   // Sync the active session max queue size input with setup value
   maxQueueSizeInput.value = setupMaxQueueSizeInput.value;
   // Automatically create initial matches
+  // For all modes (including king-of-court), use continuous flow
   currentSession = evaluateAndCreateMatches(currentSession);
   
   // Auto-start all initial matches
@@ -847,22 +845,9 @@ function handleStartSession() {
   // Apply initial layout
   updateCourtsGridLayout();
   
-  // For king-of-court, start the first round immediately
-  if (currentSession.config.mode === 'king-of-court') {
-    currentSession = startNextRound(currentSession);
-    
-    // Auto-start all matches
-    currentSession.matches.forEach(match => {
-      if (match.status === 'waiting') {
-        currentSession = startMatch(currentSession!, match.id);
-      }
-    });
-  }
-  
   renderSession();
   renderActivePlayers();
   renderQueue(); // Render queue initially
-  updateStartRoundButton();
   saveStateToLocalStorage();
 }
 
@@ -990,26 +975,12 @@ function handleCompleteMatch(matchId: string, team1Score: number, team2Score: nu
   
   currentSession = completeMatch(currentSession, matchId, team1Score, team2Score);
 
-  // For king-of-court mode, automatically start next round if all matches are complete
-  if (currentSession.config.mode === 'king-of-court') {
-    if (canStartNextRound(currentSession)) {
-      currentSession = startNextRound(currentSession);
-      
-      // Auto-start new matches
-      currentSession.matches.forEach(match => {
-        if (match.status === 'waiting') {
-          currentSession = startMatch(currentSession!, match.id);
-        }
-      });
+  // Auto-start any new matches created by evaluation (all modes now use continuous flow)
+  currentSession.matches.forEach(match => {
+    if (match.status === 'waiting') {
+      currentSession = startMatch(currentSession!, match.id);
     }
-  } else {
-    // Auto-start any new matches created by evaluation (for non-king-of-court modes)
-    currentSession.matches.forEach(match => {
-      if (match.status === 'waiting') {
-        currentSession = startMatch(currentSession!, match.id);
-      }
-    });
-  }
+  });
   
   // Update queue if visible
   if (!queueSection.classList.contains('hidden')) {
@@ -1031,9 +1002,6 @@ function handleCompleteMatch(matchId: string, team1Score: number, team2Score: nu
     renderMatchHistory();
   }
   
-  // Update start round button for king-of-court (in case not all matches complete)
-  updateStartRoundButton();
-  
   renderSession();
   renderActivePlayers();
   saveStateToLocalStorage();
@@ -1048,34 +1016,17 @@ function handleForfeitMatch(matchId: string) {
   
   currentSession = forfeitMatch(currentSession, matchId);
   
-  // For king-of-court mode, automatically start next round if all matches are complete
-  if (currentSession.config.mode === 'king-of-court') {
-    if (canStartNextRound(currentSession)) {
-      currentSession = startNextRound(currentSession);
-      
-      // Auto-start new matches
-      currentSession.matches.forEach(match => {
-        if (match.status === 'waiting') {
-          currentSession = startMatch(currentSession!, match.id);
-        }
-      });
+  // Auto-start any new matches created by evaluation (all modes now use continuous flow)
+  currentSession.matches.forEach(match => {
+    if (match.status === 'waiting') {
+      currentSession = startMatch(currentSession!, match.id);
     }
-  } else {
-    // Auto-start any new matches created by evaluation (for non-king-of-court modes)
-    currentSession.matches.forEach(match => {
-      if (match.status === 'waiting') {
-        currentSession = startMatch(currentSession!, match.id);
-      }
-    });
-  }
+  });
   
   // Update queue if visible
   if (!queueSection.classList.contains('hidden')) {
     renderQueue();
   }
-  
-  // Update start round button for king-of-court (in case not all matches complete)
-  updateStartRoundButton();
   
   renderSession();
   renderActivePlayers();
@@ -1180,9 +1131,6 @@ function renderSession() {
   } else {
     waitingArea.style.display = 'none';
   }
-  
-  // Update start round button for king-of-court
-  updateStartRoundButton();
 }
 
 function renderEmptyCourt(courtNum: number) {
@@ -1964,11 +1912,27 @@ function renderQueue() {
       `;
     }).join('');
   } else if (currentSession.config.mode === 'king-of-court') {
-    // For king-of-court, show next potential matches (if all courts are free)
-    if (canStartNextRound(currentSession)) {
-      queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">⏱️ All matches complete. Click "Start Next Round" to continue.</p>';
+    // For king-of-court, show waiting players
+    const waitingPlayerIds = Array.from(currentSession.activePlayers).filter(id => {
+      // Check if player is not in any active match
+      return !currentSession!.matches.some(match => 
+        (match.status === 'in-progress' || match.status === 'waiting') &&
+        (match.team1.includes(id) || match.team2.includes(id))
+      );
+    });
+    
+    if (waitingPlayerIds.length === 0) {
+      queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">🎾 All players are currently on courts</p>';
     } else {
-      queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">⏳ Waiting for current matches to finish before generating next round...</p>';
+      queueList.innerHTML = `
+        <p style="text-align: center; padding: 10px; color: var(--text-secondary);">⏳ Waiting Players (${waitingPlayerIds.length})</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; justify-content: center;">
+          ${waitingPlayerIds.map(id => {
+            const player = currentSession!.config.players.find(p => p.id === id);
+            return `<div class="queue-player" style="padding: 8px 16px; background: var(--card-bg); border-radius: 8px;">🎾 ${player?.name || 'Unknown'}</div>`;
+          }).join('')}
+        </div>
+      `;
     }
     queuePageInfo.textContent = '';
     queuePrevBtn.disabled = true;
@@ -1978,41 +1942,6 @@ function renderQueue() {
     queuePageInfo.textContent = '';
     queuePrevBtn.disabled = true;
     queueNextBtn.disabled = true;
-  }
-}
-
-function handleStartNextRound() {
-  if (!currentSession) return;
-  
-  currentSession = startNextRound(currentSession);
-  
-  // Auto-start new matches
-  currentSession.matches.forEach(match => {
-    if (match.status === 'waiting') {
-      currentSession = startMatch(currentSession!, match.id);
-    }
-  });
-  
-  // Update queue if visible
-  if (!queueSection.classList.contains('hidden')) {
-    renderQueue();
-  }
-  
-  renderSession();
-  updateStartRoundButton();
-  saveStateToLocalStorage();
-}
-
-function updateStartRoundButton() {
-  if (!currentSession || currentSession.config.mode !== 'king-of-court') {
-    startNextRoundBtn.classList.add('hidden');
-    return;
-  }
-  
-  if (canStartNextRound(currentSession)) {
-    startNextRoundBtn.classList.remove('hidden');
-  } else {
-    startNextRoundBtn.classList.add('hidden');
   }
 }
 

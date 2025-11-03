@@ -2,24 +2,143 @@ import type { Player, Session, Match, PlayerStats, LockedTeam } from './types';
 import { generateId, isPairBanned } from './utils';
 
 /**
- * King of the Court scheduling algorithm
+ * King of the Court scheduling algorithm (Ranking-Based Matchmaking)
  * 
- * Goals:
- * 1. Winners play winners - match players with similar win rates
- * 2. Equal play time - everyone gets roughly same number of games
- * 3. Minimize idle times - no one waits too many consecutive rounds
- * 4. Maximize opponent variety - face different people
- * 5. Maximize partner diversity (doubles) - partner with different people
- * 6. Competitive balance - teams are evenly matched by skill level
- * 7. Deterministic given same results
+ * Core Principles:
+ * 1. ELO-style ranking system - value of wins depends on opponent strength
+ * 2. Strict rank-based matchmaking - players can only play within their ranking half
+ * 3. Close-rank prioritization - prefer matches between similarly-ranked players
+ * 4. Strategic waiting - wait for better matchups rather than rushing games
+ * 5. New player integration - provisional rankings until sufficient games played
+ * 6. Variety optimization - prefer opponents you haven't faced yet
  * 
- * Note: Court numbers are arbitrary - what matters is matching by skill/win rate
+ * Matchmaking Rules:
+ * - In an 18-player game, #1 can only play ranks #2-#9
+ * - In an 18-player game, #18 can only play ranks #10-#17
+ * - Ideally, closely-ranked players (#16, #17, #18, #19) play together
+ * - Wait if necessary to avoid mismatches between high/low ranked players
+ * - New players (0 games) start with provisional middle ranking
  */
 
-
+// Base ELO rating for new players
+const BASE_RATING = 1500;
+const K_FACTOR = 32; // Standard ELO K-factor
+/**
+ * Player rating and rank information
+ */
+interface PlayerRating {
+  playerId: string;
+  rating: number;
+  rank: number;
+  gamesPlayed: number;
+  isProvisional: boolean;
+}
 
 /**
- * Generate next round of matches for King of the Court
+ * Calculate ELO-style rating for a player based on their match history
+ */
+function calculatePlayerRating(stats: PlayerStats): number {
+  if (stats.gamesPlayed === 0) {
+    return BASE_RATING; // New players start at base rating
+  }
+  
+  // Start with base rating
+  let rating = BASE_RATING;
+  
+  // Adjust based on win rate with diminishing returns
+  const winRate = stats.wins / stats.gamesPlayed;
+  const winRateAdjustment = Math.log(1 + winRate * 9) * 200; // Logarithmic scaling
+  rating += winRateAdjustment - 200; // Center around BASE_RATING for 50% win rate
+  
+  // Adjust based on point differential (quality of wins/losses)
+  const avgPointDiff = (stats.totalPointsFor - stats.totalPointsAgainst) / stats.gamesPlayed;
+  const pointDiffAdjustment = Math.log(1 + Math.abs(avgPointDiff)) * 50 * Math.sign(avgPointDiff);
+  rating += pointDiffAdjustment;
+  
+  // Bonus for consistency (more games played with good win rate)
+  if (stats.gamesPlayed >= 5 && winRate >= 0.6) {
+    rating += Math.log(stats.gamesPlayed) * 30;
+  }
+  
+  return Math.max(800, Math.min(2200, rating)); // Clamp between 800-2200
+}
+
+/**
+ * Calculate rankings for all players
+ */
+function calculatePlayerRankings(
+  playerIds: string[],
+  playerStats: Map<string, PlayerStats>
+): PlayerRating[] {
+  const ratings: PlayerRating[] = playerIds.map(playerId => {
+    const stats = playerStats.get(playerId)!;
+    const rating = calculatePlayerRating(stats);
+    const isProvisional = stats.gamesPlayed < 3; // Need 3+ games for stable ranking
+    
+    return {
+      playerId,
+      rating,
+      rank: 0, // Will be assigned after sorting
+      gamesPlayed: stats.gamesPlayed,
+      isProvisional,
+    };
+  });
+  
+  // Sort by rating (descending)
+  ratings.sort((a, b) => b.rating - a.rating);
+  
+  // Assign ranks
+  ratings.forEach((player, index) => {
+    player.rank = index + 1;
+  });
+  
+  return ratings;
+}
+
+/**
+ * Get the valid matchmaking range for a player based on their rank
+ * Players can only play with others in their half of the pool
+ */
+function getValidMatchmakingRange(rank: number, totalPlayers: number): { minRank: number; maxRank: number } {
+  const halfPool = Math.ceil(totalPlayers / 2);
+  
+  if (rank <= halfPool) {
+    // Top half: can play with ranks 1 to halfPool
+    return { minRank: 1, maxRank: halfPool };
+  } else {
+    // Bottom half: can play with ranks (halfPool+1) to totalPlayers
+    return { minRank: halfPool + 1, maxRank: totalPlayers };
+  }
+}
+
+/**
+ * Check if two players can be matched together based on rankings
+ */
+function canPlayTogether(
+  player1Rank: number,
+  player2Rank: number,
+  totalPlayers: number,
+  player1Provisional: boolean,
+  player2Provisional: boolean
+): boolean {
+  // Provisional players can play with anyone
+  if (player1Provisional || player2Provisional) {
+    return true;
+  }
+  
+  const range1 = getValidMatchmakingRange(player1Rank, totalPlayers);
+  const range2 = getValidMatchmakingRange(player2Rank, totalPlayers);
+  
+  // Check if player2's rank is in player1's range AND vice versa
+  return (
+    player2Rank >= range1.minRank && player2Rank <= range1.maxRank &&
+    player1Rank >= range2.minRank && player1Rank <= range2.maxRank
+  );
+}
+
+/**
+ * Generate matches for King of the Court (Ranking-Based Matchmaking)
+ * Creates matches for available courts, with strict rank-based constraints
  */
 export function generateKingOfCourtRound(
   session: Session
@@ -34,29 +153,369 @@ export function generateKingOfCourtRound(
     return generateLockedTeamsKingOfCourtRound(session);
   }
   
-  const activePlayerIds = Array.from(activePlayers);
+  // Get players currently in active matches (in-progress or waiting)
+  const busyPlayers = new Set<string>();
+  matches.forEach(match => {
+    if (match.status === 'in-progress' || match.status === 'waiting') {
+      [...match.team1, ...match.team2].forEach(id => busyPlayers.add(id));
+    }
+  });
   
-  if (activePlayerIds.length < playersPerMatch) {
+  // Get currently occupied courts
+  const occupiedCourts = new Set<number>();
+  matches.forEach(match => {
+    if (match.status === 'in-progress' || match.status === 'waiting') {
+      occupiedCourts.add(match.courtNumber);
+    }
+  });
+  
+  // Get available players (active but not currently playing)
+  const availablePlayerIds = Array.from(activePlayers).filter(id => !busyPlayers.has(id));
+  
+  if (availablePlayerIds.length < playersPerMatch) {
     return [];
   }
   
-  // Sort all active players by priority: who needs to play most
-  const sortedPlayers = sortPlayersByPriority(activePlayerIds, playerStats, matches);
+  // Calculate rankings for ALL active players (not just available)
+  const allActivePlayerIds = Array.from(activePlayers);
+  const allRankings = calculatePlayerRankings(allActivePlayerIds, playerStats);
   
-  // Assign players to courts sequentially
+  // Get rankings for available players
+  const availableRankings = allRankings.filter(r => availablePlayerIds.includes(r.playerId));
+  
+  // Check if we should wait for better matchups
+  const shouldWait = shouldWaitForRankBasedMatchups(
+    availableRankings,
+    allRankings.length,
+    playerStats,
+    matches,
+    occupiedCourts.size,
+    playersPerMatch
+  );
+  
+  if (shouldWait) {
+    return []; // Wait for more courts to finish for better matchups
+  }
+  
+  // Generate matches with ranking-based constraints
+  const newMatches = generateRankingBasedMatches(
+    availableRankings,
+    allRankings.length,
+    playersPerTeam,
+    playersPerMatch,
+    playerStats,
+    matches,
+    bannedPairs,
+    occupiedCourts,
+    courts
+  );
+  
+  return newMatches;
+}
+
+/**
+ * Count how many times two players have played together
+ */
+function getPlayTogetherCount(
+  player1Id: string,
+  player2Id: string,
+  matches: Match[]
+): number {
+  let count = 0;
+  const completedMatches = matches.filter(m => m.status === 'completed');
+  
+  completedMatches.forEach(match => {
+    const allPlayers = [...match.team1, ...match.team2];
+    if (allPlayers.includes(player1Id) && allPlayers.includes(player2Id)) {
+      count++;
+    }
+  });
+  
+  return count;
+}
+
+/**
+ * Determine if we should wait for more courts to finish before scheduling (ranking-based)
+ */
+function shouldWaitForRankBasedMatchups(
+  availableRankings: PlayerRating[],
+  totalActivePlayers: number,
+  playerStats: Map<string, PlayerStats>,
+  matches: Match[],
+  numBusyCourts: number,
+  playersPerMatch: number
+): boolean {
+  // Don't wait if no courts are busy (first round or all courts idle)
+  if (numBusyCourts === 0) {
+    return false;
+  }
+  
+  // Don't wait if we don't have enough players for even one match
+  if (availableRankings.length < playersPerMatch) {
+    return false;
+  }
+  
+  // Check if anyone has waited too long
+  const availablePlayerIds = availableRankings.map(r => r.playerId);
+  const consecutiveWaits = countConsecutiveWaits(availablePlayerIds, matches);
+  const maxConsecutiveWaits = Math.max(...Array.from(consecutiveWaits.values()));
+  
+  // Never wait if someone has already waited 2+ times
+  if (maxConsecutiveWaits >= 2) {
+    return false;
+  }
+  
+  // Don't wait if we have enough players for multiple good matches
+  if (availableRankings.length >= playersPerMatch * 3) {
+    return false;
+  }
+  
+  // Need at least 8 completed matches to make meaningful ranking decisions
+  const completedMatches = matches.filter(m => m.status === 'completed');
+  if (completedMatches.length < 8) {
+    return false;
+  }
+  
+  // Only consider waiting if we have at least 2 busy courts
+  if (numBusyCourts < 2) {
+    return false;
+  }
+  
+  // Check if we can make a valid rank-based match with current players
+  const canMakeValidMatch = canCreateValidRankMatch(
+    availableRankings,
+    totalActivePlayers,
+    playersPerMatch
+  );
+  
+  // HARD LOCK: If we can't make a valid match, WAIT (no override)
+  // Only exception is if someone has waited 3+ times (extreme case)
+  if (!canMakeValidMatch) {
+    if (maxConsecutiveWaits >= 3) {
+      return false; // Allow override only after 3 consecutive waits
+    }
+    return true; // Otherwise, WAIT for better matchups
+  }
+  
+  // CRITICAL CHECK: Detect if we're in a "single court loop" scenario
+  // (same small group playing repeatedly while other courts are idle)
+  const inSingleCourtLoop = detectSingleCourtLoop(
+    availableRankings.map(r => r.playerId),
+    matches,
+    numBusyCourts,
+    playersPerMatch
+  );
+  
+  // If we're in a single court loop, WAIT for other courts to finish
+  if (inSingleCourtLoop) {
+    return true;
+  }
+  
+  // Check if we have good close-rank matchup opportunities
+  const hasGoodMatchups = hasCloseRankMatchups(
+    availableRankings,
+    totalActivePlayers,
+    matches,
+    playersPerMatch
+  );
+  
+  // If we don't have good matchups and courts are busy, wait for better options
+  if (!hasGoodMatchups && numBusyCourts >= 2) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Detect if we're in a "single court loop" where the same small group
+ * keeps playing each other while other courts are idle
+ */
+function detectSingleCourtLoop(
+  availablePlayerIds: string[],
+  matches: Match[],
+  numBusyCourts: number,
+  playersPerMatch: number
+): boolean {
+  // Only check if we have multiple courts and most are busy
+  if (numBusyCourts < 3) return false;
+  
+  if (availablePlayerIds.length !== playersPerMatch) {
+    // Not a single-court-worth of players waiting
+    return false;
+  }
+  
+  const completedMatches = matches.filter(m => m.status === 'completed');
+  if (completedMatches.length < 5) return false; // Need some history
+  
+  // Check how many times this exact group has played together in recent history
+  const last10Matches = completedMatches.slice(-10);
+  let groupPlayCount = 0;
+  
+  for (const match of last10Matches) {
+    const matchPlayers = [...match.team1, ...match.team2];
+    const allInGroup = availablePlayerIds.every(id => matchPlayers.includes(id));
+    if (allInGroup) {
+      groupPlayCount++;
+    }
+  }
+  
+  // If this group has played together 3+ times in last 10 matches, we're looping
+  if (groupPlayCount >= 3) {
+    return true;
+  }
+  
+  // Also check pairwise matchup counts
+  let highRepeatPairs = 0;
+  for (let i = 0; i < availablePlayerIds.length; i++) {
+    for (let j = i + 1; j < availablePlayerIds.length; j++) {
+      const playCount = getPlayTogetherCount(availablePlayerIds[i], availablePlayerIds[j], matches);
+      if (playCount >= 3) {
+        highRepeatPairs++;
+      }
+    }
+  }
+  
+  // If most pairs have played together 3+ times, we're looping
+  const totalPairs = (availablePlayerIds.length * (availablePlayerIds.length - 1)) / 2;
+  if (highRepeatPairs >= totalPairs * 0.5) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Check if we can create at least one valid rank-based match
+ */
+function canCreateValidRankMatch(
+  availableRankings: PlayerRating[],
+  totalActivePlayers: number,
+  playersPerMatch: number
+): boolean {
+  for (let i = 0; i < availableRankings.length; i++) {
+    let compatibleCount = 0;
+    const player1 = availableRankings[i];
+    
+    for (let j = 0; j < availableRankings.length; j++) {
+      if (i === j) continue;
+      const player2 = availableRankings[j];
+      
+      if (canPlayTogether(
+        player1.rank,
+        player2.rank,
+        totalActivePlayers,
+        player1.isProvisional,
+        player2.isProvisional
+      )) {
+        compatibleCount++;
+      }
+    }
+    
+    // Need at least (playersPerMatch - 1) compatible players to form a match
+    if (compatibleCount >= playersPerMatch - 1) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Check if we have opportunities for close-rank matchups
+ */
+function hasCloseRankMatchups(
+  availableRankings: PlayerRating[],
+  totalActivePlayers: number,
+  matches: Match[],
+  playersPerMatch: number
+): boolean {
+  // Look for groups of closely-ranked players (within 3 ranks)
+  for (let i = 0; i < availableRankings.length; i++) {
+    const player1 = availableRankings[i];
+    let closeRankCount = 0;
+    
+    for (let j = 0; j < availableRankings.length; j++) {
+      if (i === j) continue;
+      const player2 = availableRankings[j];
+      
+      // Check if ranks are close AND they can play together
+      const rankDiff = Math.abs(player1.rank - player2.rank);
+      if (rankDiff <= 3 && canPlayTogether(
+        player1.rank,
+        player2.rank,
+        totalActivePlayers,
+        player1.isProvisional,
+        player2.isProvisional
+      )) {
+        closeRankCount++;
+      }
+    }
+    
+    // If we have enough close-ranked compatible players, we have good matchups
+    if (closeRankCount >= playersPerMatch - 1) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Generate matches with ranking-based constraints
+ */
+function generateRankingBasedMatches(
+  availableRankings: PlayerRating[],
+  totalActivePlayers: number,
+  playersPerTeam: number,
+  playersPerMatch: number,
+  playerStats: Map<string, PlayerStats>,
+  matches: Match[],
+  bannedPairs: [string, string][],
+  occupiedCourts: Set<number>,
+  totalCourts: number
+): Match[] {
   const newMatches: Match[] = [];
   const usedPlayers = new Set<string>();
   
-  for (let courtNum = 1; courtNum <= courts; courtNum++) {
-    // Get next available players
-    const availablePlayers = sortedPlayers.filter(id => !usedPlayers.has(id));
+  // Sort available players by wait priority
+  const sortedRankings = [...availableRankings].sort((a, b) => {
+    const statsA = playerStats.get(a.playerId)!;
+    const statsB = playerStats.get(b.playerId)!;
     
-    if (availablePlayers.length < playersPerMatch) {
-      break; // Not enough players for another court
+    // Prioritize by games waited
+    if (statsA.gamesWaited !== statsB.gamesWaited) {
+      return statsB.gamesWaited - statsA.gamesWaited;
     }
     
-    // Take first playersPerMatch players (highest priority)
-    const selectedPlayers = availablePlayers.slice(0, playersPerMatch);
+    // Then by games played (fewer = higher priority)
+    return statsA.gamesPlayed - statsB.gamesPlayed;
+  });
+  
+  // Try to create matches for each available court
+  for (let courtNum = 1; courtNum <= totalCourts; courtNum++) {
+    if (occupiedCourts.has(courtNum)) {
+      continue;
+    }
+    
+    const remainingRankings = sortedRankings.filter(r => !usedPlayers.has(r.playerId));
+    
+    if (remainingRankings.length < playersPerMatch) {
+      break;
+    }
+    
+    // Try to select players for this match
+    const selectedPlayers = selectPlayersForRankMatch(
+      remainingRankings,
+      totalActivePlayers,
+      playersPerMatch,
+      playerStats,
+      matches
+    );
+    
+    if (!selectedPlayers || selectedPlayers.length < playersPerMatch) {
+      break;
+    }
     
     // Divide into teams
     const teamAssignment = assignTeams(
@@ -88,36 +547,181 @@ export function generateKingOfCourtRound(
 }
 
 /**
- * Sort players by who needs to play most urgently
+ * Select players for a rank-based match
+ * Prioritizes close-rank matchups and variety
  */
-function sortPlayersByPriority(
-  playerIds: string[],
+function selectPlayersForRankMatch(
+  availableRankings: PlayerRating[],
+  totalActivePlayers: number,
+  playersPerMatch: number,
   playerStats: Map<string, PlayerStats>,
   matches: Match[]
-): string[] {
-  // Count consecutive waits for each player
-  const consecutiveWaits = countConsecutiveWaits(playerIds, matches);
+): string[] | null {
+  if (availableRankings.length < playersPerMatch) {
+    return null;
+  }
   
-  return [...playerIds].sort((a, b) => {
-    const statsA = playerStats.get(a)!;
-    const statsB = playerStats.get(b)!;
-    const waitsA = consecutiveWaits.get(a) || 0;
-    const waitsB = consecutiveWaits.get(b) || 0;
+  // Strategy 1: Try to find a group of closely-ranked players (within 4 ranks)
+  for (let i = 0; i < availableRankings.length; i++) {
+    const anchor = availableRankings[i];
+    const closeGroup: PlayerRating[] = [anchor];
     
-    // 1. Prioritize by consecutive waits (higher = more priority)
-    if (waitsA !== waitsB) {
-      return waitsB - waitsA;
+    for (let j = 0; j < availableRankings.length; j++) {
+      if (i === j) continue;
+      const candidate = availableRankings[j];
+      
+      const rankDiff = Math.abs(anchor.rank - candidate.rank);
+      
+      // Check if close in rank and can play together
+      if (rankDiff <= 4 && canPlayTogether(
+        anchor.rank,
+        candidate.rank,
+        totalActivePlayers,
+        anchor.isProvisional,
+        candidate.isProvisional
+      )) {
+        closeGroup.push(candidate);
+      }
+      
+      if (closeGroup.length >= playersPerMatch) {
+        break;
+      }
     }
     
-    // 2. Prioritize by total games waited (higher = more priority)
-    if (statsA.gamesWaited !== statsB.gamesWaited) {
-      return statsB.gamesWaited - statsA.gamesWaited;
+    if (closeGroup.length >= playersPerMatch) {
+      // Score this group based on variety and closeness
+      const groupPlayerIds = closeGroup.map(r => r.playerId);
+      const varietyScore = calculateGroupVarietyScore(groupPlayerIds, matches);
+      const closenessScore = calculateGroupClosenessScore(closeGroup);
+      
+      // If this is a good group, use it
+      if (varietyScore > 0.5 || closenessScore < 3) {
+        return groupPlayerIds.slice(0, playersPerMatch);
+      }
+    }
+  }
+  
+  // Strategy 2: Find any valid group that meets STRICT rank constraints
+  for (let i = 0; i < availableRankings.length; i++) {
+    const anchor = availableRankings[i];
+    const validGroup: PlayerRating[] = [anchor];
+    
+    for (let j = 0; j < availableRankings.length; j++) {
+      if (i === j) continue;
+      const candidate = availableRankings[j];
+      
+      // STRICT CHECK: All members must be able to play with candidate
+      let canJoin = true;
+      for (const member of validGroup) {
+        if (!canPlayTogether(
+          member.rank,
+          candidate.rank,
+          totalActivePlayers,
+          member.isProvisional,
+          candidate.isProvisional
+        )) {
+          canJoin = false;
+          break;
+        }
+      }
+      
+      if (canJoin) {
+        // ADDITIONAL CHECK: Candidate must be in valid range for ALL existing members
+        let inValidRange = true;
+        for (const member of validGroup) {
+          const memberRange = getValidMatchmakingRange(member.rank, totalActivePlayers);
+          if (candidate.rank < memberRange.minRank || candidate.rank > memberRange.maxRank) {
+            inValidRange = false;
+            break;
+          }
+        }
+        
+        if (inValidRange) {
+          validGroup.push(candidate);
+        }
+      }
+      
+      if (validGroup.length >= playersPerMatch) {
+        break;
+      }
     }
     
-    // 3. Prioritize by games played (lower = more priority)
-    return statsA.gamesPlayed - statsB.gamesPlayed;
-  });
+    if (validGroup.length >= playersPerMatch) {
+      // FINAL VALIDATION: Ensure all pairs in group can play together
+      let allPairsValid = true;
+      for (let a = 0; a < playersPerMatch; a++) {
+        for (let b = a + 1; b < playersPerMatch; b++) {
+          if (!canPlayTogether(
+            validGroup[a].rank,
+            validGroup[b].rank,
+            totalActivePlayers,
+            validGroup[a].isProvisional,
+            validGroup[b].isProvisional
+          )) {
+            allPairsValid = false;
+            break;
+          }
+        }
+        if (!allPairsValid) break;
+      }
+      
+      if (allPairsValid) {
+        return validGroup.slice(0, playersPerMatch).map(r => r.playerId);
+      }
+    }
+  }
+  
+  // HARD CONSTRAINT: Return null if no valid rank-constrained match exists
+  return null;
 }
+
+/**
+ * Calculate variety score for a group (how many haven't played together)
+ */
+function calculateGroupVarietyScore(
+  playerIds: string[],
+  matches: Match[]
+): number {
+  if (playerIds.length < 2) return 1;
+  
+  let totalPairs = 0;
+  let newPairs = 0;
+  
+  for (let i = 0; i < playerIds.length; i++) {
+    for (let j = i + 1; j < playerIds.length; j++) {
+      totalPairs++;
+      const playCount = getPlayTogetherCount(playerIds[i], playerIds[j], matches);
+      if (playCount === 0) {
+        newPairs++;
+      }
+    }
+  }
+  
+  return totalPairs > 0 ? newPairs / totalPairs : 1;
+}
+
+/**
+ * Calculate average rank difference in a group (lower is better)
+ */
+function calculateGroupClosenessScore(
+  rankings: PlayerRating[]
+): number {
+  if (rankings.length < 2) return 0;
+  
+  let totalDiff = 0;
+  let pairs = 0;
+  
+  for (let i = 0; i < rankings.length; i++) {
+    for (let j = i + 1; j < rankings.length; j++) {
+      totalDiff += Math.abs(rankings[i].rank - rankings[j].rank);
+      pairs++;
+    }
+  }
+  
+  return pairs > 0 ? totalDiff / pairs : 0;
+}
+
+
 
 /**
  * Count consecutive waits for each player from most recent round
@@ -397,7 +1001,7 @@ function createKingOfCourtMatch(
 }
 
 /**
- * Generate King of Court round with locked teams
+ * Generate King of Court round with locked teams (continuous flow)
  */
 function generateLockedTeamsKingOfCourtRound(session: Session): Match[] {
   const { config, playerStats, matches } = session;
@@ -407,32 +1011,76 @@ function generateLockedTeamsKingOfCourtRound(session: Session): Match[] {
     return [];
   }
   
-  // Get team stats (aggregate from individual players)
-  const teamStats = lockedTeams.map((team, idx) => {
-    const totalGames = team.reduce((sum, playerId) => {
-      const stats = playerStats.get(playerId);
-      return sum + (stats?.gamesPlayed || 0);
-    }, 0);
-    
-    const totalWaits = team.reduce((sum, playerId) => {
-      const stats = playerStats.get(playerId);
-      return sum + (stats?.gamesWaited || 0);
-    }, 0);
-    
-    const totalWins = team.reduce((sum, playerId) => {
-      const stats = playerStats.get(playerId);
-      return sum + (stats?.wins || 0);
-    }, 0);
-    
-    return {
-      teamIdx: idx,
-      team,
-      gamesPlayed: totalGames / team.length,
-      gamesWaited: totalWaits / team.length,
-      wins: totalWins / team.length,
-      winRate: totalGames > 0 ? totalWins / totalGames : 0.5,
-    };
+  // Get teams currently in active matches
+  const busyTeamIndices = new Set<number>();
+  const teamIndexMap = new Map<string, number>();
+  lockedTeams.forEach((team, idx) => {
+    const key = [...team].sort().join(',');
+    teamIndexMap.set(key, idx);
   });
+  
+  matches.forEach(match => {
+    if (match.status === 'in-progress' || match.status === 'waiting') {
+      const team1Key = [...match.team1].sort().join(',');
+      const team2Key = [...match.team2].sort().join(',');
+      
+      const team1Idx = teamIndexMap.get(team1Key);
+      const team2Idx = teamIndexMap.get(team2Key);
+      
+      if (team1Idx !== undefined) busyTeamIndices.add(team1Idx);
+      if (team2Idx !== undefined) busyTeamIndices.add(team2Idx);
+    }
+  });
+  
+  // Get currently occupied courts
+  const occupiedCourts = new Set<number>();
+  matches.forEach(match => {
+    if (match.status === 'in-progress' || match.status === 'waiting') {
+      occupiedCourts.add(match.courtNumber);
+    }
+  });
+  
+  // Get team stats (aggregate from individual players) for available teams
+  const teamStats = lockedTeams
+    .map((team, idx) => {
+      if (busyTeamIndices.has(idx)) return null;
+      
+      const totalGames = team.reduce((sum, playerId) => {
+        const stats = playerStats.get(playerId);
+        return sum + (stats?.gamesPlayed || 0);
+      }, 0);
+      
+      const totalWaits = team.reduce((sum, playerId) => {
+        const stats = playerStats.get(playerId);
+        return sum + (stats?.gamesWaited || 0);
+      }, 0);
+      
+      const totalWins = team.reduce((sum, playerId) => {
+        const stats = playerStats.get(playerId);
+        return sum + (stats?.wins || 0);
+      }, 0);
+      
+      return {
+        teamIdx: idx,
+        team,
+        gamesPlayed: totalGames / team.length,
+        gamesWaited: totalWaits / team.length,
+        wins: totalWins / team.length,
+        winRate: totalGames > 0 ? totalWins / totalGames : 0.5,
+      };
+    })
+    .filter(t => t !== null) as Array<{
+      teamIdx: number;
+      team: string[];
+      gamesPlayed: number;
+      gamesWaited: number;
+      wins: number;
+      winRate: number;
+    }>;
+  
+  if (teamStats.length < 2) {
+    return [];
+  }
   
   // Sort teams by priority (who needs to play)
   const sortedTeams = teamStats.sort((a, b) => {
@@ -451,6 +1099,11 @@ function generateLockedTeamsKingOfCourtRound(session: Session): Match[] {
   const usedTeamIndices = new Set<number>();
   
   for (let courtNum = 1; courtNum <= courts; courtNum++) {
+    // Skip if court is occupied
+    if (occupiedCourts.has(courtNum)) {
+      continue;
+    }
+    
     const availableTeams = sortedTeams.filter(t => !usedTeamIndices.has(t.teamIdx));
     
     if (availableTeams.length < 2) {

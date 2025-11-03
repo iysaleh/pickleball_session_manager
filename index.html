@@ -1141,7 +1141,6 @@
         <div class="controls">
           <button id="show-queue-btn">Show Queue</button>
           <button id="show-history-btn">Show History</button>
-          <button id="start-next-round-btn" class="hidden">Start Next Round</button>
           <button id="show-rankings-btn">Show Rankings</button>
           <button id="show-stats-btn">Show Statistics</button>
           <button id="edit-session-btn" class="btn-warning">Edit Session Config</button>
@@ -1246,18 +1245,20 @@
         <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
           <h3 style="color: var(--gradient-start); margin-bottom: 15px;">👑 King of the Court Mode</h3>
           <p style="color: var(--text-primary); margin-bottom: 10px;">
-            King of the Court is a competitive format where winners play winners:
+            King of the Court uses an advanced ELO-style ranking system with strict rank-based matchmaking for fair, competitive play:
           </p>
           <ul style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
-            <li><strong>Winners Play Winners:</strong> Players are matched with others who have similar win rates</li>
-            <li><strong>Skill-Based Matchmaking:</strong> Creates competitive, evenly-matched games</li>
-            <li><strong>Round-Based:</strong> Each round completes before the next one starts</li>
-            <li><strong>Wait Time Management:</strong> Players who've waited longest get priority</li>
-            <li><strong>Partner Rotation:</strong> Still maximizes partner diversity even in competitive play</li>
-            <li><strong>Dynamic Competition:</strong> As you win more, you face tougher opponents; lose more, face easier opponents</li>
+            <li><strong>ELO-Style Rankings:</strong> Sophisticated rating system where win value depends on opponent strength (logarithmic scaling)</li>
+            <li><strong>Strict Rank Brackets:</strong> In an 18-player session, #1 can only play ranks #2-#9, #18 can only play #10-#17 (50% range rule)</li>
+            <li><strong>Close-Rank Prioritization:</strong> System prefers matching closely-ranked players (e.g., #16, #17, #18, #19 together)</li>
+            <li><strong>Strategic Waiting:</strong> Algorithm waits for better matchups rather than rushing games - quality over speed</li>
+            <li><strong>New Player Integration:</strong> Players with &lt;3 games get provisional rankings and can play with anyone initially</li>
+            <li><strong>Variety Within Brackets:</strong> Prioritizes opponents you haven't faced yet within your ranking range</li>
+            <li><strong>Dynamic Rankings:</strong> Win more to move up brackets; lose more to move down - always face appropriate competition</li>
+            <li><strong>Hard Rank Locks:</strong> Never pairs top-half with bottom-half players unless provisional</li>
           </ul>
           <p style="color: var(--text-secondary); margin-top: 15px; font-style: italic;">
-            Perfect for competitive play where players want balanced, challenging matches based on their skill level.
+            Perfect for competitive play where fair, skill-appropriate matchups are crucial. The algorithm ensures top players face top competition, bottom players get balanced games, and everyone experiences appropriate challenge levels with maximal variety within their skill bracket.
           </p>
         </div>
         

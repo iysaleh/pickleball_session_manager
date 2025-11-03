@@ -199,9 +199,46 @@ export function removeTeamFromSession(session: Session, player1Id: string, playe
 }
 
 export function evaluateAndCreateMatches(session: Session): Session {
-  // King of the court doesn't auto-create matches - waits for manual round start
+  // King of the court uses continuous flow - generate matches for available courts
   if (session.config.mode === 'king-of-court') {
-    return session;
+    const newMatches = generateKingOfCourtRound(session);
+    
+    if (newMatches.length === 0) {
+      return session;
+    }
+    
+    // Update waiting players stats for those not selected
+    const selectedPlayers = new Set<string>();
+    newMatches.forEach(match => {
+      [...match.team1, ...match.team2].forEach(id => selectedPlayers.add(id));
+    });
+    
+    // Get players who are not currently in any match (active or new)
+    const currentlyPlaying = new Set<string>();
+    session.matches.forEach(match => {
+      if (match.status === 'in-progress' || match.status === 'waiting') {
+        [...match.team1, ...match.team2].forEach(id => currentlyPlaying.add(id));
+      }
+    });
+    newMatches.forEach(match => {
+      [...match.team1, ...match.team2].forEach(id => currentlyPlaying.add(id));
+    });
+    
+    const waitingPlayers = Array.from(session.activePlayers)
+      .filter(id => !currentlyPlaying.has(id));
+    
+    waitingPlayers.forEach(id => {
+      const stats = session.playerStats.get(id);
+      if (stats) {
+        stats.gamesWaited++;
+      }
+    });
+    
+    return {
+      ...session,
+      matches: [...session.matches, ...newMatches],
+      waitingPlayers,
+    };
   }
   
   const playersPerTeam = session.config.sessionType === 'singles' ? 1 : 2;
@@ -438,21 +475,13 @@ export function completeMatch(
     }
   });
   
-  // For king of the court mode, don't auto-create next matches
-  // Wait for all games in round to complete, then start next round manually
-  if (session.config.mode === 'king-of-court') {
-    return {
-      ...session,
-      matches: updatedMatches,
-    };
-  }
-  
   const updated = {
     ...session,
     matches: updatedMatches,
   };
   
   // Re-evaluate to create new matches (only if not an edit)
+  // For king of the court, this allows continuous flow - new matches as courts free up
   return isEdit ? updated : evaluateAndCreateMatches(updated);
 }
 
@@ -492,6 +521,10 @@ export function checkForAvailableCourts(session: Session): number[] {
   return availableCourts;
 }
 
+/**
+ * @deprecated King of the Court now uses continuous flow. Use evaluateAndCreateMatches instead.
+ * Kept for backward compatibility with tests.
+ */
 export function canStartNextRound(session: Session): boolean {
   // Check if all courts are either completed or forfeited
   const activeMatches = session.matches.filter(
@@ -500,38 +533,13 @@ export function canStartNextRound(session: Session): boolean {
   return activeMatches.length === 0;
 }
 
+/**
+ * @deprecated King of the Court now uses continuous flow. Use evaluateAndCreateMatches instead.
+ * Kept for backward compatibility with tests.
+ */
 export function startNextRound(session: Session): Session {
-  if (!canStartNextRound(session)) {
-    return session;
-  }
-  
-  // For King of Court mode, use special algorithm
-  if (session.config.mode === 'king-of-court') {
-    const newMatches = generateKingOfCourtRound(session);
-    
-    // Update waiting players stats for those not selected
-    const selectedPlayers = new Set<string>();
-    newMatches.forEach(match => {
-      [...match.team1, ...match.team2].forEach(id => selectedPlayers.add(id));
-    });
-    
-    const waitingPlayers = Array.from(session.activePlayers)
-      .filter(id => !selectedPlayers.has(id));
-    
-    waitingPlayers.forEach(id => {
-      const stats = session.playerStats.get(id);
-      if (stats) {
-        stats.gamesWaited++;
-      }
-    });
-    
-    return {
-      ...session,
-      matches: [...session.matches, ...newMatches],
-      waitingPlayers,
-    };
-  }
-  
+  // For continuous flow, just call evaluateAndCreateMatches
+  // which will create matches for available courts
   return evaluateAndCreateMatches(session);
 }
 

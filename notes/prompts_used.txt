@@ -221,6 +221,47 @@ This is great. Some improvements if you please:
 ### Revision 30.3
 * How do I run the king of the court tests? Also, there are lots of failures with  `npm test run`, fix them please. Especially make sure all the unit tests run and pass for the round-robin and king of the court algorithms.
 
+### Revision 31
+* I have now purchased the domain `BetterPickleballSessions.com` -- please make the necessary updates to support this domain. Also, do any necessary App title renaming for Better Pickleball Sessions. 
+* Add a single-page-app type navigation bar at the top that allows users to change between session controls for setup, the current active session, a page explaining the different modes and configurations, and an about page. PLease create the missing pages.
+
+### Revision 31.1
+* Beautiful, but just a few tiny bugs, when you click start session, the "Active Session" button doesn't become highlighted, the "Setup" button stays highlighted.
+** Also, you shouldn't be able to start a session if there is already an active session. 
+
+### Revision 31.2
+* When you switch between the tabs, the logic for Hide/Show Queue and Hide/Show history doesn't work properly, it's indicating that it's already being showed, but it's not until you hide and show it again for both the queue and history.
+* Review the king of the court algorithm and the Modes & Config description page, does what's described there actually match the algorithm? I don't think the algorithm is about moving up (atleast it shouldn't be), it's about winners playing winners, the court number the game is played on is irrelevant. (atleast that's how it should be)
+
+### Revision 32
+* Currently the King of the Court algorithm uses a strict round-based system. All rounds must finish before a new game is scheduled. But that's not really necessary -- we can have more of a continuous flow. Once 2 games finish, or 1 game finishes and we have 2 people waiting, we can immediately schedule the next game because we know who the winners are. Update the king of the court algorithm to be more continuous and less strict round based. Also, make sure you run and fix any tests that rely on this.
+
+### Revision 32.1
+* I think you broke king of the court --- now the courts finish all the matches scheduled at the start, and no new matches are ever scheduled, every just shows as waiting to play in the match queue (they're not even properly showing in the "Waiting Players" queue)... Something is wrong.
+
+### Revision 32.2
+* Continuous flow works now, but the problem is that we never wait for other courts to finish -- we are always scheduling a game with available players. That means we are not getting enough variation in the games played -- and the same players constantly play each other. We need to keep the big picture when scheduling games, it's OK to wait for 2 courts to finish before scheduling games. This is tricky, please think hard about a good algorithm to achieve this behavior. People who have only won games should probably never play against people who have only lost games. 
+
+### Revision 32.3
+* We're still not there yet, if I test this by only finishing games on court 1 with 2 people waiting, and never finish games on court 2,3,4, court 1 will still continuously get populated with games --- causing a lack of match variety. We need to have a court wait for other courts to finish when the same players have played in games with each other more than other players have already.
+
+### Revision 32.4
+* I don't think shouldWaitForBetterMatchups is happening, if I test this by only finishing games on court 1 with noone waiting, court 1 is just constantly populated by the same players playing against each other!
+
+
+### Revision 32.5
+* The algorithm has winning players playing with losing players to keep the flow going, that shouldn't happen. We
+   need to wait for other courts to finish, and let some player variety kick in!!!!!
+* Rework the algorithm to use the current rankings system, people should only ever play games that are close to them in rankings (if there are 18 players, there should only be 9 players that someone can ever play a game with -- IE 50% of the player pool) -- The #1 ranked player should only ever be able to play games with up to the #9 ranked player in an 18 player game. And the #18 ranked player should only ever be able to play games with up to the #10 ranked player. Have hard locks on this rule -- do not immediately schedule games if this condition is not met!!! Of course, we need special handling for players that haven't played any games at all. Add handling so that it prioritizes games with people closely ranked together -- especially if they haven't played together yet. EG, ideally, #16, #17, #18, #19 ranked players play together if possible. We need to also update the ranking so that somebody with a low win rate winning against someone with a low win rate/ranking doesn't push them to the top --- the value of a win needs to be based on some logarithmic function --- not just a straight wins-loss comparison. Please Think extra special about this algorithm, it's imperative that we get it right. Make sure we don't just rush to make games, its OK to wait for better games. 
+
+### Revision 32.6
+* Running the dev server fails with an HTML parse5 error, please fix: `npx -y vite@latest`
+
+# TODO #
+### Revision 33
+* Once we click Start Session, all session configuration options need to become un-editable until the current active session is ended. We should be able to end the current session from the Setup page (please add an "End Session" button there as well). 
+* 
+
 ### Revision 3
 ### Revision 3
 ### Revision 3
