@@ -1003,9 +1003,57 @@ function assignTeams(
     const team1PartnerCount = getPartnershipCount(config.team1[0], config.team1[1], matches);
     const team2PartnerCount = getPartnershipCount(config.team2[0], config.team2[1], matches);
     
-    // Moderate penalty for repeated partnerships (reduced from 150 to 80)
+    // Moderate penalty for repeated partnerships
     score += team1PartnerCount * 80;
     score += team2PartnerCount * 80;
+    
+    // CRITICAL: Check for recent partnerships (last 2 games per player)
+    // This prevents the same people from playing together 3+ times in a row
+    const completedMatches = matches.filter(m => m.status === 'completed');
+    const recentRounds = getLastNRounds(completedMatches.reverse(), 2);
+    
+    // Heavy penalty for recent partnerships (within last 2 rounds)
+    recentRounds.forEach(round => {
+      round.forEach(match => {
+        // Check if team1 partnership was recent
+        if (match.team1.length === 2) {
+          const [p1, p2] = match.team1;
+          if ((config.team1[0] === p1 && config.team1[1] === p2) ||
+              (config.team1[0] === p2 && config.team1[1] === p1)) {
+            score += 300; // HEAVY penalty for recent partnership
+          }
+          if ((config.team2[0] === p1 && config.team2[1] === p2) ||
+              (config.team2[0] === p2 && config.team2[1] === p1)) {
+            score += 300; // HEAVY penalty for recent partnership
+          }
+        }
+        
+        // Check if team2 partnership was recent
+        if (match.team2.length === 2) {
+          const [p1, p2] = match.team2;
+          if ((config.team1[0] === p1 && config.team1[1] === p2) ||
+              (config.team1[0] === p2 && config.team1[1] === p1)) {
+            score += 300; // HEAVY penalty for recent partnership
+          }
+          if ((config.team2[0] === p1 && config.team2[1] === p2) ||
+              (config.team2[0] === p2 && config.team2[1] === p1)) {
+            score += 300; // HEAVY penalty for recent partnership
+          }
+        }
+        
+        // Heavy penalty for recent opponent pairings
+        const matchPlayers = [...match.team1, ...match.team2];
+        const configPlayers = [...config.team1, ...config.team2];
+        let overlapCount = 0;
+        for (const p of configPlayers) {
+          if (matchPlayers.includes(p)) overlapCount++;
+        }
+        // If 3+ players overlap with a recent match, penalize
+        if (overlapCount >= 3) {
+          score += 200; // Heavy penalty for playing with mostly same people recently
+        }
+      });
+    });
     
     // Count actual opponent frequencies (all-time, not just recent)
     let totalOpponentCount = 0;
@@ -1016,7 +1064,7 @@ function assignTeams(
       }
     }
     
-    // Lighter penalty for repeated opponent matchups (reduced from 50 to 25)
+    // Lighter penalty for repeated opponent matchups
     score += totalOpponentCount * 25;
     
     // Prefer balanced teams (similar win rates)
