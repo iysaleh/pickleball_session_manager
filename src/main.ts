@@ -36,12 +36,15 @@ const addBannedPairBtn = document.getElementById('add-banned-pair-btn') as HTMLB
 const bannedPairsList = document.getElementById('banned-pairs-list') as HTMLElement;
 
 const startSessionBtn = document.getElementById('start-session-btn') as HTMLButtonElement;
+const setupEndSessionClearBtn = document.getElementById('setup-end-session-clear-btn') as HTMLButtonElement;
+const setupEndSessionKeepBtn = document.getElementById('setup-end-session-keep-btn') as HTMLButtonElement;
 const showRankingsBtn = document.getElementById('show-rankings-btn') as HTMLButtonElement;
 const showStatsBtn = document.getElementById('show-stats-btn') as HTMLButtonElement;
 const showHistoryBtn = document.getElementById('show-history-btn') as HTMLButtonElement;
 const editSessionBtn = document.getElementById('edit-session-btn') as HTMLButtonElement;
 const clearSessionBtn = document.getElementById('clear-session-btn') as HTMLButtonElement;
-const endSessionBtn = document.getElementById('end-session-btn') as HTMLButtonElement;
+const endSessionClearBtn = document.getElementById('end-session-clear-btn') as HTMLButtonElement;
+const endSessionKeepBtn = document.getElementById('end-session-keep-btn') as HTMLButtonElement;
 const rankingsModal = document.getElementById('rankings-modal') as HTMLElement;
 const rankingsModalClose = document.getElementById('rankings-modal-close') as HTMLButtonElement;
 const rankingsList = document.getElementById('rankings-list') as HTMLElement;
@@ -107,6 +110,8 @@ if (isTestMode && testModeContainer) {
 
 addBannedPairBtn.addEventListener('click', handleAddBannedPair);
 startSessionBtn.addEventListener('click', handleStartSession);
+setupEndSessionClearBtn.addEventListener('click', handleEndSessionAndClearData);
+setupEndSessionKeepBtn.addEventListener('click', handleEndSessionAndKeepPlayers);
 showRankingsBtn.addEventListener('click', openRankingsModal);
 rankingsModalClose.addEventListener('click', closeRankingsModal);
 rankingsModal.addEventListener('click', (e) => {
@@ -124,7 +129,8 @@ statsModal.addEventListener('click', (e) => {
 showHistoryBtn.addEventListener('click', toggleHistory);
 editSessionBtn.addEventListener('click', handleEditSession);
 clearSessionBtn.addEventListener('click', handleClearSessionData);
-endSessionBtn.addEventListener('click', handleEndSession);
+endSessionClearBtn.addEventListener('click', handleEndSessionAndClearData);
+endSessionKeepBtn.addEventListener('click', handleEndSessionAndKeepPlayers);
 addSessionPlayerBtn.addEventListener('click', handleAddSessionPlayer);
 sessionPlayerNameInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') handleAddSessionPlayer();
@@ -280,6 +286,9 @@ function loadStateFromLocalStorage() {
     // Restore active session
     if (state.currentSession) {
       currentSession = deserializeSession(state.currentSession);
+      
+      // Lock configuration inputs since session is active
+      lockConfigurationInputs();
       
       // Switch to control view
       setupSection.classList.add('hidden');
@@ -544,6 +553,7 @@ function renderPlayerList() {
       const removeBtn = document.createElement('button');
       removeBtn.textContent = '×';
       removeBtn.onclick = () => (window as any).removePlayer(player.id);
+      removeBtn.disabled = currentSession !== null; // Disable if session is active
       removeBtn.style.cssText = 'margin-left: 10px; color: #dc3545; background: transparent; border: 1px solid #dc3545; padding: 2px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;';
       
       content.appendChild(nameSpan);
@@ -614,10 +624,17 @@ function renderBannedPairs() {
     if (player1 && player2) {
       const tag = document.createElement('div');
       tag.className = 'banned-pair-tag';
-      tag.innerHTML = `
-        <span>${player1.name} & ${player2.name}</span>
-        <button onclick="window.removeBannedPair(${index})">×</button>
-      `;
+      
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = `${player1.name} & ${player2.name}`;
+      
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '×';
+      removeBtn.onclick = () => (window as any).removeBannedPair(index);
+      removeBtn.disabled = currentSession !== null; // Disable if session is active
+      
+      tag.appendChild(nameSpan);
+      tag.appendChild(removeBtn);
       bannedPairsList.appendChild(tag);
     }
   });
@@ -773,6 +790,7 @@ function renderLockedTeams() {
       const removeBtn = document.createElement('button');
       removeBtn.textContent = '×';
       removeBtn.onclick = () => (window as any).removeLockedTeam(index);
+      removeBtn.disabled = currentSession !== null; // Disable if session is active
       removeBtn.style.cssText = 'margin-left: 10px; color: #dc3545; background: transparent; border: 1px solid #dc3545; padding: 2px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;';
       
       content.appendChild(nameSpan);
@@ -834,13 +852,16 @@ function handleStartSession() {
     }
   });
   
-  // Switch to Active Session page
-  showPage('session');
+  // Lock configuration inputs
+  lockConfigurationInputs();
   
+  // Switch to Active Session page and update UI
   queueSection.classList.remove('hidden'); // Show queue by default
   showQueueBtn.textContent = 'Hide Queue'; // Update button text
   matchHistorySection.classList.remove('hidden'); // Show history by default
   showHistoryBtn.textContent = 'Hide History'; // Update button text
+  
+  showPage('session');
   
   // Apply initial layout
   updateCourtsGridLayout();
@@ -926,6 +947,23 @@ function handleRemoveSessionPlayer(playerId: string) {
   
   currentSession = removePlayerFromSession(currentSession, playerId);
   
+  // Also remove from the setup players list
+  const playerIndex = players.findIndex(p => p.id === playerId);
+  if (playerIndex > -1) {
+    players.splice(playerIndex, 1);
+    
+    // Remove from banned pairs
+    for (let i = bannedPairs.length - 1; i >= 0; i--) {
+      if (bannedPairs[i][0] === playerId || bannedPairs[i][1] === playerId) {
+        bannedPairs.splice(i, 1);
+      }
+    }
+    
+    renderPlayerList();
+    updateBannedPairSelects();
+    renderBannedPairs();
+  }
+  
   // Auto-start any new matches
   currentSession.matches.forEach(match => {
     if (match.status === 'waiting') {
@@ -946,6 +984,39 @@ function handleRemoveSessionTeam(player1Id: string, player2Id: string) {
   }
   
   currentSession = removeTeamFromSession(currentSession, player1Id, player2Id);
+  
+  // Also remove from the setup players list
+  const player1Index = players.findIndex(p => p.id === player1Id);
+  const player2Index = players.findIndex(p => p.id === player2Id);
+  
+  if (player1Index > -1) {
+    players.splice(player1Index, 1);
+  }
+  if (player2Index > -1) {
+    players.splice(player2Index, 1);
+  }
+  
+  // Remove from banned pairs
+  for (let i = bannedPairs.length - 1; i >= 0; i--) {
+    if (bannedPairs[i][0] === player1Id || bannedPairs[i][1] === player1Id ||
+        bannedPairs[i][0] === player2Id || bannedPairs[i][1] === player2Id) {
+      bannedPairs.splice(i, 1);
+    }
+  }
+  
+  // Remove from locked teams
+  for (let i = lockedTeams.length - 1; i >= 0; i--) {
+    const team = lockedTeams[i];
+    if ((team[0] === player1Id && team[1] === player2Id) ||
+        (team[0] === player2Id && team[1] === player1Id)) {
+      lockedTeams.splice(i, 1);
+    }
+  }
+  
+  renderPlayerList();
+  updateBannedPairSelects();
+  renderBannedPairs();
+  renderLockedTeams();
   
   // Auto-start any new matches
   currentSession.matches.forEach(match => {
@@ -1649,15 +1720,16 @@ function handleEditSession() {
 
   // Keep players but clear session
   currentSession = null;
+  
+  // Unlock configuration inputs
+  unlockConfigurationInputs();
 
-  // Show setup section, hide others
-  setupSection.classList.remove('hidden');
-  controlSection.classList.add('hidden');
-  courtsSection.classList.add('hidden');
-  closeStatsModal(); // Close stats modal if open
-  closeRankingsModal(); // Close rankings modal if open
-  matchHistorySection.classList.add('hidden');
-  queueSection.classList.add('hidden'); // Hide queue when editing
+  // Close modals if open
+  closeStatsModal();
+  closeRankingsModal();
+
+  // Switch to setup page
+  showPage('setup');
 
   // Reset locked teams UI state if needed
   if (lockedTeamsCheckbox.checked) {
@@ -1682,8 +1754,8 @@ function handleClearSessionData() {
   alert('✅ Session data cleared from browser storage.');
 }
 
-function handleEndSession() {
-  if (!confirm('Are you sure you want to end the session? All data (including players) will be lost.')) {
+function handleEndSessionAndClearData() {
+  if (!confirm('Are you sure you want to end the session and clear all data? All players and configuration will be lost.')) {
     return;
   }
   
@@ -1692,19 +1764,126 @@ function handleEndSession() {
   bannedPairs = [];
   lockedTeams = [];
   
-  setupSection.classList.remove('hidden');
-  controlSection.classList.add('hidden');
-  courtsSection.classList.add('hidden');
-  closeStatsModal(); // Close stats modal if open
-  closeRankingsModal(); // Close rankings modal if open
-  matchHistorySection.classList.add('hidden');
-  queueSection.classList.add('hidden'); // Hide queue when ending session
+  // Unlock configuration inputs
+  unlockConfigurationInputs();
+  
+  // Close modals if open
+  closeStatsModal();
+  closeRankingsModal();
+  
+  // Switch to setup page
+  showPage('setup');
   
   renderPlayerList();
   updateBannedPairSelects();
   renderBannedPairs();
   renderLockedTeams();
   clearLocalStorageState();
+  
+  alert('✅ Session ended and all data cleared.');
+}
+
+function handleEndSessionAndKeepPlayers() {
+  if (!confirm('Are you sure you want to end the session? Players will be kept for the next session.')) {
+    return;
+  }
+  
+  currentSession = null;
+  
+  // Unlock configuration inputs
+  unlockConfigurationInputs();
+  
+  // Close modals if open
+  closeStatsModal();
+  closeRankingsModal();
+  
+  // Switch to setup page
+  showPage('setup');
+  
+  // Players, banned pairs, and locked teams are kept
+  renderPlayerList();
+  updateBannedPairSelects();
+  renderBannedPairs();
+  renderLockedTeams();
+  saveStateToLocalStorage();
+  
+  alert('✅ Session ended. Players saved for next session.');
+}
+
+// Configuration locking functions
+function lockConfigurationInputs() {
+  // Disable all setup configuration inputs
+  gameModeSelect.disabled = true;
+  sessionTypeSelect.disabled = true;
+  numCourtsInput.disabled = true;
+  setupMaxQueueSizeInput.disabled = true;
+  lockedTeamsCheckbox.disabled = true;
+  
+  // Disable player/team input
+  playerNameInput.disabled = true;
+  addPlayerBtn.disabled = true;
+  teamPlayer1NameInput.disabled = true;
+  teamPlayer2NameInput.disabled = true;
+  addLockedTeamBtn.disabled = true;
+  
+  // Disable banned pairs controls
+  bannedPlayer1Select.disabled = true;
+  bannedPlayer2Select.disabled = true;
+  addBannedPairBtn.disabled = true;
+  
+  // Re-render player/team lists to disable remove buttons
+  if (lockedTeamsCheckbox.checked) {
+    renderLockedTeams();
+  } else {
+    renderPlayerList();
+  }
+  renderBannedPairs();
+  
+  // Hide start session button, show end session buttons
+  startSessionBtn.style.display = 'none';
+  setupEndSessionClearBtn.style.display = 'inline-block';
+  setupEndSessionKeepBtn.style.display = 'inline-block';
+}
+
+function unlockConfigurationInputs() {
+  // Enable all setup configuration inputs
+  gameModeSelect.disabled = false;
+  sessionTypeSelect.disabled = false;
+  numCourtsInput.disabled = false;
+  setupMaxQueueSizeInput.disabled = false;
+  lockedTeamsCheckbox.disabled = false;
+  
+  // Enable player/team input
+  playerNameInput.disabled = false;
+  addPlayerBtn.disabled = false;
+  teamPlayer1NameInput.disabled = false;
+  teamPlayer2NameInput.disabled = false;
+  addLockedTeamBtn.disabled = false;
+  
+  // Enable banned pairs controls
+  bannedPlayer1Select.disabled = false;
+  bannedPlayer2Select.disabled = false;
+  addBannedPairBtn.disabled = false;
+  
+  // Re-render to enable removal buttons
+  if (lockedTeamsCheckbox.checked) {
+    renderLockedTeams();
+  } else {
+    renderPlayerList();
+  }
+  renderBannedPairs();
+  
+  // Show start session button, hide end session buttons
+  startSessionBtn.style.display = 'inline-block';
+  setupEndSessionClearBtn.style.display = 'none';
+  setupEndSessionKeepBtn.style.display = 'none';
+  
+  // Enable start session button if requirements met
+  if (lockedTeamsCheckbox.checked) {
+    startSessionBtn.disabled = lockedTeams.length < 2;
+  } else {
+    startSessionBtn.disabled = players.length < 2;
+  }
 }
 
 // Expose functions to window for onclick handlers
