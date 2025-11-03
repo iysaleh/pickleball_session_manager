@@ -16,7 +16,8 @@ const isTestMode = urlParams.get('test') === 'true';
 const setupSection = document.getElementById('setup-section') as HTMLElement;
 const controlSection = document.getElementById('control-section') as HTMLElement;
 const courtsSection = document.getElementById('courts-section') as HTMLElement;
-const statsSection = document.getElementById('stats-section') as HTMLElement;
+const statsModal = document.getElementById('stats-modal') as HTMLElement;
+const statsModalClose = document.getElementById('stats-modal-close') as HTMLButtonElement;
 const testModeContainer = document.getElementById('test-mode-container') as HTMLElement;
 const addTestPlayersBtn = document.getElementById('add-test-players-btn') as HTMLButtonElement;
 
@@ -41,7 +42,8 @@ const showHistoryBtn = document.getElementById('show-history-btn') as HTMLButton
 const editSessionBtn = document.getElementById('edit-session-btn') as HTMLButtonElement;
 const clearSessionBtn = document.getElementById('clear-session-btn') as HTMLButtonElement;
 const endSessionBtn = document.getElementById('end-session-btn') as HTMLButtonElement;
-const rankingsSection = document.getElementById('rankings-section') as HTMLElement;
+const rankingsModal = document.getElementById('rankings-modal') as HTMLElement;
+const rankingsModalClose = document.getElementById('rankings-modal-close') as HTMLButtonElement;
 const rankingsList = document.getElementById('rankings-list') as HTMLElement;
 const activePlayersList = document.getElementById('active-players-list') as HTMLElement;
 const sessionPlayerNameInput = document.getElementById('session-player-name') as HTMLInputElement;
@@ -106,8 +108,20 @@ if (isTestMode && testModeContainer) {
 
 addBannedPairBtn.addEventListener('click', handleAddBannedPair);
 startSessionBtn.addEventListener('click', handleStartSession);
-showRankingsBtn.addEventListener('click', toggleRankings);
-showStatsBtn.addEventListener('click', toggleStats);
+showRankingsBtn.addEventListener('click', openRankingsModal);
+rankingsModalClose.addEventListener('click', closeRankingsModal);
+rankingsModal.addEventListener('click', (e) => {
+  if (e.target === rankingsModal) {
+    closeRankingsModal();
+  }
+});
+showStatsBtn.addEventListener('click', openStatsModal);
+statsModalClose.addEventListener('click', closeStatsModal);
+statsModal.addEventListener('click', (e) => {
+  if (e.target === statsModal) {
+    closeStatsModal();
+  }
+});
 showHistoryBtn.addEventListener('click', toggleHistory);
 editSessionBtn.addEventListener('click', handleEditSession);
 clearSessionBtn.addEventListener('click', handleClearSessionData);
@@ -996,13 +1010,13 @@ function handleCompleteMatch(matchId: string, team1Score: number, team2Score: nu
     renderQueue();
   }
   
-  // Always update rankings if visible
-  if (!rankingsSection.classList.contains('hidden')) {
+  // Always update rankings if modal is open
+  if (rankingsModal.classList.contains('show')) {
     renderRankings();
   }
   
-  // Always update stats if visible
-  if (!statsSection.classList.contains('hidden')) {
+  // Always update stats if modal is open
+  if (statsModal.classList.contains('show')) {
     renderStats();
   }
   
@@ -1068,8 +1082,8 @@ function renderSession() {
   // Always update match history (now always visible by default)
   renderMatchHistory();
   
-  // Always update stats if visible
-  if (!statsSection.classList.contains('hidden')) {
+  // Always update stats if modal is open
+  if (statsModal.classList.contains('show')) {
     renderStats();
   }
   
@@ -1381,15 +1395,16 @@ function renderActivePlayers() {
   }
 }
 
-function toggleRankings() {
-  if (rankingsSection.classList.contains('hidden')) {
-    renderRankings();
-    rankingsSection.classList.remove('hidden');
-    showRankingsBtn.textContent = 'Hide Rankings';
-  } else {
-    rankingsSection.classList.add('hidden');
-    showRankingsBtn.textContent = 'Show Rankings';
-  }
+function openRankingsModal() {
+  if (!currentSession) return;
+  renderRankings();
+  rankingsModal.classList.add('show');
+  document.body.style.overflow = 'hidden'; // Prevent background scrolling
+}
+
+function closeRankingsModal() {
+  rankingsModal.classList.remove('show');
+  document.body.style.overflow = ''; // Restore scrolling
 }
 
 function renderRankings() {
@@ -1511,15 +1526,16 @@ function renderRankings() {
   }
 }
 
-function toggleStats() {
-  if (statsSection.classList.contains('hidden')) {
-    renderStats();
-    statsSection.classList.remove('hidden');
-    showStatsBtn.textContent = 'Hide Statistics';
-  } else {
-    statsSection.classList.add('hidden');
-    showStatsBtn.textContent = 'Show Statistics';
-  }
+function openStatsModal() {
+  if (!currentSession) return;
+  renderStats();
+  statsModal.classList.add('show');
+  document.body.style.overflow = 'hidden'; // Prevent background scrolling
+}
+
+function closeStatsModal() {
+  statsModal.classList.remove('show');
+  document.body.style.overflow = ''; // Restore scrolling
 }
 
 function toggleHistory() {
@@ -1683,8 +1699,8 @@ function handleEditSession() {
   setupSection.classList.remove('hidden');
   controlSection.classList.add('hidden');
   courtsSection.classList.add('hidden');
-  statsSection.classList.add('hidden');
-  rankingsSection.classList.add('hidden');
+  closeStatsModal(); // Close stats modal if open
+  closeRankingsModal(); // Close rankings modal if open
   matchHistorySection.classList.add('hidden');
   queueSection.classList.add('hidden'); // Hide queue when editing
 
@@ -1724,8 +1740,8 @@ function handleEndSession() {
   setupSection.classList.remove('hidden');
   controlSection.classList.add('hidden');
   courtsSection.classList.add('hidden');
-  statsSection.classList.add('hidden');
-  rankingsSection.classList.add('hidden');
+  closeStatsModal(); // Close stats modal if open
+  closeRankingsModal(); // Close rankings modal if open
   matchHistorySection.classList.add('hidden');
   queueSection.classList.add('hidden'); // Hide queue when ending session
   
@@ -1827,13 +1843,13 @@ function handleEndSession() {
   
   currentSession = completeMatch(currentSession, matchId, score1, score2);
   
-  // Always update rankings if visible
-  if (!rankingsSection.classList.contains('hidden')) {
+  // Always update rankings if modal is open
+  if (rankingsModal.classList.contains('show')) {
     renderRankings();
   }
   
-  // Always update stats if visible
-  if (!statsSection.classList.contains('hidden')) {
+  // Always update stats if modal is open
+  if (statsModal.classList.contains('show')) {
     renderStats();
   }
   
