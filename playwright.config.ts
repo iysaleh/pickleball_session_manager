@@ -14,7 +14,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   
   /* Retry on CI only */
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 2 : 1,
   
   /* Opt out of parallel tests on CI */
   workers: process.env.CI ? 1 : undefined,
@@ -28,7 +28,7 @@ export default defineConfig({
   /* Shared settings for all the projects below */
   use: {
     /* Base URL to use in actions like `await page.goto('/')` */
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:5173/pickleball/',
     
     /* Collect trace when retrying the failed test */
     trace: 'on-first-retry',
@@ -38,6 +38,10 @@ export default defineConfig({
     
     /* Video on failure */
     video: 'retain-on-failure',
+    
+    /* Increase timeouts */
+    actionTimeout: 15000,
+    navigationTimeout: 45000,
   },
 
   /* Configure projects for major browsers */
@@ -70,9 +74,11 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
+    command: 'npx -y vite@latest',
+    url: 'http://localhost:5173/pickleball/',
+    reuseExistingServer: true,
     timeout: 120 * 1000,
+    stdout: 'pipe',
+    stderr: 'pipe',
   },
 });

@@ -5,10 +5,10 @@
  * Run this before starting the dev server to catch config issues early
  */
 
-console.log('🔍 Checking configuration files...\n');
+import fs from 'fs';
+import path from 'path';
 
-const fs = require('fs');
-const path = require('path');
+console.log('🔍 Checking configuration files...\n');
 
 let hasErrors = false;
 

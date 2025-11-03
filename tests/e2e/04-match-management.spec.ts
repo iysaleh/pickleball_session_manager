@@ -51,10 +51,19 @@ test.describe('Match Management', () => {
     // Click complete button
     await firstMatch.locator('button:has-text("Complete")').click();
     
-    // Match should move to history
-    await page.waitForTimeout(500);
+    // Wait longer for the match to be processed and UI to update
+    await page.waitForTimeout(1500);
     
-    // Court should show next match or be empty
+    // Wait for the match status to change from "In Progress"
+    // Either the court gets a new match or becomes empty
+    await page.waitForFunction(() => {
+      const court = document.querySelector('.court .match-status');
+      return court && !court.textContent.includes('In Progress');
+    }, { timeout: 5000 }).catch(() => {
+      // If timeout, that's ok - might have auto-started next match
+    });
+    
+    // Court should show next match or be empty (not showing the completed match)
     const courtStatus = await firstMatch.locator('.match-status').textContent();
     expect(courtStatus).not.toContain('In Progress');
   });

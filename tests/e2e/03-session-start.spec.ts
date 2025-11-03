@@ -59,9 +59,15 @@ test.describe('Session Start', () => {
     
     await page.click('#start-session-btn');
     
+    // Wait for session to start and UI to update
+    await page.waitForTimeout(1500);
+    
+    // Wait for control section
+    await page.waitForSelector('#control-section', { state: 'visible', timeout: 10000 });
     await expect(page.locator('#control-section')).toBeVisible();
     
     // Start next round button should be visible for king-of-court
+    await page.waitForSelector('#start-next-round-btn', { state: 'visible', timeout: 10000 });
     await expect(page.locator('#start-next-round-btn')).toBeVisible();
   });
 
@@ -100,6 +106,9 @@ test.describe('Session Start', () => {
     await addPlayers(page, 6);
     
     await page.click('#start-session-btn');
+    
+    // Wait for control section to be visible
+    await page.waitForSelector('#control-section', { state: 'visible', timeout: 5000 });
     
     // Check all control buttons are present
     await expect(page.locator('#show-queue-btn')).toBeVisible();

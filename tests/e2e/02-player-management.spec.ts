@@ -72,12 +72,18 @@ test.describe('Player Management', () => {
     await page.fill('#player-name', 'Bob');
     await page.click('#add-player-btn');
     
+    // Wait for players to be added
+    await page.waitForTimeout(500);
+    
     // Find and click remove button for Alice
     const playerList = page.locator('#player-list');
     await expect(playerList).toContainText('Alice');
     
-    // Click the first remove button
-    await playerList.locator('button').first().click();
+    // Click the first remove button more specifically
+    await page.locator('#player-list ol li').first().locator('button').click();
+    
+    // Wait for removal
+    await page.waitForTimeout(500);
     
     // Alice should be gone, Bob should remain
     const listText = await playerList.textContent();
@@ -103,7 +109,12 @@ test.describe('Player Management', () => {
     for (let i = 1; i <= 3; i++) {
       await page.fill('#player-name', `Player ${i}`);
       await page.click('#add-player-btn');
+      // Wait a bit between additions
+      await page.waitForTimeout(200);
     }
+    
+    // Wait for list to update
+    await page.waitForTimeout(500);
     
     // Count list items
     const playerItems = page.locator('#player-list ol li');

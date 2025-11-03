@@ -1,261 +1,205 @@
-# Quick Reference Guide
+# 🚀 Quick Reference Card
 
-## 🎯 Key Features at a Glance
+## Essential Commands
 
-### Court Display
-- **Layout:** Team 1 (left) ↔ Controls (center) ↔ Team 2 (right)
-- **Colors:** Blue border (Team 1), Purple border (Team 2)
-- **Controls:** Score inputs + Complete/Forfeit buttons centered
+### Development
+```bash
+# Start dev server
+npx -y vite@latest
 
-### Match History
-- **Access:** Click "Show History" button
-- **View:** All completed/forfeited matches (newest first)
-- **Edit:** Change scores directly and click "Save"
-- **Colors:** Green = winner, Red = loser
-
-### Player Management
-- **Add:** Type name in session controls → "Add Player"
-- **Remove:** Click "Remove" next to player name
-- **Reactivate:** Click "Reactivate" on inactive players
-- **Status:** Active (normal), Inactive (grayed out)
-
-## 🎮 Quick Actions
-
-| Action | How To | Effect |
-|--------|--------|--------|
-| Complete Match | Enter scores → "Complete" | Match ends, stats updated, new match created |
-| Forfeit Match | Click "Forfeit" → Confirm | No stats recorded, court freed, new match created |
-| Edit Score | Show History → Change values → "Save" | Stats recalculated, winner/loser updated |
-| Add Player | Type name → "Add Player" | Player joins queue, new matches evaluated |
-| Remove Player | Click "Remove" → Confirm | Active matches forfeited, player marked inactive |
-| View History | Click "Show History" | All matches displayed |
-| View Stats | Click "Show Statistics" | Player stats cards shown |
-| Edit Session | Click "Edit Session" → Confirm | Players kept, return to setup, change settings |
-| End Session | Click "End Session" → Confirm | Everything cleared, fresh start |
-
-## 🎨 Visual Indicators
-
-### Match Status Colors
-- 🟡 **Yellow** = Waiting
-- 🟢 **Green** = In Progress
-- ⚪ **Gray** = Completed
-- 🔴 **Red** = Forfeited
-
-### Team Colors
-- 🔵 **Blue border** = Team 1
-- 🟣 **Purple border** = Team 2
-
-### History Colors
-- 🟢 **Green background** = Winner
-- 🔴 **Red background** = Loser
-
-## 📋 Keyboard Shortcuts
-
-- **Enter** after typing player name = Add player (setup & session)
-- **Tab** to navigate between score inputs
-- **Enter** in score input = Focus next input
-
-## 🔄 Automatic Behaviors
-
-The system automatically:
-- ✅ Creates matches when courts available
-- ✅ Starts matches immediately
-- ✅ Evaluates after score entry
-- ✅ Evaluates after forfeit
-- ✅ Evaluates after player add/remove
-- ✅ Prioritizes waiting players
-- ✅ Balances games played
-- ✅ Respects banned pairs
-
-## 🏆 Game Modes
-
-### Round Robin
-- Partners change every game
-- Maximizes diversity
-- Fair rotation
-
-### King of the Court
-- Winners stay on court
-- Losers go to waiting queue
-- Competitive mode
-
-### Teams
-- Partners stay together
-- Only opponents change
-- Team building mode
-
-## 📊 Statistics Tracked
-
-Per Player:
-- Games Played
-- Wins / Losses
-- Win Rate %
-- Times Waited
-- Unique Partners
-- Unique Opponents
-
-## 🎯 Best Practices
-
-### Starting Session
-1. Add all expected players first
-2. Set banned pairs if needed
-3. Configure courts correctly
-4. Start session
-
-### During Play
-1. Let system auto-create matches
-2. Enter scores promptly
-3. Use forfeit only when needed
-4. Add late arrivals immediately
-
-### Score Entry
-1. Double-check before clicking Complete
-2. Use History to correct mistakes
-3. Edit scores right away if error noticed
-
-### Player Management
-1. Confirm before removing players
-2. Reactivate if player returns
-3. Keep active list current
-
-## ⚠️ Common Pitfalls
-
-### ❌ DON'T
-- Don't close/refresh browser (loses data)
-- Don't remove player without confirming
-- Don't forfeit matches unnecessarily
-- Don't edit scores multiple times (confusing)
-
-### ✅ DO
-- Enter scores accurately first time
-- Use forfeit for genuine issues
-- Add all players at start when possible
-- Review history periodically
-
-## 🐛 Troubleshooting
-
-### No Matches Being Created
-- **Check:** Enough active players?
-- **Doubles:** Need 4+ players
-- **Singles:** Need 2+ players
-
-### Player Can't Be Added
-- **Check:** Already in player list?
-- **Fix:** Can't add duplicates
-
-### Score Won't Save
-- **Check:** Valid numbers entered?
-- **Fix:** Must be positive integers
-
-### History Not Showing
-- **Check:** Any completed matches?
-- **Fix:** Complete at least one match first
-
-## 🔢 Minimum Requirements
-
-### Doubles
-- **Minimum:** 4 players
-- **Optimal:** 8+ players (2 courts)
-- **Max Courts:** Limited by players (4 per court)
-
-### Singles  
-- **Minimum:** 2 players
-- **Optimal:** 4+ players (2 courts)
-- **Max Courts:** Limited by players (2 per court)
-
-## 💾 Data Persistence
-
-### ⚠️ Important
-- **Not Saved:** Session data lost on refresh
-- **Not Saved:** History cleared on session end
-- **Saved:** Nothing persists currently
-
-### Workaround
-- Take screenshots of stats/history
-- Manual record keeping
-- Plan for future: localStorage
-
-## 📱 Device Support
-
-### Desktop
-- ✅ Full features
-- ✅ Optimal layout
-- ✅ Best experience
-
-### Tablet
-- ✅ Full features
-- ✅ Touch-friendly
-- ⚠️ Slightly condensed
-
-### Mobile
-- ✅ Works but limited
-- ⚠️ Teams may stack vertically
-- ⚠️ Smaller touch targets
-
-## 🎓 Tips & Tricks
-
-### For Organizers
-1. **Pre-populate banned pairs** before starting
-2. **Add all players first** to avoid mid-session additions
-3. **Check history** to ensure fair rotation
-4. **Take screenshots** for records
-
-### For Players
-1. **Check stats** to see your progress
-2. **Review history** to see who you've played
-3. **Be ready** when you're up next (check waiting area)
-
-### For Score Keeping
-1. **Announce scores clearly** before entering
-2. **Double-check** before clicking Complete
-3. **Edit immediately** if mistake noticed
-4. **Use history** to verify past scores
-
-## 🚀 Performance Tips
-
-- ✅ Close unused browser tabs
-- ✅ Use modern browser (Chrome/Firefox/Edge)
-- ✅ Clear browser cache if slow
-- ✅ Limit to ~20-30 players max
-
-## 🎯 Session Flow Example
-
-```
-1. Setup (5 min)
-   - Add players
-   - Set mode & courts
-   - Add banned pairs
-   
-2. Start Session
-   - Matches auto-created
-   - Players assigned
-   
-3. Play (2-3 hours)
-   - Complete matches
-   - Scores entered
-   - New matches auto-created
-   - Players rotated fairly
-   
-4. Review
-   - Check history
-   - View stats
-   - Identify top performers
-   
-5. End
-   - Take screenshots
-   - End session
+# Start dev server (if npm works)
+npm run dev
 ```
 
-## 📞 Support
+### Testing
 
-- **Documentation:** README.md
-- **Examples:** EXAMPLES.md
-- **Features:** FEATURES.md
-- **Changes:** CHANGELOG.md
-- **UI Guide:** UI_GUIDE.md
+#### Run All Tests
+```bash
+npm run test:all          # Complete test suite
+node run-all-tests.js     # Same as above
+run-tests.bat             # Windows batch
+.\run-tests.ps1           # Windows PowerShell
+```
+
+#### E2E Tests Only
+```bash
+npx playwright test       # All browsers, headless
+npm run test:e2e:ui       # Interactive UI mode
+npm run test:e2e:headed   # Visible browsers
+npm run test:e2e:debug    # Debug mode
+```
+
+#### Unit Tests Only
+```bash
+npm test                  # Watch mode
+npm run test:run          # Run once
+npm run test:ui           # Interactive UI
+```
+
+#### Check Configuration
+```bash
+node check-config.js      # Validate setup
+```
+
+### Building & Deployment
+```bash
+npm run build             # Build for production
+npm run deploy            # Deploy to GitHub Pages
+npm run preview           # Preview production build
+```
+
+### View Reports
+```bash
+npx playwright show-report    # E2E test report
+```
+
+## File Structure
+
+```
+pickleball/
+├── src/                      # Source code
+│   └── main.ts              # Main application
+├── tests/
+│   └── e2e/                 # E2E tests (Playwright)
+│       ├── 00-dev-server.spec.ts
+│       ├── 01-setup.spec.ts
+│       ├── 02-player-management.spec.ts
+│       ├── 03-session-start.spec.ts
+│       ├── 04-match-management.spec.ts
+│       ├── 05-rankings-stats.spec.ts
+│       ├── 06-local-storage.spec.ts
+│       └── 07-locked-teams.spec.ts
+├── index.html               # Entry point
+├── vite.config.ts           # Vite configuration
+├── playwright.config.ts     # Playwright configuration
+├── package.json             # Dependencies & scripts
+├── run-all-tests.js         # Test runner
+├── check-config.js          # Config validator
+├── run-tests.bat            # Windows batch script
+└── run-tests.ps1            # PowerShell script
+```
+
+## URLs
+
+- **Local Dev**: http://localhost:5173/pickleball/
+- **GitHub Pages**: https://username.github.io/pickleball/
+
+## Test Coverage
+
+✅ **70+ E2E Tests** covering:
+- Application setup
+- Player management
+- Session creation (Round Robin, King of Court)
+- Match operations
+- Rankings & statistics
+- Data persistence
+- Locked teams
+- UI interactions
+
+✅ **5 Browsers**:
+- Desktop: Chrome, Firefox, Safari
+- Mobile: Chrome, Safari
+
+## Quick Fixes
+
+### Port 5173 in use
+```bash
+# Windows
+netstat -ano | findstr :5173
+taskkill /PID <PID> /F
+```
+
+### Tests failing
+```bash
+# Install Playwright browsers
+npx playwright install
+
+# Run with UI to debug
+npm run test:e2e:ui
+```
+
+### Config errors
+```bash
+# Validate configuration
+node check-config.js
+```
+
+### npm install broken
+```bash
+# Use npx to run vite directly
+npx -y vite@latest
+```
+
+## Exit Codes
+
+- `0` = Success ✅
+- `1` = Failure ❌
+
+## Color Legend (Terminal)
+
+- 🟢 Green = Passed
+- 🔴 Red = Failed
+- 🟡 Yellow = Warning/Skipped
+- 🔵 Blue = Info
+- 🟣 Magenta = Title
+
+## Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| Server won't start | Use `npx -y vite@latest` |
+| Tests timeout | Increase timeouts in playwright.config.ts |
+| npm install fails | Already handled - tests use npx |
+| Port in use | Kill process or let config reuse |
+
+## Test Duration
+
+- Config Check: ~1s
+- E2E Tests: ~3-4min
+- Unit Tests: ~10-30s
+- **Total**: ~4-5min
+
+## Pre-Commit Checklist
+
+- [ ] Run all tests: `npm run test:all`
+- [ ] All tests pass
+- [ ] Check git status: `git status`
+- [ ] Commit: `git commit -m "message"`
+
+## Pre-Deploy Checklist
+
+- [ ] Run all tests: `npm run test:all`
+- [ ] Build: `npm run build`
+- [ ] Preview: `npm run preview`
+- [ ] Deploy: `npm run deploy`
+
+## Support
+
+- **Test Runner Guide**: TEST_RUNNER_GUIDE.md
+- **Testing Guide**: TESTING.md
+- **Deployment Guide**: DEPLOYMENT.md
+- **Dev Server Guide**: DEV_SERVER_GUIDE.md
+
+## Scripts Summary
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start dev server |
+| `npm run build` | Build for production |
+| `npm run test:all` | Run all tests |
+| `npm run test:e2e` | Run E2E tests |
+| `npm run test:e2e:ui` | E2E with UI |
+| `npm test` | Run unit tests |
+| `npm run deploy` | Deploy to GitHub Pages |
+| `node check-config.js` | Validate config |
+
+## Get Started
+
+1. **Start server**: `npx -y vite@latest`
+2. **Run tests**: `npm run test:all`
+3. **View app**: http://localhost:5173/pickleball/
+4. **Deploy**: `npm run deploy`
 
 ---
 
-**Version:** 2.1  
-**Last Updated:** October 31, 2025  
-**Access:** http://localhost:5173
+**Keep this card handy!** Bookmark for quick reference. 📌

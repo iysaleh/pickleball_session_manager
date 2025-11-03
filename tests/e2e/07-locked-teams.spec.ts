@@ -33,6 +33,9 @@ test.describe('Locked Teams', () => {
     await page.selectOption('#session-type', 'doubles');
     await page.check('#locked-teams-checkbox');
     
+    // Wait for locked teams setup to appear
+    await page.waitForSelector('#locked-teams-setup', { state: 'visible', timeout: 5000 });
+    
     // Locked teams setup should be visible
     await expect(page.locator('#locked-teams-setup')).toBeVisible();
   });

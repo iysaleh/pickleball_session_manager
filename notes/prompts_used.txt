@@ -206,11 +206,25 @@ This is great. Some improvements if you please:
 * How come all the tests passed, but running npx -y vite@latest didn't work? Should we add a test for basic dev startup?
 
 
-### Revision
-### Revision
-### Revision
-### Revision
-### Revision
+### Revision 30
+* 7 of the Playwright tests failed, are you able to run the tests yourself, get the error output, and fix them?
+
+### Revision 30.1
+* Can you write me a simple script that runs all the tests? (E2E, Round Robin, and King of the Court Tests)
+
+### Revision 30.2
+* 'npm run test:all' doesn't work, try it yourself and fix any issues with it: npm run test:all
+
+### Revision 30.2
+* Excellent, please run and fix all failing tests (including timing tests)
+
+### Revision 30.3
+* How do I run the king of the court tests? Also, there are lots of failures with  `npm test run`, fix them please. Especially make sure all the unit tests run and pass for the round-robin and king of the court algorithms.
+
+### Revision 3
+### Revision 3
+### Revision 3
+### Revision 3
 
 
 # Useful Commands:
@@ -218,3 +232,34 @@ npx vitest run roundrobin.test.ts
 # Run local webserver
 npx -y vite@latest
 http://localhost:5173?test=true 
+
+####
+   🚀 How to Run Tests
+   Run King of Court Tests:
+     npx vitest run src/kingofcourt.test.ts
+   Run Round Robin Tests:
+     npx vitest run src/roundrobin.test.ts
+   Run All Unit Tests:
+     npm test              # Watch mode
+     npm run test:run      # Run once
+   Run All E2E Tests:
+     npm run test:e2e
+   Run Everything:
+     npm run test:all
+####
+
+# Testing UI, according to Copilot:
+     # Install dependencies
+     npm install
+
+     # Install Playwright browsers
+     npx playwright install
+
+     # Run with interactive UI (recommended)
+     npm run test:e2e:ui
+
+     # Or run all tests
+     npm run test:e2e
+
+     # View results
+     npx playwright show-report

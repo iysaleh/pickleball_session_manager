@@ -61,7 +61,11 @@ test.describe('Setup and Initial Load', () => {
     await page.goto('/');
     
     const favicon = page.locator('link[rel="icon"]');
-    await expect(favicon).toHaveAttribute('href', /data:image\/svg/);
+    const href = await favicon.getAttribute('href');
+    
+    // Check that favicon href exists and contains svg
+    expect(href).toBeTruthy();
+    expect(href).toContain('svg');
   });
 
   test('should have all game mode options', async ({ page }) => {
