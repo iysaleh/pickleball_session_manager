@@ -257,13 +257,31 @@ This is great. Some improvements if you please:
 ### Revision 32.6
 * Running the dev server fails with an HTML parse5 error, please fix: `npx -y vite@latest`
 
-# TODO #
+### Revision 32.7
+* The hard lock on players only being able to play within 50% of the player pool by order of rankings is simply not working -- it's immediately scheduling a court after a game finishes regardless of ranking. Please fix!
+
 ### Revision 33
 * Once we click Start Session, all session configuration options need to become un-editable until the current active session is ended. We should be able to end the current session from the Setup page (please add an "End Session" button there as well). 
-* 
 
-### Revision 3
-### Revision 3
+### Revision 33.1
+* You can still remove players for an active session on the Setup page, but nothing happens --- you shouldn't be able to remove players there when a session is active.
+* Please have 2 buttons while a session is active: "End Session and Clear Data", "End Session and Keep Players"
+
+### Revision 33.2
+* When you remove a player from the Active Session page, it should also remove the same player from the Setup page, but that doesn't happen now. 
+
+### Revision 34
+* In the about page, Add a link to the github repository for this https://github.com/iysaleh/pickleball_session_manager . Mention that it's open source and to report issues, bugs or feature requests there.
+
+### Revision 35
+* Adding a player to an active session doesn't add the player to the Session Setup page --- it should. If you end a session but keep the players after adding a player, any players added after the initial setup should be present in the setup page.
+* In King of the Court mode, There's an extra waiting players section within the Match Queue -- sometimes players correctly show up there, but not in the "Waiting Players" Area. There shouldn't be a second waiting players section within the Match Queue, "Waiting Players" should be updated with king of the court waiting players logic when another needs to finish before the next games can be scheduled.
+
+### Revision TODO
+* King of the Court doesn't really make sense for 4 players, but I tried it anyways. After 3 games, there were no more games to play and all 4 players just sat there waiting. Is something wrong with the algorithm? Shouldn't it never end, regardless of the configuration?
+* Please add a test for 20 players and make sure the algorithm continues to work for 400 games, make the winners random...
+
+
 ### Revision 3
 ### Revision 3
 

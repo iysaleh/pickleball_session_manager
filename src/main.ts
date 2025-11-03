@@ -1186,21 +1186,49 @@ function renderSession() {
   }
   
   // Render waiting players
-  if (currentSession.waitingPlayers.length > 0) {
-    waitingArea.style.display = 'block';
-    waitingPlayers.innerHTML = '';
-    
-    currentSession.waitingPlayers.forEach(playerId => {
-      const player = currentSession!.config.players.find(p => p.id === playerId);
-      if (player) {
-        const tag = document.createElement('div');
-        tag.className = 'player-tag';
-        tag.innerHTML = `<span>${player.name}</span>`;
-        waitingPlayers.appendChild(tag);
-      }
+  if (currentSession.config.mode === 'king-of-court') {
+    // For King of Court, show players not currently in active matches
+    const waitingPlayerIds = Array.from(currentSession.activePlayers).filter(id => {
+      return !currentSession!.matches.some(match =>
+        (match.status === 'in-progress' || match.status === 'waiting') &&
+        (match.team1.includes(id) || match.team2.includes(id))
+      );
     });
+    
+    if (waitingPlayerIds.length > 0) {
+      waitingArea.style.display = 'block';
+      waitingPlayers.innerHTML = '';
+
+      waitingPlayerIds.forEach(playerId => {
+        const player = currentSession!.config.players.find(p => p.id === playerId);
+        if (player) {
+          const tag = document.createElement('div');
+          tag.className = 'player-tag';
+          tag.innerHTML = `<span>${player.name}</span>`;
+          waitingPlayers.appendChild(tag);
+        }
+      });
+    } else {
+      waitingArea.style.display = 'none';
+    }
   } else {
-    waitingArea.style.display = 'none';
+    // For other modes, use the session's waitingPlayers array
+    if (currentSession.waitingPlayers.length > 0) {
+      waitingArea.style.display = 'block';
+      waitingPlayers.innerHTML = '';
+
+      currentSession.waitingPlayers.forEach(playerId => {
+        const player = currentSession!.config.players.find(p => p.id === playerId);
+        if (player) {
+          const tag = document.createElement('div');
+          tag.className = 'player-tag';
+          tag.innerHTML = `<span>${player.name}</span>`;
+          waitingPlayers.appendChild(tag);
+        }
+      });
+    } else {
+      waitingArea.style.display = 'none';
+    }
   }
 }
 
@@ -1788,6 +1816,11 @@ function handleEndSessionAndKeepPlayers() {
     return;
   }
   
+  // Sync players array with all players from the session (including those added during session)
+  if (currentSession) {
+    players = [...currentSession.config.players];
+  }
+  
   currentSession = null;
   
   // Unlock configuration inputs
@@ -2091,28 +2124,9 @@ function renderQueue() {
       `;
     }).join('');
   } else if (currentSession.config.mode === 'king-of-court') {
-    // For king-of-court, show waiting players
-    const waitingPlayerIds = Array.from(currentSession.activePlayers).filter(id => {
-      // Check if player is not in any active match
-      return !currentSession!.matches.some(match => 
-        (match.status === 'in-progress' || match.status === 'waiting') &&
-        (match.team1.includes(id) || match.team2.includes(id))
-      );
-    });
-    
-    if (waitingPlayerIds.length === 0) {
-      queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">🎾 All players are currently on courts</p>';
-    } else {
-      queueList.innerHTML = `
-        <p style="text-align: center; padding: 10px; color: var(--text-secondary);">⏳ Waiting Players (${waitingPlayerIds.length})</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; justify-content: center;">
-          ${waitingPlayerIds.map(id => {
-            const player = currentSession!.config.players.find(p => p.id === id);
-            return `<div class="queue-player" style="padding: 8px 16px; background: var(--card-bg); border-radius: 8px;">🎾 ${player?.name || 'Unknown'}</div>`;
-          }).join('')}
-        </div>
-      `;
-    }
+    // For King of Court, the queue section doesn't show a traditional queue
+    // Waiting players are shown in the main waiting area instead
+    queueList.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">King of the Court mode uses dynamic matchmaking.<br>Waiting players are shown in the "Waiting Players" section above.</p>';
     queuePageInfo.textContent = '';
     queuePrevBtn.disabled = true;
     queueNextBtn.disabled = true;
