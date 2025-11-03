@@ -1987,9 +1987,10 @@ function renderStats() {
         ? ((teamWins / teamGamesPlayed) * 100).toFixed(1)
         : '0.0';
       
-      const avgPointDiff = teamGamesPlayed > 0
-        ? ((teamPointsFor - teamPointsAgainst) / (teamGamesPlayed * 2)).toFixed(1)
-        : '0.0';
+      const avgPointDiffNum = teamGamesPlayed > 0
+        ? (teamPointsFor - teamPointsAgainst) / (teamGamesPlayed * 2)
+        : 0;
+      const avgPointDiff = avgPointDiffNum.toFixed(1);
       
       const card = document.createElement('div');
       card.className = 'stat-card';
@@ -2018,7 +2019,7 @@ function renderStats() {
         </div>
         <div class="stat-line">
           <span>Avg Point Diff:</span>
-          <strong>${avgPointDiff >= 0 ? '+' : ''}${avgPointDiff}</strong>
+          <strong>${avgPointDiffNum >= 0 ? '+' : ''}${avgPointDiff}</strong>
         </div>
       `;
 
