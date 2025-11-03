@@ -166,6 +166,53 @@ This is great. Some improvements if you please:
 * For locked team sessions, make sure the Current Session page shows the locked teams rather than individual players -- The same as it is in the SEssion Setup Page
 * For team sessions, A team gets 1st, 2nd, 3rd --- not the individual players -- make sure the ranking component updates to show the team together, not the player.
 
+### Revision 24
+* We don't want a player that gets added late to a game to essentially never wait because other people have played 2-3 games already, so it makes the most since that a player that gets added later should have their wait status = the max waited by the person that has waited the most so far + 1. Please implement that. (Also, wait times should apply to teams as a whole in team mode)
+* When team mode is enabled, make sure you can dynamically add and remove teams in the active session page. 
+
+### Revision 25
+* Please update the favicon to be the tennis/pickleball icon so it shows that way in the browser address bar and window
+* Please update the app so that the current state is saved locally in the browsers data -- If a user does a refresh or a hard-refresh, all the current data should stay. Please add a "Clear Current Session Configuration" in the Sessions Control page to be able to purge the local browser data cache for this site.
+
+### Revision 26
+* Make "Show Rankings" a Closable Pop-Up window, instead of an element on the page that we have to scroll down to see
+* Change the default number of courts to 4 instead of 2
+
+### Revision 26.1
+* Also make "Show Statistics" a Closable Pop-Up window like "Show Rankings" is now.
+
+### Revision 26.2
+* Move "Show History" next to the "Show Queue" Button. The button Order should be: "Show Queue" "Show History" Show Rankings" "Show Statistics" "Edit Session" "Clear Session Data" "End Session".
+
+### Revision 26.3
+* Rename "Edit Session" to "Edit Session Config"
+
+### Revision 27
+* Courts elements in the Active Courts box can overflow the screen, and there is no way to scroll if that happens. Either make it scrollable, or make the elements autofit. 
+
+### Revision 27.1
+* The problem is when the courts overflow in the screen width, there is now left-right scroll bar. I have no problem with the vertical scrollability.
+
+### Revision 28
+* I want to release this as a github page so that anybody can go to the link and use it. Will that work? Or is there is server component that is required? If it works, what changes do I need?
+
+### Revision 29
+* Please build comprehensive UI tests that run in a local browser.
+
+### Revision 29.1
+* Go ahead and run the UI tests, and fixup any that are broken
+
+### Revision 29.2
+* How come all the tests passed, but running npx -y vite@latest didn't work? Should we add a test for basic dev startup?
+
+
+### Revision
+### Revision
+### Revision
+### Revision
+### Revision
+
+
 # Useful Commands:
 npx vitest run roundrobin.test.ts
 # Run local webserver

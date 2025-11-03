@@ -261,9 +261,36 @@ npx vitest src/session.test.ts
 
 - **TypeScript**: Type-safe JavaScript
 - **Vite**: Fast build tool and dev server
+- **Playwright**: End-to-end UI testing in real browsers
 - **Vitest**: Unit testing framework
 - **Happy-DOM**: Lightweight DOM implementation for testing
 - **Pure CSS**: No framework dependencies for styling
+
+## 🧪 Testing
+
+Comprehensive UI test suite with **70+ tests** covering all major features:
+
+```bash
+# Install Playwright browsers (first time)
+npx playwright install
+
+# Run tests with interactive UI
+npm run test:e2e:ui
+
+# Run all tests
+npm run test:e2e
+```
+
+See [TESTING.md](TESTING.md) for full testing guide.
+
+**Test Coverage:**
+- ✅ All game modes and session types
+- ✅ Player and team management
+- ✅ Match operations and scoring
+- ✅ Rankings and statistics
+- ✅ Data persistence (localStorage)
+- ✅ UI interactions and modals
+- ✅ Multi-browser (Chrome, Firefox, Safari, Mobile)
 
 ## Browser Support
 
