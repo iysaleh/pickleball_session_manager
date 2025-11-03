@@ -2,6 +2,19 @@
 
 A client-side TypeScript web application for managing pickleball play sessions with multiple game modes and intelligent matchmaking.
 
+## 🚀 Live Demo
+
+**Visit the live app:** [https://YOUR-USERNAME.github.io/pickleball/](https://YOUR-USERNAME.github.io/pickleball/)
+
+> **Note:** Replace `YOUR-USERNAME` with your actual GitHub username once deployed.
+
+## ✨ Key Highlights
+
+- 💯 **100% Client-Side** - No server required!
+- 💾 **Auto-Save** - All data persists in your browser
+- 🆓 **Free to Use** - Hosted on GitHub Pages
+- 📱 **Mobile Friendly** - Works on all devices
+
 ## Features
 
 ### Game Modes
@@ -267,14 +280,25 @@ ISC
 
 Feel free to submit issues or pull requests to improve the application!
 
+## 🌐 Deploying to GitHub Pages
+
+This app is ready to deploy to GitHub Pages! See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions.
+
+### Quick Deploy:
+
+1. **Update vite.config.ts** - Set `base: '/your-repo-name/'`
+2. **Install dependencies** - `npm install`
+3. **Deploy** - `npm run deploy`
+4. **Access** - `https://YOUR-USERNAME.github.io/your-repo-name/`
+
+**Note:** All data is stored locally in each user's browser using localStorage. No backend or database required!
+
 ## Future Enhancements
 
 Potential features for future development:
-- Persistent storage (localStorage/IndexedDB)
-- Export session statistics
+- Export session statistics to CSV/JSON
 - Custom scoring rules
 - Tournament brackets
-- Mobile-responsive improvements
 - Elo rating system
-- Match history
-- Player profiles
+- Player profiles with avatars
+- Session templates
