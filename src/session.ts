@@ -430,6 +430,13 @@ export function completeMatch(
         stats.totalPointsAgainst -= match.score!.team1Score;
       }
     });
+  } else {
+    // Not an edit - this is the first time completing this match
+    // Increment gamesPlayed for all players
+    [...match.team1, ...match.team2].forEach((playerId) => {
+      const stats = session.playerStats.get(playerId);
+      if (stats) stats.gamesPlayed++;
+    });
   }
   
   // Update match

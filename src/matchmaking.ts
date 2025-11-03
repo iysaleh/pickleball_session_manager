@@ -88,12 +88,10 @@ export function createMatch(
   team2: string[],
   statsMap: Map<string, PlayerStats>
 ): Match {
-  // Update stats
+  // Track partners and opponents (but don't increment gamesPlayed until match is completed)
   [...team1, ...team2].forEach((playerId) => {
     const stats = statsMap.get(playerId);
     if (stats) {
-      stats.gamesPlayed++;
-      
       // Track partners
       const teammates = team1.includes(playerId) ? team1 : team2;
       teammates.forEach((partnerId) => {

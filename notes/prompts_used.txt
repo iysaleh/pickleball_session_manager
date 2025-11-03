@@ -283,6 +283,21 @@ This is great. Some improvements if you please:
 ### Revision 36.1
 * We have too many empty courts at any one time now, and it's possible to make it impossible to meet these new strict match conditions. We need to ease up the requirements.
 
+### Revision 37
+* Can we show and sort by the score that's actually being used in king of the court to arrange games in the "Show Rankings" page?
+
+### Revision 38
+* In show statistics, games played includes the current game that is not finished. That is not correct. It should only include completed games.
+
+### Revision 39
+* In King of the Court, I hate it where we have a game where players A B are against C D, and then the next game is with players A C vs D B ... Please add hard restrictions against back to back games with the same exact players.
+
+### Revision 39.1
+* Add a button to export the match history and current matches configuration in a simple text format (also include the current waiting players)
+
+### Revision 39.2
+* Look at this match history and current court setup @pickleball-session-11-03-2025-15-00.txt -- Player Ibraheem is against Leslie, even though she has lost every game, and he has won every game! That should never happen!!! Analyze what went wrong with the algorithm and fix it, and then add a manual test to avoid this from ever happening again.
+
 ### Revision TODO
 * King of the Court doesn't really make sense for 4 players, but I tried it anyways. After 3 games, there were no more games to play and all 4 players just sat there waiting. Is something wrong with the algorithm? Shouldn't it never end, regardless of the configuration?
 * Please add a test for 20 players and make sure the algorithm continues to work for 400 games, make the winners random...

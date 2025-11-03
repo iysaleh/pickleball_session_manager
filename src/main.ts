@@ -42,6 +42,7 @@ const setupEndSessionKeepBtn = document.getElementById('setup-end-session-keep-b
 const showRankingsBtn = document.getElementById('show-rankings-btn') as HTMLButtonElement;
 const showStatsBtn = document.getElementById('show-stats-btn') as HTMLButtonElement;
 const showHistoryBtn = document.getElementById('show-history-btn') as HTMLButtonElement;
+const exportSessionBtn = document.getElementById('export-session-btn') as HTMLButtonElement;
 const editSessionBtn = document.getElementById('edit-session-btn') as HTMLButtonElement;
 const clearSessionBtn = document.getElementById('clear-session-btn') as HTMLButtonElement;
 const endSessionClearBtn = document.getElementById('end-session-clear-btn') as HTMLButtonElement;
@@ -128,6 +129,7 @@ statsModal.addEventListener('click', (e) => {
   }
 });
 showHistoryBtn.addEventListener('click', toggleHistory);
+exportSessionBtn.addEventListener('click', handleExportSession);
 editSessionBtn.addEventListener('click', handleEditSession);
 clearSessionBtn.addEventListener('click', handleClearSessionData);
 endSessionClearBtn.addEventListener('click', handleEndSessionAndClearData);
@@ -1691,6 +1693,159 @@ function toggleHistory() {
     matchHistorySection.classList.add('hidden');
     showHistoryBtn.textContent = 'Show History';
   }
+}
+
+function handleExportSession() {
+  if (!currentSession) return;
+  
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }).replace(/:/g, '-');
+  
+  let exportText = '═══════════════════════════════════════════════════════\n';
+  exportText += '   BETTER PICKLEBALL SESSIONS - SESSION EXPORT\n';
+  exportText += '═══════════════════════════════════════════════════════\n\n';
+  exportText += `Date: ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n`;
+  exportText += `Time: ${now.toLocaleTimeString('en-US')}\n\n`;
+  
+  // Session Configuration
+  exportText += '═══════════════════════════════════════════════════════\n';
+  exportText += '   SESSION CONFIGURATION\n';
+  exportText += '═══════════════════════════════════════════════════════\n\n';
+  exportText += `Game Mode: ${currentSession.config.mode === 'king-of-court' ? 'King of the Court' : 'Round Robin'}\n`;
+  exportText += `Session Type: ${currentSession.config.sessionType === 'doubles' ? 'Doubles' : 'Singles'}\n`;
+  exportText += `Number of Courts: ${currentSession.config.courts}\n`;
+  exportText += `Total Players: ${currentSession.config.players.length}\n`;
+  exportText += `Active Players: ${currentSession.activePlayers.size}\n\n`;
+  
+  // Current Matches
+  const activeMatches = currentSession.matches.filter(m => m.status === 'in-progress' || m.status === 'waiting');
+  if (activeMatches.length > 0) {
+    exportText += '═══════════════════════════════════════════════════════\n';
+    exportText += '   CURRENT MATCHES\n';
+    exportText += '═══════════════════════════════════════════════════════\n\n';
+    
+    activeMatches.forEach(match => {
+      const team1Names = match.team1.map(id => {
+        const player = currentSession!.config.players.find(p => p.id === id);
+        return player ? player.name : 'Unknown';
+      });
+      const team2Names = match.team2.map(id => {
+        const player = currentSession!.config.players.find(p => p.id === id);
+        return player ? player.name : 'Unknown';
+      });
+      
+      exportText += `Court ${match.courtNumber} [${match.status.toUpperCase()}]:\n`;
+      exportText += `  ${team1Names.join(' & ')}\n`;
+      exportText += `    vs\n`;
+      exportText += `  ${team2Names.join(' & ')}\n\n`;
+    });
+  }
+  
+  // Waiting Players
+  if (currentSession.config.mode === 'king-of-court') {
+    const waitingPlayerIds = Array.from(currentSession.activePlayers).filter(id => {
+      return !currentSession!.matches.some(match =>
+        (match.status === 'in-progress' || match.status === 'waiting') &&
+        (match.team1.includes(id) || match.team2.includes(id))
+      );
+    });
+    
+    if (waitingPlayerIds.length > 0) {
+      exportText += '═══════════════════════════════════════════════════════\n';
+      exportText += '   WAITING PLAYERS\n';
+      exportText += '═══════════════════════════════════════════════════════\n\n';
+      
+      waitingPlayerIds.forEach((id, idx) => {
+        const player = currentSession!.config.players.find(p => p.id === id);
+        if (player) {
+          exportText += `  ${idx + 1}. ${player.name}\n`;
+        }
+      });
+      exportText += '\n';
+    }
+  } else if (currentSession.waitingPlayers.length > 0) {
+    exportText += '═══════════════════════════════════════════════════════\n';
+    exportText += '   WAITING PLAYERS\n';
+    exportText += '═══════════════════════════════════════════════════════\n\n';
+    
+    currentSession.waitingPlayers.forEach((id, idx) => {
+      const player = currentSession!.config.players.find(p => p.id === id);
+      if (player) {
+        exportText += `  ${idx + 1}. ${player.name}\n`;
+      }
+    });
+    exportText += '\n';
+  }
+  
+  // Match History
+  const completedMatches = currentSession.matches.filter(m => m.status === 'completed' || m.status === 'forfeited');
+  if (completedMatches.length > 0) {
+    exportText += '═══════════════════════════════════════════════════════\n';
+    exportText += '   MATCH HISTORY\n';
+    exportText += '═══════════════════════════════════════════════════════\n\n';
+    
+    completedMatches.forEach((match, idx) => {
+      const team1Names = match.team1.map(id => {
+        const player = currentSession!.config.players.find(p => p.id === id);
+        return player ? player.name : 'Unknown';
+      });
+      const team2Names = match.team2.map(id => {
+        const player = currentSession!.config.players.find(p => p.id === id);
+        return player ? player.name : 'Unknown';
+      });
+      
+      exportText += `Match ${idx + 1} - Court ${match.courtNumber}`;
+      if (match.status === 'forfeited') {
+        exportText += ' [FORFEITED]:\n';
+        exportText += `  ${team1Names.join(' & ')} vs ${team2Names.join(' & ')}\n\n`;
+      } else if (match.score) {
+        const winner = match.score.team1Score > match.score.team2Score ? team1Names : team2Names;
+        exportText += `:\n`;
+        exportText += `  ${team1Names.join(' & ')} (${match.score.team1Score})\n`;
+        exportText += `    vs\n`;
+        exportText += `  ${team2Names.join(' & ')} (${match.score.team2Score})\n`;
+        exportText += `  Winner: ${winner.join(' & ')}\n\n`;
+      }
+    });
+  }
+  
+  // Player Statistics Summary
+  exportText += '═══════════════════════════════════════════════════════\n';
+  exportText += '   PLAYER STATISTICS SUMMARY\n';
+  exportText += '═══════════════════════════════════════════════════════\n\n';
+  
+  const playerIds = currentSession.config.players.map(p => p.id);
+  const rankings = calculatePlayerRankings(playerIds, currentSession.playerStats);
+  
+  rankings.forEach(ranking => {
+    const player = currentSession!.config.players.find(p => p.id === ranking.playerId);
+    if (player) {
+      const stats = currentSession!.playerStats.get(ranking.playerId);
+      const winRate = stats && stats.gamesPlayed > 0 ? ((stats.wins / stats.gamesPlayed) * 100).toFixed(1) : '0.0';
+      
+      exportText += `${ranking.rank}. ${player.name}\n`;
+      exportText += `   Wins: ${ranking.wins} | Losses: ${ranking.losses} | Win Rate: ${winRate}%\n`;
+      exportText += `   Avg Point Diff: ${ranking.avgPointDifferential >= 0 ? '+' : ''}${ranking.avgPointDifferential.toFixed(1)}\n\n`;
+    }
+  });
+  
+  exportText += '═══════════════════════════════════════════════════════\n';
+  exportText += '   END OF SESSION EXPORT\n';
+  exportText += '═══════════════════════════════════════════════════════\n';
+  
+  // Create and download file
+  const blob = new Blob([exportText], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pickleball-session-${dateStr}-${timeStr}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  alert('✅ Session exported successfully!');
 }
 
 function renderMatchHistory() {

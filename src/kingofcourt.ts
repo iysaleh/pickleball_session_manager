@@ -114,6 +114,8 @@ function getValidMatchmakingRange(rank: number, totalPlayers: number): { minRank
 
 /**
  * Check if two players can be matched together based on rankings
+ * CRITICAL: Players can only play within their ranking half
+ * Provisional players get slightly more flexibility but MUST still respect half-pool boundaries
  */
 function canPlayTogether(
   player1Rank: number,
@@ -122,11 +124,29 @@ function canPlayTogether(
   player1Provisional: boolean,
   player2Provisional: boolean
 ): boolean {
-  // Provisional players can play with anyone
+  const halfPool = Math.ceil(totalPlayers / 2);
+  
+  // HARD RULE: Never allow top half (1 to halfPool) to play bottom half (halfPool+1 to totalPlayers)
+  const player1TopHalf = player1Rank <= halfPool;
+  const player2TopHalf = player2Rank <= halfPool;
+  
+  // Players must be in the same half
+  if (player1TopHalf !== player2TopHalf) {
+    return false; // Cannot cross the half-pool boundary
+  }
+  
+  // If both are provisional, allow them to play together within the same half
+  if (player1Provisional && player2Provisional) {
+    return true; // Same half, both provisional
+  }
+  
+  // If one is provisional, allow slightly more flexibility (within same half)
   if (player1Provisional || player2Provisional) {
+    // Provisional players can play with anyone in their half
     return true;
   }
   
+  // Non-provisional players use strict range checking
   const range1 = getValidMatchmakingRange(player1Rank, totalPlayers);
   const range2 = getValidMatchmakingRange(player2Rank, totalPlayers);
   
@@ -233,6 +253,46 @@ function getPlayTogetherCount(
   });
   
   return count;
+}
+
+/**
+ * Check if this group has too much overlap with the most recently completed match
+ * Returns true if 3 or more of the same players were in the last match
+ * 
+ * Example violations:
+ * - Last match: A, B, C, D
+ * - Current match: A, B, C, E (3 overlapping - NOT ALLOWED)
+ * - Current match: A, B, E, F (2 overlapping - ALLOWED)
+ */
+function isBackToBackGame(
+  playerIds: string[],
+  matches: Match[]
+): boolean {
+  // Get the most recent completed match
+  const completedMatches = matches.filter(m => m.status === 'completed');
+  if (completedMatches.length === 0) return false;
+  
+  // Sort by endTime to get the most recent
+  const sortedMatches = [...completedMatches].sort((a, b) => {
+    const timeA = a.endTime || 0;
+    const timeB = b.endTime || 0;
+    return timeB - timeA;
+  });
+  
+  const lastMatch = sortedMatches[0];
+  const lastMatchPlayers = new Set([...lastMatch.team1, ...lastMatch.team2]);
+  
+  // Count how many players from the proposed group were in the last match
+  let overlapCount = 0;
+  for (const playerId of playerIds) {
+    if (lastMatchPlayers.has(playerId)) {
+      overlapCount++;
+    }
+  }
+  
+  // Reject if 3 or more players are the same (75% overlap)
+  // This ensures at least 2 new players in each match for good variety
+  return overlapCount >= 3;
 }
 
 /**
@@ -627,6 +687,12 @@ function selectPlayersForRankMatch(
     if (closeGroup.length >= playersPerMatch) {
       // Score this group based on variety and closeness
       const groupPlayerIds = closeGroup.map(r => r.playerId);
+      
+      // HARD CONSTRAINT: Never allow back-to-back games with same exact players
+      if (isBackToBackGame(groupPlayerIds.slice(0, playersPerMatch), matches)) {
+        continue; // Skip this group
+      }
+      
       const varietyScore = calculateGroupVarietyScore(groupPlayerIds, matches);
       const closenessScore = calculateGroupClosenessScore(closeGroup);
       const repetitionScore = calculateGroupRepetitionScore(groupPlayerIds, matches, playerStats, softRepetitionFrequency);
@@ -705,6 +771,11 @@ function selectPlayersForRankMatch(
       if (allPairsValid) {
         const groupPlayerIds = validGroup.slice(0, playersPerMatch).map(r => r.playerId);
         
+        // HARD CONSTRAINT: Never allow back-to-back games with same exact players
+        if (isBackToBackGame(groupPlayerIds, matches)) {
+          continue; // Skip this group
+        }
+        
         // Prefer groups with better variety, but don't hard block
         const repetitionScore = calculateGroupRepetitionScore(groupPlayerIds, matches, playerStats, softRepetitionFrequency);
         
@@ -717,7 +788,7 @@ function selectPlayersForRankMatch(
   }
   
   // Last resort: if we have ANY valid rank-constrained group, use it (even with repetition)
-  // This prevents empty courts
+  // But NEVER allow back-to-back with the exact same players
   for (let i = 0; i < availableRankings.length; i++) {
     const anchor = availableRankings[i];
     const validGroup: PlayerRating[] = [anchor];
@@ -750,7 +821,12 @@ function selectPlayersForRankMatch(
     }
     
     if (validGroup.length >= playersPerMatch) {
-      return validGroup.slice(0, playersPerMatch).map(r => r.playerId);
+      const groupPlayerIds = validGroup.slice(0, playersPerMatch).map(r => r.playerId);
+      
+      // HARD CONSTRAINT: Never allow back-to-back games with same exact players
+      if (!isBackToBackGame(groupPlayerIds, matches)) {
+        return groupPlayerIds;
+      }
     }
   }
   
@@ -1100,12 +1176,10 @@ function createKingOfCourtMatch(
   team2: string[],
   statsMap: Map<string, PlayerStats>
 ): Match {
-  // Update stats
+  // Track partners and opponents (but don't increment gamesPlayed until match is completed)
   [...team1, ...team2].forEach((playerId) => {
     const stats = statsMap.get(playerId);
     if (stats) {
-      stats.gamesPlayed++;
-      
       // Track partners
       const teammates = team1.includes(playerId) ? team1 : team2;
       teammates.forEach((partnerId) => {
