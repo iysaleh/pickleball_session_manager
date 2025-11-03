@@ -1300,6 +1300,30 @@ function generateLockedTeamsKingOfCourtRound(session: Session): Match[] {
   // Track recent opponents
   const recentOpponents = getRecentTeamOpponents(lockedTeams, matches, 2);
   
+  // Calculate rankings for locked teams based on win rate
+  const rankedTeams = [...teamStats].sort((a, b) => {
+    // Sort by win rate first
+    if (b.winRate !== a.winRate) {
+      return b.winRate - a.winRate;
+    }
+    // Then by total wins
+    return b.wins - a.wins;
+  });
+  
+  // Assign ranks
+  rankedTeams.forEach((team, index) => {
+    (team as any).rank = index + 1;
+  });
+  
+  // Determine half-pool boundary
+  const totalTeams = lockedTeams.length;
+  const halfPool = Math.ceil(totalTeams / 2);
+  
+  // Check if we should enforce half-pool constraints
+  // At the start of a session (no completed matches), rankings are arbitrary, so skip the constraint
+  const completedMatchCount = matches.filter(m => m.status === 'completed').length;
+  const enforceHalfPool = completedMatchCount >= Math.min(4, Math.floor(totalTeams / 2));
+  
   const newMatches: Match[] = [];
   const usedTeamIndices = new Set<number>();
   
@@ -1317,13 +1341,30 @@ function generateLockedTeamsKingOfCourtRound(session: Session): Match[] {
     
     // Take first team
     const team1Data = availableTeams[0];
+    const team1Rank = (rankedTeams.find(t => t.teamIdx === team1Data.teamIdx) as any)?.rank || 1;
+    const team1TopHalf = team1Rank <= halfPool;
     
-    // Find best opponent for team1 (similar win rate, not recent opponent)
-    let bestOpponent = availableTeams[1];
+    // Find best opponent for team1 (similar win rate, not recent opponent, same half)
+    let bestOpponent = null;
     let bestScore = Infinity;
     
     for (let i = 1; i < availableTeams.length; i++) {
       const team2Data = availableTeams[i];
+      const team2Rank = (rankedTeams.find(t => t.teamIdx === team2Data.teamIdx) as any)?.rank || 1;
+      const team2TopHalf = team2Rank <= halfPool;
+      
+      // HARD CONSTRAINT: Teams must be in the same half (top vs top, bottom vs bottom)
+      // BUT: Skip this constraint at the start of the session when rankings aren't established
+      if (enforceHalfPool && team1TopHalf !== team2TopHalf) {
+        continue; // Skip teams from different halves
+      }
+      
+      // Check if this would be a back-to-back matchup (same 4 players as last match)
+      const proposedPlayers = [...team1Data.team, ...team2Data.team];
+      if (isBackToBackGame(proposedPlayers, matches)) {
+        continue; // Skip back-to-back matchups
+      }
+      
       let score = 0;
       
       // Prefer balanced matchups (similar win rates)
@@ -1339,6 +1380,11 @@ function generateLockedTeamsKingOfCourtRound(session: Session): Match[] {
         bestScore = score;
         bestOpponent = team2Data;
       }
+    }
+    
+    // If no valid opponent found (due to constraints), skip this court
+    if (!bestOpponent) {
+      continue;
     }
     
     const match = createKingOfCourtMatch(

@@ -1810,25 +1810,50 @@ function handleExportSession() {
     });
   }
   
-  // Player Statistics Summary
-  exportText += '═══════════════════════════════════════════════════════\n';
-  exportText += '   PLAYER STATISTICS SUMMARY\n';
-  exportText += '═══════════════════════════════════════════════════════\n\n';
-  
-  const playerIds = currentSession.config.players.map(p => p.id);
-  const rankings = calculatePlayerRankings(playerIds, currentSession.playerStats);
-  
-  rankings.forEach(ranking => {
-    const player = currentSession!.config.players.find(p => p.id === ranking.playerId);
-    if (player) {
-      const stats = currentSession!.playerStats.get(ranking.playerId);
-      const winRate = stats && stats.gamesPlayed > 0 ? ((stats.wins / stats.gamesPlayed) * 100).toFixed(1) : '0.0';
+  // Player/Team Statistics Summary
+  if (currentSession.config.lockedTeams && currentSession.config.lockedTeams.length > 0) {
+    exportText += '═══════════════════════════════════════════════════════\n';
+    exportText += '   TEAM STATISTICS SUMMARY\n';
+    exportText += '═══════════════════════════════════════════════════════\n\n';
+    
+    const rankings = calculateTeamRankings(currentSession.config.lockedTeams, currentSession.playerStats);
+    
+    rankings.forEach(ranking => {
+      const player1 = currentSession!.config.players.find(p => p.id === ranking.team[0]);
+      const player2 = currentSession!.config.players.find(p => p.id === ranking.team[1]);
       
-      exportText += `${ranking.rank}. ${player.name}\n`;
-      exportText += `   Wins: ${ranking.wins} | Losses: ${ranking.losses} | Win Rate: ${winRate}%\n`;
-      exportText += `   Avg Point Diff: ${ranking.avgPointDifferential >= 0 ? '+' : ''}${ranking.avgPointDifferential.toFixed(1)}\n\n`;
-    }
-  });
+      if (player1 && player2) {
+        const stats1 = currentSession!.playerStats.get(player1.id);
+        const stats2 = currentSession!.playerStats.get(player2.id);
+        
+        const teamGamesPlayed = stats1 && stats2 ? (stats1.gamesPlayed + stats2.gamesPlayed) / 2 : 0;
+        const winRate = teamGamesPlayed > 0 ? ((ranking.wins / teamGamesPlayed) * 100).toFixed(1) : '0.0';
+        
+        exportText += `${ranking.rank}. ${player1.name} & ${player2.name}\n`;
+        exportText += `   Wins: ${ranking.wins} | Losses: ${ranking.losses} | Win Rate: ${winRate}%\n`;
+        exportText += `   Avg Point Diff: ${ranking.avgPointDifferential >= 0 ? '+' : ''}${ranking.avgPointDifferential.toFixed(1)}\n\n`;
+      }
+    });
+  } else {
+    exportText += '═══════════════════════════════════════════════════════\n';
+    exportText += '   PLAYER STATISTICS SUMMARY\n';
+    exportText += '═══════════════════════════════════════════════════════\n\n';
+    
+    const playerIds = currentSession.config.players.map(p => p.id);
+    const rankings = calculatePlayerRankings(playerIds, currentSession.playerStats);
+    
+    rankings.forEach(ranking => {
+      const player = currentSession!.config.players.find(p => p.id === ranking.playerId);
+      if (player) {
+        const stats = currentSession!.playerStats.get(ranking.playerId);
+        const winRate = stats && stats.gamesPlayed > 0 ? ((stats.wins / stats.gamesPlayed) * 100).toFixed(1) : '0.0';
+        
+        exportText += `${ranking.rank}. ${player.name}\n`;
+        exportText += `   Wins: ${ranking.wins} | Losses: ${ranking.losses} | Win Rate: ${winRate}%\n`;
+        exportText += `   Avg Point Diff: ${ranking.avgPointDifferential >= 0 ? '+' : ''}${ranking.avgPointDifferential.toFixed(1)}\n\n`;
+      }
+    });
+  }
   
   exportText += '═══════════════════════════════════════════════════════\n';
   exportText += '   END OF SESSION EXPORT\n';
@@ -1934,54 +1959,119 @@ function renderMatchHistory() {
 
 function renderStats() {
   if (!currentSession) return;
-  
+
   statsGrid.innerHTML = '';
-  
-  currentSession.config.players.forEach(player => {
-    const stats = currentSession!.playerStats.get(player.id);
-    if (!stats) return;
-    
-    const card = document.createElement('div');
-    card.className = 'stat-card';
-    
-    const winRate = stats.gamesPlayed > 0 
-      ? ((stats.wins / stats.gamesPlayed) * 100).toFixed(1)
-      : '0.0';
-    
-    card.innerHTML = `
-      <h4>${player.name}</h4>
-      <div class="stat-line">
-        <span>Games Played:</span>
-        <strong>${stats.gamesPlayed}</strong>
-      </div>
-      <div class="stat-line">
-        <span>Wins:</span>
-        <strong>${stats.wins}</strong>
-      </div>
-      <div class="stat-line">
-        <span>Losses:</span>
-        <strong>${stats.losses}</strong>
-      </div>
-      <div class="stat-line">
-        <span>Win Rate:</span>
-        <strong>${winRate}%</strong>
-      </div>
-      <div class="stat-line">
-        <span>Times Waited:</span>
-        <strong>${stats.gamesWaited}</strong>
-      </div>
-      <div class="stat-line">
-        <span>Unique Partners:</span>
-        <strong>${stats.partnersPlayed.size}</strong>
-      </div>
-      <div class="stat-line">
-        <span>Unique Opponents:</span>
-        <strong>${stats.opponentsPlayed.size}</strong>
-      </div>
-    `;
-    
-    statsGrid.appendChild(card);
-  });
+
+  // For locked teams, show team statistics
+  if (currentSession.config.lockedTeams && currentSession.config.lockedTeams.length > 0) {
+    currentSession.config.lockedTeams.forEach(team => {
+      const player1 = currentSession!.config.players.find(p => p.id === team[0]);
+      const player2 = currentSession!.config.players.find(p => p.id === team[1]);
+      
+      if (!player1 || !player2) return;
+      
+      // Aggregate team stats from both players
+      const stats1 = currentSession!.playerStats.get(player1.id);
+      const stats2 = currentSession!.playerStats.get(player2.id);
+      
+      if (!stats1 || !stats2) return;
+      
+      const teamGamesPlayed = (stats1.gamesPlayed + stats2.gamesPlayed) / 2;
+      const teamWins = (stats1.wins + stats2.wins) / 2;
+      const teamLosses = (stats1.losses + stats2.losses) / 2;
+      const teamWaited = (stats1.gamesWaited + stats2.gamesWaited) / 2;
+      const teamPointsFor = stats1.totalPointsFor + stats2.totalPointsFor;
+      const teamPointsAgainst = stats1.totalPointsAgainst + stats2.totalPointsAgainst;
+      
+      const winRate = teamGamesPlayed > 0
+        ? ((teamWins / teamGamesPlayed) * 100).toFixed(1)
+        : '0.0';
+      
+      const avgPointDiff = teamGamesPlayed > 0
+        ? ((teamPointsFor - teamPointsAgainst) / (teamGamesPlayed * 2)).toFixed(1)
+        : '0.0';
+      
+      const card = document.createElement('div');
+      card.className = 'stat-card';
+
+      card.innerHTML = `
+        <h4>${player1.name} & ${player2.name}</h4>
+        <div class="stat-line">
+          <span>Games Played:</span>
+          <strong>${teamGamesPlayed.toFixed(0)}</strong>
+        </div>
+        <div class="stat-line">
+          <span>Wins:</span>
+          <strong>${teamWins.toFixed(0)}</strong>
+        </div>
+        <div class="stat-line">
+          <span>Losses:</span>
+          <strong>${teamLosses.toFixed(0)}</strong>
+        </div>
+        <div class="stat-line">
+          <span>Win Rate:</span>
+          <strong>${winRate}%</strong>
+        </div>
+        <div class="stat-line">
+          <span>Times Waited:</span>
+          <strong>${teamWaited.toFixed(0)}</strong>
+        </div>
+        <div class="stat-line">
+          <span>Avg Point Diff:</span>
+          <strong>${avgPointDiff >= 0 ? '+' : ''}${avgPointDiff}</strong>
+        </div>
+      `;
+
+      statsGrid.appendChild(card);
+    });
+  } else {
+    // Individual player statistics
+    currentSession.config.players.forEach(player => {
+      const stats = currentSession!.playerStats.get(player.id);
+      if (!stats) return;
+
+      const card = document.createElement('div');
+      card.className = 'stat-card';
+
+      const winRate = stats.gamesPlayed > 0
+        ? ((stats.wins / stats.gamesPlayed) * 100).toFixed(1)
+        : '0.0';
+
+      card.innerHTML = `
+        <h4>${player.name}</h4>
+        <div class="stat-line">
+          <span>Games Played:</span>
+          <strong>${stats.gamesPlayed}</strong>
+        </div>
+        <div class="stat-line">
+          <span>Wins:</span>
+          <strong>${stats.wins}</strong>
+        </div>
+        <div class="stat-line">
+          <span>Losses:</span>
+          <strong>${stats.losses}</strong>
+        </div>
+        <div class="stat-line">
+          <span>Win Rate:</span>
+          <strong>${winRate}%</strong>
+        </div>
+        <div class="stat-line">
+          <span>Times Waited:</span>
+          <strong>${stats.gamesWaited}</strong>
+        </div>
+        <div class="stat-line">
+          <span>Unique Partners:</span>
+          <strong>${stats.partnersPlayed.size}</strong>
+        </div>
+        <div class="stat-line">
+          <span>Unique Opponents:</span>
+          <strong>${stats.opponentsPlayed.size}</strong>
+        </div>
+      `;
+
+      statsGrid.appendChild(card);
+    });
+  }
 }
 
 function handleEditSession() {

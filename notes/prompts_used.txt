@@ -298,6 +298,18 @@ This is great. Some improvements if you please:
 ### Revision 39.2
 * Look at this match history and current court setup @pickleball-session-11-03-2025-15-00.txt -- Player Ibraheem is against Leslie, even though she has lost every game, and he has won every game! That should never happen!!! Analyze what went wrong with the algorithm and fix it, and then add a manual test to avoid this from ever happening again.
 
+### Revision 39.3
+* Look at this match history and current court setup @pickleball-session-11-03-2025-15-05.txt --- Ibraheem is playing with players 14 and 2 again so soon, with just player 9 being new. That's not enough variety. Expand the back-to-back hard matchmaking limitation to prevent 3 of the same players from playing back-to-back as well.
+
+### Revision 40
+* Do all of these improvements to the king of the court algorithm also apply to locked teams mode, or do we need updates to support that?
+
+### Revision 41
+* Do the Rankings and Statistics been updated for teams so that we see team based information? Or is it still indvidual?
+
+### Revision 41.1
+*Look at the team session for @pickleball-session-11-03-2025-15-19.txt , At the start of the session, we had more than enough teams to make a match, but only 2 courts are filled!!! Something is seriously wrong. Fix it, and add a test so it doesn't happen again.
+
 ### Revision TODO
 * King of the Court doesn't really make sense for 4 players, but I tried it anyways. After 3 games, there were no more games to play and all 4 players just sat there waiting. Is something wrong with the algorithm? Shouldn't it never end, regardless of the configuration?
 * Please add a test for 20 players and make sure the algorithm continues to work for 400 games, make the winners random...
