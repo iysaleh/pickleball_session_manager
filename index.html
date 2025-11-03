@@ -244,11 +244,34 @@
       grid-template-columns: repeat(2, 1fr);
       gap: 20px;
       margin-top: 20px;
+      max-height: calc(100vh - 350px);
+      overflow-y: auto;
+      overflow-x: auto;
+      padding-right: 10px;
+    }
+    
+    .courts-grid::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .courts-grid::-webkit-scrollbar-track {
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+    }
+    
+    .courts-grid::-webkit-scrollbar-thumb {
+      background: var(--gradient-start);
+      border-radius: 4px;
+    }
+    
+    .courts-grid::-webkit-scrollbar-thumb:hover {
+      background: var(--gradient-end);
     }
     
     @media (max-width: 768px) {
       .courts-grid {
         grid-template-columns: 1fr !important;
+        max-height: calc(100vh - 300px);
       }
     }
     
