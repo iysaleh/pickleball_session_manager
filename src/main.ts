@@ -792,6 +792,12 @@ function renderLockedTeams() {
 }
 
 function handleStartSession() {
+  // Check if session already exists
+  if (currentSession) {
+    alert('A session is already active. Please end the current session before starting a new one.');
+    return;
+  }
+  
   // Validate locked teams if enabled
   if (lockedTeamsCheckbox.checked) {
     if (lockedTeams.length < 2) {
@@ -830,9 +836,9 @@ function handleStartSession() {
     }
   });
   
-  setupSection.classList.add('hidden');
-  controlSection.classList.remove('hidden');
-  courtsSection.classList.remove('hidden');
+  // Switch to Active Session page
+  showPage('session');
+  
   queueSection.classList.remove('hidden'); // Show queue by default
   showQueueBtn.textContent = 'Hide Queue'; // Update button text
   matchHistorySection.classList.remove('hidden'); // Show history by default
@@ -1252,7 +1258,8 @@ function renderActivePlayers() {
   
   // For locked teams, show teams instead of individual players
   if (isLockedTeamsMode) {
-    if (currentSession.config.lockedTeams.length === 0) {
+    const lockedTeams = currentSession.config.lockedTeams || [];
+    if (lockedTeams.length === 0) {
       activePlayersList.innerHTML = '<p style="color: var(--text-secondary); padding: 10px;">No teams in session</p>';
       return;
     }
@@ -1271,9 +1278,9 @@ function renderActivePlayers() {
     const containerWidth = activePlayersList.offsetWidth || 1000;
     const columnWidth = 300 + 30; // columnWidth + gap
     const numColumns = Math.max(1, Math.floor(containerWidth / columnWidth));
-    const itemsPerColumn = Math.ceil(currentSession.config.lockedTeams.length / numColumns);
+    const itemsPerColumn = Math.ceil(lockedTeams.length / numColumns);
     
-    currentSession.config.lockedTeams.forEach((team, idx) => {
+    lockedTeams.forEach((team, idx) => {
       const player1 = currentSession!.config.players.find(p => p.id === team[0]);
       const player2 = currentSession!.config.players.find(p => p.id === team[1]);
       
@@ -2009,6 +2016,84 @@ function updateStartRoundButton() {
   }
 }
 
+// Navigation
+const navSetup = document.getElementById('nav-setup') as HTMLButtonElement;
+const navSession = document.getElementById('nav-session') as HTMLButtonElement;
+const navModes = document.getElementById('nav-modes') as HTMLButtonElement;
+const navAbout = document.getElementById('nav-about') as HTMLButtonElement;
+const modesPage = document.getElementById('modes-page') as HTMLElement;
+const aboutPage = document.getElementById('about-page') as HTMLElement;
+const aboutGotoSetup = document.getElementById('about-goto-setup') as HTMLButtonElement;
+
+function showPage(page: 'setup' | 'session' | 'modes' | 'about') {
+  // Hide all pages
+  setupSection.classList.add('hidden');
+  controlSection.classList.add('hidden');
+  courtsSection.classList.add('hidden');
+  modesPage.classList.add('hidden');
+  aboutPage.classList.add('hidden');
+  
+  // Track whether queue/history were visible before
+  const queueWasVisible = !queueSection.classList.contains('hidden');
+  const historyWasVisible = !matchHistorySection.classList.contains('hidden');
+  
+  queueSection.classList.add('hidden');
+  matchHistorySection.classList.add('hidden');
+  
+  // Remove active from all nav buttons
+  [navSetup, navSession, navModes, navAbout].forEach(btn => btn.classList.remove('active'));
+  
+  // Show selected page
+  switch (page) {
+    case 'setup':
+      setupSection.classList.remove('hidden');
+      navSetup.classList.add('active');
+      break;
+    case 'session':
+      if (currentSession) {
+        controlSection.classList.remove('hidden');
+        courtsSection.classList.remove('hidden');
+        
+        // Restore queue/history visibility state
+        if (queueWasVisible) {
+          queueSection.classList.remove('hidden');
+          showQueueBtn.textContent = 'Hide Queue';
+        } else {
+          showQueueBtn.textContent = 'Show Queue';
+        }
+        
+        if (historyWasVisible) {
+          matchHistorySection.classList.remove('hidden');
+          showHistoryBtn.textContent = 'Hide History';
+        } else {
+          showHistoryBtn.textContent = 'Show History';
+        }
+      } else {
+        // No active session, show setup
+        setupSection.classList.remove('hidden');
+        navSetup.classList.add('active');
+        return;
+      }
+      navSession.classList.add('active');
+      break;
+    case 'modes':
+      modesPage.classList.remove('hidden');
+      navModes.classList.add('active');
+      break;
+    case 'about':
+      aboutPage.classList.remove('hidden');
+      navAbout.classList.add('active');
+      break;
+  }
+}
+
+navSetup.addEventListener('click', () => showPage('setup'));
+navSession.addEventListener('click', () => showPage('session'));
+navModes.addEventListener('click', () => showPage('modes'));
+navAbout.addEventListener('click', () => showPage('about'));
+aboutGotoSetup.addEventListener('click', () => showPage('setup'));
+
 // Initialize
 renderPlayerList();
 updateBannedPairSelects();
+showPage('setup'); // Start on setup page

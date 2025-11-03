@@ -1,6 +1,7 @@
 // https://vitejs.dev/config/
 export default {
-  base: '/pickleball/', // Replace with your repo name
+  base: '/', // Root domain for BetterPickleballSessions.com
+  publicDir: 'public', // Ensure CNAME is copied to dist
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

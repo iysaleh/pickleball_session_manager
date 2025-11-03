@@ -5,13 +5,15 @@ import { generateId, isPairBanned } from './utils';
  * King of the Court scheduling algorithm
  * 
  * Goals:
- * 1. Equal play time - everyone gets roughly same number of games
- * 2. Minimize idle times - no one waits too many consecutive rounds
- * 3. Maximize opponent variety - face different people
- * 4. Maximize partner diversity (doubles) - partner with different people
- * 5. Winners move up, losers move down (with some flexibility)
- * 6. High win-rate players tend to face each other
+ * 1. Winners play winners - match players with similar win rates
+ * 2. Equal play time - everyone gets roughly same number of games
+ * 3. Minimize idle times - no one waits too many consecutive rounds
+ * 4. Maximize opponent variety - face different people
+ * 5. Maximize partner diversity (doubles) - partner with different people
+ * 6. Competitive balance - teams are evenly matched by skill level
  * 7. Deterministic given same results
+ * 
+ * Note: Court numbers are arbitrary - what matters is matching by skill/win rate
  */
 
 

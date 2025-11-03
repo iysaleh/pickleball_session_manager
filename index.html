@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pickleball Session Manager</title>
+  <title>Better Pickleball Sessions</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎾</text></svg>">
   <style>
     :root {
@@ -77,9 +77,41 @@
     header {
       background: var(--header-bg);
       color: white;
-      padding: 30px;
+      padding: 15px 30px;
       text-align: center;
       position: relative;
+    }
+    
+    nav {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
+    
+    nav button {
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      color: white;
+      padding: 8px 20px;
+      border-radius: 25px;
+      cursor: pointer;
+      font-size: 0.95em;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+      font-weight: 500;
+    }
+    
+    nav button:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px);
+    }
+    
+    nav button.active {
+      background: rgba(255, 255, 255, 0.4);
+      border-color: rgba(255, 255, 255, 0.6);
+      font-weight: 600;
     }
     
     .theme-toggle-btn {
@@ -961,8 +993,14 @@
   <div class="container">
     <header>
       <button class="theme-toggle-btn" id="theme-toggle" title="Toggle dark/light mode">🌙</button>
-      <h1>🎾 Pickleball Session Manager</h1>
-      <p class="subtitle">Organize your games with ease</p>
+      <h1>🎾 Better Pickleball Sessions</h1>
+      <p class="subtitle">Professional session management made easy</p>
+      <nav>
+        <button id="nav-setup" class="nav-btn active">Setup</button>
+        <button id="nav-session" class="nav-btn">Active Session</button>
+        <button id="nav-modes" class="nav-btn">Modes & Config</button>
+        <button id="nav-about" class="nav-btn">About</button>
+      </nav>
     </header>
     
     <div class="content">
@@ -1181,6 +1219,219 @@
           <div class="modal-body">
             <div class="stats-grid" id="stats-grid"></div>
           </div>
+        </div>
+      </div>
+      
+      <!-- Modes & Config Page -->
+      <div id="modes-page" class="section hidden">
+        <h2 class="section-title">🎮 Game Modes & Configuration</h2>
+        
+        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
+          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">🔄 Round Robin Mode</h3>
+          <p style="color: var(--text-primary); margin-bottom: 10px;">
+            In Round Robin mode, the algorithm creates matches designed to maximize variety and fairness:
+          </p>
+          <ul style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
+            <li><strong>Partner Diversity:</strong> Players are paired with different partners as much as possible</li>
+            <li><strong>Opponent Variety:</strong> Players face different opponents across matches</li>
+            <li><strong>Fair Play Time:</strong> All players get roughly equal playing time</li>
+            <li><strong>No Duplicate Matchups:</strong> The same 4 players won't face each other in the same configuration</li>
+            <li><strong>Banned Pairs:</strong> Specify pairs of players who won't be partnered together</li>
+          </ul>
+          <p style="color: var(--text-secondary); margin-top: 15px; font-style: italic;">
+            Perfect for social play where everyone wants to play with and against different people.
+          </p>
+        </div>
+        
+        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
+          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">👑 King of the Court Mode</h3>
+          <p style="color: var(--text-primary); margin-bottom: 10px;">
+            King of the Court is a competitive format where winners play winners:
+          </p>
+          <ul style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
+            <li><strong>Winners Play Winners:</strong> Players are matched with others who have similar win rates</li>
+            <li><strong>Skill-Based Matchmaking:</strong> Creates competitive, evenly-matched games</li>
+            <li><strong>Round-Based:</strong> Each round completes before the next one starts</li>
+            <li><strong>Wait Time Management:</strong> Players who've waited longest get priority</li>
+            <li><strong>Partner Rotation:</strong> Still maximizes partner diversity even in competitive play</li>
+            <li><strong>Dynamic Competition:</strong> As you win more, you face tougher opponents; lose more, face easier opponents</li>
+          </ul>
+          <p style="color: var(--text-secondary); margin-top: 15px; font-style: italic;">
+            Perfect for competitive play where players want balanced, challenging matches based on their skill level.
+          </p>
+        </div>
+        
+        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
+          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">⚙️ Configuration Options</h3>
+          
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: var(--text-primary); margin-bottom: 10px;">Session Type</h4>
+            <p style="color: var(--text-secondary); line-height: 1.6;">
+              <strong>Doubles:</strong> 2v2 matches with 4 players per court<br>
+              <strong>Singles:</strong> 1v1 matches with 2 players per court
+            </p>
+          </div>
+          
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: var(--text-primary); margin-bottom: 10px;">Number of Courts</h4>
+            <p style="color: var(--text-secondary); line-height: 1.6;">
+              Set how many courts are available (1-10). More courts mean more simultaneous matches and less wait time.
+            </p>
+          </div>
+          
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: var(--text-primary); margin-bottom: 10px;">Locked Teams (Doubles Only)</h4>
+            <p style="color: var(--text-secondary); line-height: 1.6;">
+              Enable this to keep the same pairs of players together for the entire session. Perfect for tournaments or when players want to stay with their chosen partner. Only opponents will change between matches.
+            </p>
+          </div>
+          
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: var(--text-primary); margin-bottom: 10px;">Banned Pairs</h4>
+            <p style="color: var(--text-secondary); line-height: 1.6;">
+              Specify pairs of players who should never be partnered together. Useful for skill mismatches or personal preferences.
+            </p>
+          </div>
+          
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: var(--text-primary); margin-bottom: 10px;">Max Queue Size</h4>
+            <p style="color: var(--text-secondary); line-height: 1.6;">
+              Controls how many matches are pre-calculated in advance (default: 100). Increase for longer sessions.
+            </p>
+          </div>
+        </div>
+        
+        <div style="padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
+          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">💡 Tips for Best Results</h3>
+          <ul style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
+            <li>Add all players before starting the session for optimal match distribution</li>
+            <li>Use Round Robin for social play and variety</li>
+            <li>Use King of the Court for competitive, skill-based play</li>
+            <li>Set the number of courts based on your facility and player count</li>
+            <li>Enable Locked Teams for tournaments or when partners want to stay together</li>
+            <li>Use Banned Pairs to prevent pairing players with large skill gaps</li>
+            <li>Players added mid-session will be integrated fairly into the rotation</li>
+          </ul>
+        </div>
+      </div>
+      
+      <!-- About Page -->
+      <div id="about-page" class="section hidden">
+        <h2 class="section-title">ℹ️ About Better Pickleball Sessions</h2>
+        
+        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
+          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">Welcome!</h3>
+          <p style="color: var(--text-primary); line-height: 1.8; margin-bottom: 15px;">
+            Better Pickleball Sessions is a professional-grade session management tool designed to make organizing pickleball games effortless and fair. Whether you're running a casual social session or a competitive tournament, our advanced algorithms ensure everyone gets balanced play time and variety.
+          </p>
+          <p style="color: var(--text-secondary); line-height: 1.8;">
+            Built with modern web technologies and sophisticated matchmaking algorithms, this tool handles everything from player management to match scheduling, rankings, and statistics tracking.
+          </p>
+        </div>
+        
+        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
+          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">✨ Key Features</h3>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+            <div>
+              <h4 style="color: var(--text-primary); margin-bottom: 8px;">🎯 Smart Matchmaking</h4>
+              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
+                Advanced algorithms maximize partner diversity, opponent variety, and fair play distribution
+              </p>
+            </div>
+            <div>
+              <h4 style="color: var(--text-primary); margin-bottom: 8px;">⏱️ Real-Time Management</h4>
+              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
+                Track matches in progress, manage scores, and see live rankings and statistics
+              </p>
+            </div>
+            <div>
+              <h4 style="color: var(--text-primary); margin-bottom: 8px;">🏆 Two Game Modes</h4>
+              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
+                Choose between social Round Robin or competitive King of the Court formats
+              </p>
+            </div>
+            <div>
+              <h4 style="color: var(--text-primary); margin-bottom: 8px;">👥 Flexible Teams</h4>
+              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
+                Support for singles, doubles, locked teams, and dynamic partner rotation
+              </p>
+            </div>
+            <div>
+              <h4 style="color: var(--text-primary); margin-bottom: 8px;">💾 Auto-Save</h4>
+              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
+                Sessions are automatically saved to your browser - survive refreshes and crashes
+              </p>
+            </div>
+            <div>
+              <h4 style="color: var(--text-primary); margin-bottom: 8px;">📊 Rich Analytics</h4>
+              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
+                View detailed player statistics, win rates, and match history
+              </p>
+            </div>
+            <div>
+              <h4 style="color: var(--text-primary); margin-bottom: 8px;">🌙 Dark Mode</h4>
+              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
+                Toggle between light and dark themes for comfortable viewing in any lighting
+              </p>
+            </div>
+            <div>
+              <h4 style="color: var(--text-primary); margin-bottom: 8px;">📱 Responsive Design</h4>
+              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
+                Works perfectly on desktop, tablet, and mobile devices
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
+          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">🚀 Getting Started</h3>
+          <ol style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
+            <li><strong>Go to Setup:</strong> Click the "Setup" tab in the navigation</li>
+            <li><strong>Choose Mode:</strong> Select Round Robin or King of the Court</li>
+            <li><strong>Add Players:</strong> Enter player names (or teams if using locked teams)</li>
+            <li><strong>Configure Settings:</strong> Set number of courts, session type, and any advanced options</li>
+            <li><strong>Start Session:</strong> Click "Start Session" to begin</li>
+            <li><strong>Manage Matches:</strong> Switch to "Active Session" to see courts, complete matches, and track progress</li>
+            <li><strong>View Progress:</strong> Check rankings, statistics, and match history anytime</li>
+          </ol>
+        </div>
+        
+        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
+          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">🎾 Perfect For</h3>
+          <ul style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
+            <li>Club social sessions and open play</li>
+            <li>Round robin tournaments</li>
+            <li>King of the Court competitions</li>
+            <li>League play and ladder matches</li>
+            <li>Private group sessions</li>
+            <li>Coaching and training sessions</li>
+            <li>Corporate team building events</li>
+          </ul>
+        </div>
+        
+        <div style="padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
+          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">💻 Technology</h3>
+          <p style="color: var(--text-secondary); line-height: 1.8; margin-bottom: 15px;">
+            Better Pickleball Sessions is built with:
+          </p>
+          <ul style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
+            <li><strong>Modern TypeScript:</strong> Type-safe, maintainable code</li>
+            <li><strong>Advanced Algorithms:</strong> Sophisticated matchmaking logic for fairness</li>
+            <li><strong>Local Storage:</strong> No server required - your data stays on your device</li>
+            <li><strong>Responsive Design:</strong> Beautiful UI that works on all devices</li>
+            <li><strong>No Installation:</strong> Just visit the website and start using it</li>
+            <li><strong>Free Forever:</strong> No subscriptions, no accounts, no hidden fees</li>
+          </ul>
+        </div>
+        
+        <div style="margin-top: 30px; padding: 20px; background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)); border-radius: 8px; text-align: center;">
+          <h3 style="color: white; margin-bottom: 10px;">🎉 Ready to organize better sessions?</h3>
+          <p style="color: rgba(255, 255, 255, 0.9); margin-bottom: 20px;">
+            Click "Setup" in the navigation to get started!
+          </p>
+          <button id="about-goto-setup" style="background: white; color: var(--gradient-start); padding: 12px 30px; font-size: 1.1em; font-weight: 600; border: none; border-radius: 25px; cursor: pointer;">
+            Go to Setup →
+          </button>
         </div>
       </div>
     </div>

@@ -1,7 +1,8 @@
 {
-  "name": "pickleball",
+  "name": "better-pickleball-sessions",
   "version": "1.0.0",
-  "description": "Pickleball Session Manager",
+  "description": "Better Pickleball Sessions - Professional session management",
+  "homepage": "https://betterpickleballsessions.com",
   "type": "module",
   "scripts": {
     "dev": "vite",
