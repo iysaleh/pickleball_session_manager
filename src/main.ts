@@ -88,6 +88,9 @@ const lockedTeamsSetup = document.getElementById('locked-teams-setup') as HTMLEl
 const addLockedTeamBtn = document.getElementById('add-locked-team-btn') as HTMLButtonElement;
 const lockedTeamsList = document.getElementById('locked-teams-list') as HTMLElement;
 
+// Advanced config elements
+const randomizePlayerOrderCheckbox = document.getElementById('randomize-player-order-checkbox') as HTMLInputElement;
+
 // Court layout state
 let courtsPerRow = 2;
 
@@ -837,6 +840,7 @@ function handleStartSession() {
     courts: parseInt(numCourtsInput.value),
     bannedPairs: [...bannedPairs],
     lockedTeams: lockedTeamsCheckbox.checked ? [...lockedTeams] : undefined,
+    randomizePlayerOrder: randomizePlayerOrderCheckbox.checked,
   };
   
   const maxQueueSize = parseInt(setupMaxQueueSizeInput.value) || 100;

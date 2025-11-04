@@ -1,5 +1,5 @@
 import type { Session, SessionConfig, Match, Player, PlayerStats } from './types';
-import { generateId, createPlayerStats, getPlayersWhoWaitedMost } from './utils';
+import { generateId, createPlayerStats, getPlayersWhoWaitedMost, shuffleArray } from './utils';
 import { selectPlayersForNextGame, createMatch } from './matchmaking';
 import { generateRoundRobinQueue } from './queue';
 import { generateKingOfCourtRound } from './kingofcourt';
@@ -8,19 +8,29 @@ export function createSession(config: SessionConfig, maxQueueSize: number = 100)
   const playerStats = new Map<string, PlayerStats>();
   const activePlayers = new Set<string>();
   
-  config.players.forEach((player) => {
+  // Randomize player order if requested
+  const playersToUse = config.randomizePlayerOrder 
+    ? shuffleArray(config.players)
+    : config.players;
+  
+  playersToUse.forEach((player) => {
     playerStats.set(player.id, createPlayerStats(player.id));
     activePlayers.add(player.id);
   });
   
+  // Update config with potentially shuffled players
+  const finalConfig = config.randomizePlayerOrder
+    ? { ...config, players: playersToUse }
+    : config;
+  
   // Generate match queue for round-robin mode
-  const matchQueue = config.mode === 'round-robin'
-    ? generateRoundRobinQueue(config.players, config.sessionType, config.bannedPairs, maxQueueSize, config.lockedTeams)
+  const matchQueue = finalConfig.mode === 'round-robin'
+    ? generateRoundRobinQueue(playersToUse, finalConfig.sessionType, finalConfig.bannedPairs, maxQueueSize, finalConfig.lockedTeams)
     : [];
   
   return {
     id: generateId(),
-    config,
+    config: finalConfig,
     matches: [],
     waitingPlayers: [],
     playerStats,

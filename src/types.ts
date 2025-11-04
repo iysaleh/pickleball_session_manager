@@ -31,6 +31,7 @@ export type SessionConfig = {
   courts: number;
   bannedPairs: TeamPair[];
   lockedTeams?: LockedTeam[]; // Optional locked teams for doubles only
+  randomizePlayerOrder?: boolean; // Optional: randomize player order at session start
 };
 
 export type QueuedMatch = {

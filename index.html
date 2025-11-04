@@ -1140,7 +1140,18 @@
         <!-- Advanced Config Section (hidden by default) -->
         <div id="advanced-config-section" class="hidden" style="padding: 15px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 15px;">
           <h3 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 1.1em;">Advanced Settings</h3>
+          
           <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+              <input type="checkbox" id="randomize-player-order-checkbox" style="width: auto; cursor: pointer;">
+              <span>Randomize Initial Player Order</span>
+            </label>
+            <p style="color: var(--text-secondary); font-size: 0.85em; margin-top: 5px; margin-left: 30px;">
+              Shuffle players randomly when starting the session instead of using the order they were added. This ensures first matches are not always the same players.
+            </p>
+          </div>
+          
+          <div class="form-group" style="margin-top: 15px;">
             <label for="setup-max-queue-size">Max Queue Size</label>
             <input type="number" id="setup-max-queue-size" min="10" max="1000" value="100">
             <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Maximum number of matches to pre-calculate in the queue</p>
