@@ -58,6 +58,7 @@ const sessionTeamControls = document.getElementById('session-team-controls') as 
 const sessionTeamPlayer1Input = document.getElementById('session-team-player1-name') as HTMLInputElement;
 const sessionTeamPlayer2Input = document.getElementById('session-team-player2-name') as HTMLInputElement;
 const addSessionTeamBtn = document.getElementById('add-session-team-btn') as HTMLButtonElement;
+const sessionGameModeSpan = document.getElementById('session-game-mode') as HTMLElement;
 
 const courtsGrid = document.getElementById('courts-grid') as HTMLElement;
 const courtsPerRowInput = document.getElementById('courts-per-row') as HTMLInputElement;
@@ -1113,6 +1114,10 @@ function handleForfeitMatch(matchId: string) {
 
 function renderSession() {
   if (!currentSession) return;
+  
+  // Update game mode display
+  const gameModeName = currentSession.config.mode === 'king-of-court' ? 'King of the Court' : 'Round Robin';
+  sessionGameModeSpan.textContent = ` - ${gameModeName}`;
   
   // Always update match history (now always visible by default)
   renderMatchHistory();

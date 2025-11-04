@@ -310,6 +310,21 @@ This is great. Some improvements if you please:
 ### Revision 41.1
 *Look at the team session for @pickleball-session-11-03-2025-15-19.txt , At the start of the session, we had more than enough teams to make a match, but only 2 courts are filled!!! Something is seriously wrong. Fix it, and add a test so it doesn't happen again.
 
+### Revision 42
+* The site is no longer functional at https://betterpickleballsessions.com/
+
+### Revision 43
+* SEO Optimization
+
+### Revision 44
+* With 3 people waiting in the "Players Waiting" queue (IE 19 people in a 4 court setup), you can end up with cases with a small amount of player variety. Augment the king of the court algorithm to occassionally wait for 2 courts to finish even when it can technically schedule a game now, just to increase game matchup variety. Look at how often players 1 & 2 played against each other due to the lack of waiting in this session: @pickleball-session-11-04-2025-13-54.txt --- please minimize this effect.
+
+### Revision 45
+* When I click Start Session, the courts are populated in the order that players were added. Add an advanced configuration option that uses a random seed of the players instead. Disable it by default.
+
+### Revision 46
+* Please add the current game mode to the Active Session page after the Session Controls label, EG "Session Controls - King of the Court" or "Session Controls - Round Robin"
+
 ### Revision TODO
 * King of the Court doesn't really make sense for 4 players, but I tried it anyways. After 3 games, there were no more games to play and all 4 players just sat there waiting. Is something wrong with the algorithm? Shouldn't it never end, regardless of the configuration?
 * Please add a test for 20 players and make sure the algorithm continues to work for 400 games, make the winners random...
