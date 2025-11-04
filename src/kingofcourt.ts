@@ -378,14 +378,14 @@ function shouldWaitForRankBasedMatchups(
     return false;
   }
   
-  // Need at least 12 completed matches to make meaningful ranking decisions (increased from 8)
+  // Need at least 6 completed matches to make meaningful ranking decisions (reduced from 12)
   const completedMatches = matches.filter(m => m.status === 'completed');
-  if (completedMatches.length < 12) {
+  if (completedMatches.length < 6) {
     return false;
   }
   
-  // Only consider waiting if we have at least 3 busy courts (increased from 2)
-  if (numBusyCourts < 3) {
+  // Only consider waiting if we have at least 2 busy courts (reduced from 3)
+  if (numBusyCourts < 2) {
     return false;
   }
   
@@ -410,8 +410,23 @@ function shouldWaitForRankBasedMatchups(
     playersPerMatch
   );
   
-  // If we're in a single court loop AND have many busy courts, WAIT for other courts to finish
-  if (inSingleCourtLoop && numBusyCourts >= 4) {
+  // If we're in a single court loop AND have multiple busy courts, WAIT for other courts to finish
+  // Lowered threshold from 4 to 2 busy courts to trigger waiting more often
+  if (inSingleCourtLoop && numBusyCourts >= 2) {
+    return true;
+  }
+  
+  // NEW: Check for high-repetition matchups even if not a perfect "loop"
+  // If the available players have very high overlap with recent matches, wait for variety
+  const hasHighRepetition = detectHighRepetitionMatchup(
+    availablePlayerIds,
+    matches,
+    numBusyCourts,
+    playersPerMatch
+  );
+  
+  // If we have high repetition AND multiple courts finishing soon, wait
+  if (hasHighRepetition && numBusyCourts >= 2) {
     return true;
   }
   
@@ -429,8 +444,8 @@ function detectSingleCourtLoop(
   numBusyCourts: number,
   playersPerMatch: number
 ): boolean {
-  // Only check if we have multiple courts and most are busy
-  if (numBusyCourts < 3) return false;
+  // Only check if we have multiple courts and some are busy
+  if (numBusyCourts < 2) return false;
   
   if (availablePlayerIds.length !== playersPerMatch) {
     // Not a single-court-worth of players waiting
@@ -452,8 +467,8 @@ function detectSingleCourtLoop(
     }
   }
   
-  // If this group has played together 3+ times in last 10 matches, we're looping
-  if (groupPlayCount >= 3) {
+  // If this group has played together 2+ times in last 10 matches, we're looping (reduced from 3)
+  if (groupPlayCount >= 2) {
     return true;
   }
   
@@ -472,6 +487,80 @@ function detectSingleCourtLoop(
   const totalPairs = (availablePlayerIds.length * (availablePlayerIds.length - 1)) / 2;
   if (highRepeatPairs >= totalPairs * 0.5) {
     return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Detect if the available players would create a high-repetition matchup
+ * This catches cases where 3+ players are waiting and would play with mostly the same people
+ */
+function detectHighRepetitionMatchup(
+  availablePlayerIds: string[],
+  matches: Match[],
+  numBusyCourts: number,
+  playersPerMatch: number
+): boolean {
+  // Only check if we have enough players waiting to warrant checking
+  if (availablePlayerIds.length < playersPerMatch) {
+    return false;
+  }
+  
+  const completedMatches = matches.filter(m => m.status === 'completed');
+  if (completedMatches.length < 4) return false; // Need some history
+  
+  // Check the last 5 matches for repetition patterns
+  const last5Matches = completedMatches.slice(-5);
+  
+  // For each pair of available players, check how recently they played together
+  let recentPairCount = 0;
+  let totalPairsChecked = 0;
+  
+  for (let i = 0; i < availablePlayerIds.length && i < playersPerMatch; i++) {
+    for (let j = i + 1; j < availablePlayerIds.length && j < playersPerMatch; j++) {
+      totalPairsChecked++;
+      const player1 = availablePlayerIds[i];
+      const player2 = availablePlayerIds[j];
+      
+      // Check if these two played together in any of the last 5 matches
+      for (const match of last5Matches) {
+        const matchPlayers = [...match.team1, ...match.team2];
+        if (matchPlayers.includes(player1) && matchPlayers.includes(player2)) {
+          recentPairCount++;
+          break; // Count each pair only once
+        }
+      }
+    }
+  }
+  
+  // If more than 60% of the pairs played together recently, we have high repetition
+  // (This would catch cases like players 1 & 2 playing together 3 times in last 5 matches)
+  if (totalPairsChecked > 0 && recentPairCount / totalPairsChecked > 0.6) {
+    return true;
+  }
+  
+  // Also check: if ANY single player appears in 3+ of the last 5 matches with any of the waiting players
+  for (const playerId of availablePlayerIds.slice(0, playersPerMatch)) {
+    let appearanceCount = 0;
+    
+    for (const match of last5Matches) {
+      const matchPlayers = [...match.team1, ...match.team2];
+      
+      // Check if this player AND at least one other waiting player were in this match
+      const waitingPlayersInMatch = availablePlayerIds.filter(id => 
+        id !== playerId && matchPlayers.includes(id)
+      );
+      
+      if (matchPlayers.includes(playerId) && waitingPlayersInMatch.length > 0) {
+        appearanceCount++;
+      }
+    }
+    
+    // If this player appeared with waiting partners in 3+ of last 5 matches, high repetition
+    if (appearanceCount >= 3) {
+      return true;
+    }
   }
   
   return false;
