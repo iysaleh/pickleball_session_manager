@@ -3,8 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Better Pickleball Sessions</title>
+  
+  <!-- Primary Meta Tags -->
+  <title>Better Pickleball Sessions - Professional Session Management & Matchmaking</title>
+  <meta name="title" content="Better Pickleball Sessions - Professional Session Management">
+  <meta name="description" content="Free professional pickleball session manager with smart matchmaking algorithms. Organize round robin tournaments, King of the Court competitions, track rankings and statistics. Perfect for clubs and social play.">
+  <meta name="keywords" content="pickleball, session manager, round robin, king of the court, tournament manager, matchmaking, pickleball app, court management, rankings, statistics">
+  <meta name="author" content="Better Pickleball Sessions">
+  <meta name="robots" content="index, follow">
+  <meta name="language" content="English">
+  
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://betterpickleballsessions.com/">
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://betterpickleballsessions.com/">
+  <meta property="og:title" content="Better Pickleball Sessions - Professional Session Management">
+  <meta property="og:description" content="Free professional pickleball session manager with smart matchmaking algorithms. Organize tournaments, track rankings, and manage court schedules effortlessly.">
+  <meta property="og:image" content="https://betterpickleballsessions.com/og-image.png">
+  <meta property="og:site_name" content="Better Pickleball Sessions">
+  
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://betterpickleballsessions.com/">
+  <meta property="twitter:title" content="Better Pickleball Sessions - Professional Session Management">
+  <meta property="twitter:description" content="Free professional pickleball session manager with smart matchmaking algorithms. Organize tournaments, track rankings, and manage court schedules.">
+  <meta property="twitter:image" content="https://betterpickleballsessions.com/og-image.png">
+  
+  <!-- Favicon -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎾</text></svg>">
+  
+  <!-- Structured Data (JSON-LD) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Better Pickleball Sessions",
+    "description": "Professional pickleball session management with smart matchmaking algorithms for organizing tournaments and social play",
+    "url": "https://betterpickleballsessions.com",
+    "applicationCategory": "SportsApplication",
+    "operatingSystem": "Any",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": [
+      "Smart matchmaking algorithms",
+      "Round Robin tournaments",
+      "King of the Court competitions",
+      "Real-time rankings and statistics",
+      "Match history tracking",
+      "Multiple court management",
+      "Singles and doubles support",
+      "Locked teams mode",
+      "Auto-save sessions"
+    ]
+  }
+  </script>
   <style>
     :root {
       /* Light mode colors */
@@ -991,21 +1048,21 @@
 </head>
 <body>
   <div class="container">
-    <header>
-      <button class="theme-toggle-btn" id="theme-toggle" title="Toggle dark/light mode">🌙</button>
+    <header role="banner">
+      <button class="theme-toggle-btn" id="theme-toggle" title="Toggle dark/light mode" aria-label="Toggle dark/light mode">🌙</button>
       <h1>🎾 Better Pickleball Sessions</h1>
       <p class="subtitle">Professional session management made easy</p>
-      <nav>
-        <button id="nav-setup" class="nav-btn active">Setup</button>
-        <button id="nav-session" class="nav-btn">Active Session</button>
-        <button id="nav-modes" class="nav-btn">Modes & Config</button>
-        <button id="nav-about" class="nav-btn">About</button>
+      <nav role="navigation" aria-label="Main navigation">
+        <button id="nav-setup" class="nav-btn active" aria-label="Setup session">Setup</button>
+        <button id="nav-session" class="nav-btn" aria-label="View active session">Active Session</button>
+        <button id="nav-modes" class="nav-btn" aria-label="Game modes and configuration">Modes & Config</button>
+        <button id="nav-about" class="nav-btn" aria-label="About this application">About</button>
       </nav>
     </header>
     
-    <div class="content">
+    <main class="content" role="main">
       <!-- Setup Section -->
-      <div id="setup-section" class="section">
+      <article id="setup-section" class="section">
         <h2 class="section-title">Session Setup</h2>
         
         <!-- Test Mode Container (hidden by default) -->
@@ -1118,10 +1175,10 @@
           <button id="setup-end-session-clear-btn" class="btn-danger" style="display: none;">End Session and Clear Data</button>
           <button id="setup-end-session-keep-btn" class="btn-danger" style="display: none;">End Session and Keep Players</button>
         </div>
-      </div>
+      </article>
       
       <!-- Session Control Section -->
-      <div id="control-section" class="section hidden">
+      <article id="control-section" class="section hidden">
         <h2 class="section-title">Session Controls</h2>
         
         <div class="form-group">
@@ -1151,10 +1208,10 @@
           <button id="end-session-clear-btn" class="btn-danger">End Session and Clear Data</button>
           <button id="end-session-keep-btn" class="btn-danger">End Session and Keep Players</button>
         </div>
-      </div>
+      </article>
       
       <!-- Courts Display -->
-      <div id="courts-section" class="section hidden">
+      <article id="courts-section" class="section hidden">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
           <h2 class="section-title" style="margin: 0;">Active Courts</h2>
           <div style="display: flex; gap: 10px; align-items: center;">
@@ -1169,10 +1226,10 @@
           <div class="waiting-title">⏳ Waiting Players</div>
           <div class="player-list" id="waiting-players"></div>
         </div>
-      </div>
+      </article>
       
       <!-- Match Queue Section -->
-      <div id="queue-section" class="section hidden">
+      <article id="queue-section" class="section hidden">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
           <h2 class="section-title" style="margin: 0;">📋 Match Queue</h2>
           <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -1191,42 +1248,42 @@
         </div>
         
         <div id="queue-list"></div>
-      </div>
+      </article>
       
       <!-- Match History Section -->
-      <div id="match-history-section" class="section hidden">
+      <article id="match-history-section" class="section hidden">
         <h2 class="section-title">Match History</h2>
         <div id="match-history-list"></div>
-      </div>
+      </article>
       
       <!-- Rankings Modal -->
-      <div id="rankings-modal" class="modal">
+      <aside id="rankings-modal" class="modal" role="dialog" aria-labelledby="rankings-title" aria-hidden="true">
         <div class="modal-content">
           <div class="modal-header">
-            <h2>🏆 Current Rankings</h2>
-            <button class="modal-close" id="rankings-modal-close">&times;</button>
+            <h2 id="rankings-title">🏆 Current Rankings</h2>
+            <button class="modal-close" id="rankings-modal-close" aria-label="Close rankings modal">&times;</button>
           </div>
           <div class="modal-body">
             <div id="rankings-list"></div>
           </div>
         </div>
-      </div>
+      </aside>
       
       <!-- Statistics Modal -->
-      <div id="stats-modal" class="modal">
+      <aside id="stats-modal" class="modal" role="dialog" aria-labelledby="stats-title" aria-hidden="true">
         <div class="modal-content">
           <div class="modal-header">
-            <h2>📊 Player Statistics</h2>
-            <button class="modal-close" id="stats-modal-close">&times;</button>
+            <h2 id="stats-title">📊 Player Statistics</h2>
+            <button class="modal-close" id="stats-modal-close" aria-label="Close statistics modal">&times;</button>
           </div>
           <div class="modal-body">
             <div class="stats-grid" id="stats-grid"></div>
           </div>
         </div>
-      </div>
+      </aside>
       
       <!-- Modes & Config Page -->
-      <div id="modes-page" class="section hidden">
+      <article id="modes-page" class="section hidden">
         <h2 class="section-title">🎮 Game Modes & Configuration</h2>
         
         <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
@@ -1318,10 +1375,10 @@
             <li>Players added mid-session will be integrated fairly into the rotation</li>
           </ul>
         </div>
-      </div>
+      </article>
       
       <!-- About Page -->
-      <div id="about-page" class="section hidden">
+      <article id="about-page" class="section hidden">
         <h2 class="section-title">ℹ️ About Better Pickleball Sessions</h2>
         
         <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
@@ -1469,8 +1526,21 @@
             Go to Setup →
           </button>
         </div>
+      </article>
+    </main>
+    
+    <noscript>
+      <div style="padding: 40px; text-align: center; background: #fff3cd; border: 2px solid #ffc107; margin: 20px; border-radius: 8px;">
+        <h2 style="color: #856404;">JavaScript Required</h2>
+        <p style="color: #856404;">Better Pickleball Sessions requires JavaScript to run. Please enable JavaScript in your browser to use this application.</p>
+        <h3 style="margin-top: 30px; color: #856404;">About Better Pickleball Sessions:</h3>
+        <p style="color: #856404; max-width: 800px; margin: 15px auto; line-height: 1.6;">
+          Better Pickleball Sessions is a free professional-grade session management tool for organizing pickleball games. 
+          Features include smart matchmaking algorithms, Round Robin tournaments, King of the Court competitions, 
+          real-time rankings and statistics, match history tracking, and support for multiple courts.
+        </p>
       </div>
-    </div>
+    </noscript>
   </div>
   
   <script type="module" src="/src/main.ts"></script>
