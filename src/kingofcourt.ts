@@ -20,9 +20,6 @@ import { generateId, isPairBanned } from './utils';
  * - New players (0 games) start with provisional middle ranking
  */
 
-// Base ELO rating for new players
-const BASE_RATING = 1500;
-const K_FACTOR = 32; // Standard ELO K-factor
 /**
  * Player rating and rank information
  */
@@ -38,18 +35,18 @@ interface PlayerRating {
  * Calculate ELO-style rating for a player based on their match history
  * Exported for use in rankings display
  */
-export function calculatePlayerRating(stats: PlayerStats): number {
+export function calculatePlayerRating(stats: PlayerStats, baseRating: number = 1500, minRating: number = 800, maxRating: number = 2200): number {
   if (stats.gamesPlayed === 0) {
-    return BASE_RATING; // New players start at base rating
+    return baseRating; // New players start at base rating
   }
   
   // Start with base rating
-  let rating = BASE_RATING;
+  let rating = baseRating;
   
   // Adjust based on win rate with diminishing returns
   const winRate = stats.wins / stats.gamesPlayed;
   const winRateAdjustment = Math.log(1 + winRate * 9) * 200; // Logarithmic scaling
-  rating += winRateAdjustment - 200; // Center around BASE_RATING for 50% win rate
+  rating += winRateAdjustment - 200; // Center around baseRating for 50% win rate
   
   // Adjust based on point differential (quality of wins/losses)
   const avgPointDiff = (stats.totalPointsFor - stats.totalPointsAgainst) / stats.gamesPlayed;
@@ -61,7 +58,7 @@ export function calculatePlayerRating(stats: PlayerStats): number {
     rating += Math.log(stats.gamesPlayed) * 30;
   }
   
-  return Math.max(800, Math.min(2200, rating)); // Clamp between 800-2200
+  return Math.max(minRating, Math.min(maxRating, rating)); // Clamp between min-max
 }
 
 /**
@@ -69,12 +66,14 @@ export function calculatePlayerRating(stats: PlayerStats): number {
  */
 function calculatePlayerRankings(
   playerIds: string[],
-  playerStats: Map<string, PlayerStats>
+  playerStats: Map<string, PlayerStats>,
+  session: Session
 ): PlayerRating[] {
+  const config = session.advancedConfig.kingOfCourt;
   const ratings: PlayerRating[] = playerIds.map(playerId => {
     const stats = playerStats.get(playerId)!;
-    const rating = calculatePlayerRating(stats);
-    const isProvisional = stats.gamesPlayed < 2; // Need 2+ games for stable ranking
+    const rating = calculatePlayerRating(stats, config.baseRating, config.minRating, config.maxRating);
+    const isProvisional = stats.gamesPlayed < config.provisionalGamesThreshold;
     
     return {
       playerId,
@@ -204,7 +203,7 @@ export function generateKingOfCourtRound(
   
   // Calculate rankings for ALL active players (not just available)
   const allActivePlayerIds = Array.from(activePlayers);
-  const allRankings = calculatePlayerRankings(allActivePlayerIds, playerStats);
+  const allRankings = calculatePlayerRankings(allActivePlayerIds, playerStats, session);
   
   // Get rankings for available players
   const availableRankings = allRankings.filter(r => availablePlayerIds.includes(r.playerId));
@@ -218,7 +217,8 @@ export function generateKingOfCourtRound(
     matches,
     occupiedCourts.size,
     playersPerMatch,
-    courts
+    courts,
+    session
   );
   
   if (shouldWait) {
@@ -239,7 +239,8 @@ export function generateKingOfCourtRound(
     bannedPairs,
     occupiedCourts,
     courts,
-    hasEmptyCourts
+    hasEmptyCourts,
+    session
   );
   
   return newMatches;
@@ -268,16 +269,17 @@ function getPlayTogetherCount(
 
 /**
  * Check if this group has too much overlap with the most recently completed match
- * Returns true if 3 or more of the same players were in the last match
+ * Returns true if backToBackOverlapThreshold or more of the same players were in the last match
  * 
- * Example violations:
+ * Example violations (with threshold=3):
  * - Last match: A, B, C, D
  * - Current match: A, B, C, E (3 overlapping - NOT ALLOWED)
  * - Current match: A, B, E, F (2 overlapping - ALLOWED)
  */
 function isBackToBackGame(
   playerIds: string[],
-  matches: Match[]
+  matches: Match[],
+  backToBackOverlapThreshold: number = 3
 ): boolean {
   // Get the most recent completed match
   const completedMatches = matches.filter(m => m.status === 'completed');
@@ -377,7 +379,8 @@ function getOpponentCount(
 function wouldCauseImmediateRepetition(
   availableRankings: PlayerRating[],
   matches: Match[],
-  playersPerMatch: number
+  playersPerMatch: number,
+  config: import('./types').KingOfCourtConfig
 ): boolean {
   if (availableRankings.length < playersPerMatch) {
     return false;
@@ -460,8 +463,11 @@ function shouldWaitForRankBasedMatchups(
   matches: Match[],
   numBusyCourts: number,
   playersPerMatch: number,
-  totalCourts: number
+  totalCourts: number,
+  session: Session
 ): boolean {
+  const config = session.advancedConfig.kingOfCourt;
+  
   // Don't wait if no courts are busy (first round or all courts idle)
   if (numBusyCourts === 0) {
     return false;
@@ -473,7 +479,7 @@ function shouldWaitForRankBasedMatchups(
   if (!allCourtsBusy) {
     // There are empty courts - but check if filling them would cause immediate repetition
     // If it would, wait for other courts to finish for better variety
-    if (wouldCauseImmediateRepetition(availableRankings, matches, playersPerMatch)) {
+    if (wouldCauseImmediateRepetition(availableRankings, matches, playersPerMatch, config)) {
       return true; // Wait for better variety even with empty courts
     }
     return false; // Fill the courts
@@ -489,8 +495,8 @@ function shouldWaitForRankBasedMatchups(
   const consecutiveWaits = countConsecutiveWaits(availablePlayerIds, matches);
   const maxConsecutiveWaits = Math.max(...Array.from(consecutiveWaits.values()));
   
-  // Never wait if someone has already waited 1+ times (reduced from 2)
-  if (maxConsecutiveWaits >= 1) {
+  // Never wait if someone has already waited maxConsecutiveWaits+ times
+  if (maxConsecutiveWaits >= config.maxConsecutiveWaits) {
     return false;
   }
   
@@ -499,14 +505,14 @@ function shouldWaitForRankBasedMatchups(
     return false;
   }
   
-  // Need at least 6 completed matches to make meaningful ranking decisions (reduced from 12)
+  // Need at least X completed matches to make meaningful ranking decisions
   const completedMatches = matches.filter(m => m.status === 'completed');
-  if (completedMatches.length < 6) {
+  if (completedMatches.length < config.minCompletedMatchesForWaiting) {
     return false;
   }
   
-  // Only consider waiting if we have at least 2 busy courts (reduced from 3)
-  if (numBusyCourts < 2) {
+  // Only consider waiting if we have at least X busy courts
+  if (numBusyCourts < config.minBusyCourtsForWaiting) {
     return false;
   }
   
@@ -528,12 +534,12 @@ function shouldWaitForRankBasedMatchups(
     availableRankings.map(r => r.playerId),
     matches,
     numBusyCourts,
-    playersPerMatch
+    playersPerMatch,
+    config
   );
   
   // If we're in a single court loop AND have multiple busy courts, WAIT for other courts to finish
-  // Lowered threshold from 4 to 2 busy courts to trigger waiting more often
-  if (inSingleCourtLoop && numBusyCourts >= 2) {
+  if (inSingleCourtLoop && numBusyCourts >= config.minBusyCourtsForWaiting) {
     return true;
   }
   
@@ -543,11 +549,12 @@ function shouldWaitForRankBasedMatchups(
     availablePlayerIds,
     matches,
     numBusyCourts,
-    playersPerMatch
+    playersPerMatch,
+    config
   );
   
   // If we have high repetition AND multiple courts finishing soon, wait
-  if (hasHighRepetition && numBusyCourts >= 2) {
+  if (hasHighRepetition && numBusyCourts >= config.minBusyCourtsForWaiting) {
     return true;
   }
   
@@ -563,10 +570,11 @@ function detectSingleCourtLoop(
   availablePlayerIds: string[],
   matches: Match[],
   numBusyCourts: number,
-  playersPerMatch: number
+  playersPerMatch: number,
+  config: import('./types').KingOfCourtConfig
 ): boolean {
   // Only check if we have multiple courts and some are busy
-  if (numBusyCourts < 2) return false;
+  if (numBusyCourts < config.minBusyCourtsForWaiting) return false;
   
   if (availablePlayerIds.length !== playersPerMatch) {
     // Not a single-court-worth of players waiting
@@ -588,8 +596,8 @@ function detectSingleCourtLoop(
     }
   }
   
-  // If this group has played together 2+ times in last 10 matches, we're looping (reduced from 3)
-  if (groupPlayCount >= 2) {
+  // If this group has played together X+ times in last 10 matches, we're looping
+  if (groupPlayCount >= config.singleCourtLoopThreshold) {
     return true;
   }
   
@@ -621,7 +629,8 @@ function detectHighRepetitionMatchup(
   availablePlayerIds: string[],
   matches: Match[],
   numBusyCourts: number,
-  playersPerMatch: number
+  playersPerMatch: number,
+  config: import('./types').KingOfCourtConfig
 ): boolean {
   // Only check if we have enough players waiting to warrant checking
   if (availablePlayerIds.length < playersPerMatch) {
@@ -655,9 +664,9 @@ function detectHighRepetitionMatchup(
     }
   }
   
-  // If more than 60% of the pairs played together recently, we have high repetition
+  // If more than threshold% of the pairs played together recently, we have high repetition
   // (This would catch cases like players 1 & 2 playing together 3 times in last 5 matches)
-  if (totalPairsChecked > 0 && recentPairCount / totalPairsChecked > 0.6) {
+  if (totalPairsChecked > 0 && recentPairCount / totalPairsChecked > config.highRepetitionThreshold) {
     return true;
   }
   
@@ -776,7 +785,8 @@ function generateRankingBasedMatches(
   bannedPairs: [string, string][],
   occupiedCourts: Set<number>,
   totalCourts: number,
-  hasEmptyCourts: boolean
+  hasEmptyCourts: boolean,
+  session: Session
 ): Match[] {
   const newMatches: Match[] = [];
   const usedPlayers = new Set<string>();
@@ -816,7 +826,8 @@ function generateRankingBasedMatches(
       playersPerMatch,
       playerStats,
       allMatches,
-      hasEmptyCourts
+      hasEmptyCourts,
+      session
     );
     
     if (!selectedPlayers || selectedPlayers.length < playersPerMatch) {
@@ -830,7 +841,8 @@ function generateRankingBasedMatches(
       playersPerTeam,
       playerStats,
       allMatches,
-      bannedPairs
+      bannedPairs,
+      session
     );
     
     if (!teamAssignment) {
@@ -863,8 +875,11 @@ function selectPlayersForRankMatch(
   playersPerMatch: number,
   playerStats: Map<string, PlayerStats>,
   matches: Match[],
-  hasEmptyCourts: boolean
+  hasEmptyCourts: boolean,
+  session: Session
 ): string[] | null {
+  const config = session.advancedConfig.kingOfCourt;
+  
   if (availableRankings.length < playersPerMatch) {
     return null;
   }
@@ -876,7 +891,7 @@ function selectPlayersForRankMatch(
     // Try to find a group that doesn't duplicate the first match
     for (let i = 0; i < availableRankings.length - playersPerMatch + 1; i++) {
       const groupPlayerIds = availableRankings.slice(i, i + playersPerMatch).map(r => r.playerId);
-      if (!isBackToBackGame(groupPlayerIds, matches)) {
+      if (!isBackToBackGame(groupPlayerIds, matches, config.backToBackOverlapThreshold)) {
         return groupPlayerIds;
       }
     }
@@ -923,7 +938,7 @@ function selectPlayersForRankMatch(
         const groupPlayerIds = validGroup.slice(0, playersPerMatch).map(r => r.playerId);
         
         // Still enforce the ONE hard constraint: no back-to-back with same players
-        if (!isBackToBackGame(groupPlayerIds, matches)) {
+        if (!isBackToBackGame(groupPlayerIds, matches, config.backToBackOverlapThreshold)) {
           return groupPlayerIds;
         }
       }
@@ -935,9 +950,9 @@ function selectPlayersForRankMatch(
   
   // Calculate soft preference frequency (used for scoring)
   // Try to avoid same person more than once per (totalPlayers/6) games, but don't hard block
-  const softRepetitionFrequency = Math.max(3, Math.floor(totalActivePlayers / 6));
+  const softRepetitionFrequency = Math.max(config.softRepetitionFrequency, Math.floor(totalActivePlayers / 6));
   
-  // Strategy 1: Try to find a group of closely-ranked players (within 4 ranks) with variety constraints
+  // Strategy 1: Try to find a group of closely-ranked players (within closeRankThreshold ranks) with variety constraints
   for (let i = 0; i < availableRankings.length; i++) {
     const anchor = availableRankings[i];
     const closeGroup: PlayerRating[] = [anchor];
@@ -949,7 +964,7 @@ function selectPlayersForRankMatch(
       const rankDiff = Math.abs(anchor.rank - candidate.rank);
       
       // Check if close in rank and can play together
-      if (rankDiff <= 4 && canPlayTogether(
+      if (rankDiff <= config.closeRankThreshold && canPlayTogether(
         anchor.rank,
         candidate.rank,
         totalActivePlayers,
@@ -969,7 +984,7 @@ function selectPlayersForRankMatch(
       const groupPlayerIds = closeGroup.map(r => r.playerId);
       
       // HARD CONSTRAINT: Never allow back-to-back games with same exact players
-      if (isBackToBackGame(groupPlayerIds.slice(0, playersPerMatch), matches)) {
+      if (isBackToBackGame(groupPlayerIds.slice(0, playersPerMatch), matches, config.backToBackOverlapThreshold)) {
         continue; // Skip this group
       }
       
@@ -978,7 +993,7 @@ function selectPlayersForRankMatch(
       const repetitionScore = calculateGroupRepetitionScore(groupPlayerIds, matches, playerStats, softRepetitionFrequency);
       
       // If this is a good group (good variety OR close ranks AND reasonable repetition), use it
-      if ((varietyScore > 0.5 || closenessScore < 3) && repetitionScore < 0.8) {
+      if ((varietyScore > 0.5 || closenessScore < config.veryCloseRankThreshold) && repetitionScore < 0.8) {
         return groupPlayerIds.slice(0, playersPerMatch);
       }
     }
@@ -1052,7 +1067,7 @@ function selectPlayersForRankMatch(
         const groupPlayerIds = validGroup.slice(0, playersPerMatch).map(r => r.playerId);
         
         // HARD CONSTRAINT: Never allow back-to-back games with same exact players
-        if (isBackToBackGame(groupPlayerIds, matches)) {
+        if (isBackToBackGame(groupPlayerIds, matches, config.backToBackOverlapThreshold)) {
           continue; // Skip this group
         }
         
@@ -1104,7 +1119,7 @@ function selectPlayersForRankMatch(
       const groupPlayerIds = validGroup.slice(0, playersPerMatch).map(r => r.playerId);
       
       // HARD CONSTRAINT: Never allow back-to-back games with same exact players
-      if (!isBackToBackGame(groupPlayerIds, matches)) {
+      if (!isBackToBackGame(groupPlayerIds, matches, config.backToBackOverlapThreshold)) {
         return groupPlayerIds;
       }
     }
@@ -1253,8 +1268,10 @@ function assignTeams(
   playersPerTeam: number,
   playerStats: Map<string, PlayerStats>,
   matches: Match[],
-  bannedPairs: [string, string][]
+  bannedPairs: [string, string][],
+  session: Session
 ): { team1: string[]; team2: string[] } | null {
+  const algConfig = session.advancedConfig.kingOfCourt;
   if (playersPerTeam === 1) {
     // Singles: simple 1v1
     return {
@@ -1284,8 +1301,8 @@ function assignTeams(
     const team2PartnerCount = getPartnershipCount(config.team2[0], config.team2[1], matches);
     
     // Moderate penalty for repeated partnerships
-    score += team1PartnerCount * 80;
-    score += team2PartnerCount * 80;
+    score += team1PartnerCount * algConfig.partnershipRepeatPenalty;
+    score += team2PartnerCount * algConfig.partnershipRepeatPenalty;
     
     // CRITICAL: Check for recent partnerships (last 2 games per player)
     // This prevents the same people from playing together 3+ times in a row
@@ -1300,11 +1317,11 @@ function assignTeams(
           const [p1, p2] = match.team1;
           if ((config.team1[0] === p1 && config.team1[1] === p2) ||
               (config.team1[0] === p2 && config.team1[1] === p1)) {
-            score += 300; // HEAVY penalty for recent partnership
+            score += algConfig.recentPartnershipPenalty;
           }
           if ((config.team2[0] === p1 && config.team2[1] === p2) ||
               (config.team2[0] === p2 && config.team2[1] === p1)) {
-            score += 300; // HEAVY penalty for recent partnership
+            score += algConfig.recentPartnershipPenalty;
           }
         }
         
@@ -1313,11 +1330,11 @@ function assignTeams(
           const [p1, p2] = match.team2;
           if ((config.team1[0] === p1 && config.team1[1] === p2) ||
               (config.team1[0] === p2 && config.team1[1] === p1)) {
-            score += 300; // HEAVY penalty for recent partnership
+            score += algConfig.recentPartnershipPenalty;
           }
           if ((config.team2[0] === p1 && config.team2[1] === p2) ||
               (config.team2[0] === p2 && config.team2[1] === p1)) {
-            score += 300; // HEAVY penalty for recent partnership
+            score += algConfig.recentPartnershipPenalty;
           }
         }
         
@@ -1328,9 +1345,9 @@ function assignTeams(
         for (const p of configPlayers) {
           if (matchPlayers.includes(p)) overlapCount++;
         }
-        // If 3+ players overlap with a recent match, penalize
-        if (overlapCount >= 3) {
-          score += 200; // Heavy penalty for playing with mostly same people recently
+        // If backToBackOverlapThreshold+ players overlap with a recent match, penalize
+        if (overlapCount >= algConfig.backToBackOverlapThreshold) {
+          score += algConfig.recentOverlapPenalty;
         }
       });
     });
@@ -1345,7 +1362,7 @@ function assignTeams(
     }
     
     // Lighter penalty for repeated opponent matchups
-    score += totalOpponentCount * 25;
+    score += totalOpponentCount * algConfig.opponentRepeatPenalty;
     
     // Prefer balanced teams (similar win rates)
     const team1WinRate = config.team1.reduce((sum, id) => {
@@ -1358,7 +1375,7 @@ function assignTeams(
       return sum + (stats.gamesPlayed > 0 ? stats.wins / stats.gamesPlayed : 0.5);
     }, 0) / config.team2.length;
     
-    score += Math.abs(team1WinRate - team2WinRate) * 20;
+    score += Math.abs(team1WinRate - team2WinRate) * algConfig.teamBalancePenalty;
     
     if (bestConfig === null || score < bestConfig.score) {
       bestConfig = { ...config, score };

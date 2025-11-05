@@ -1156,6 +1156,158 @@
             <input type="number" id="setup-max-queue-size" min="10" max="1000" value="100">
             <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Maximum number of matches to pre-calculate in the queue</p>
           </div>
+
+          <!-- King of the Court Algorithm Settings -->
+          <div style="margin-top: 25px; padding-top: 15px; border-top: 2px solid var(--border-color);">
+            <h4 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 1em;">⚔️ King of the Court Algorithm Tuning</h4>
+            <p style="color: var(--text-secondary); font-size: 0.85em; margin-bottom: 15px;">
+              These settings control the matchmaking algorithm for King of the Court mode.
+            </p>
+
+            <!-- ELO Rating System -->
+            <details style="margin-bottom: 15px;">
+              <summary style="cursor: pointer; font-weight: 600; color: var(--text-primary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
+                ELO Rating System
+              </summary>
+              <div style="padding: 10px; margin-top: 10px;">
+                <div class="form-group">
+                  <label for="koc-base-rating">Base Rating (Default: 1500)</label>
+                  <input type="number" id="koc-base-rating" min="800" max="2200" value="1500" step="50">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Starting ELO rating for new players</p>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-min-rating">Minimum Rating (Default: 800)</label>
+                  <input type="number" id="koc-min-rating" min="500" max="1500" value="800" step="50">
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-max-rating">Maximum Rating (Default: 2200)</label>
+                  <input type="number" id="koc-max-rating" min="1500" max="3000" value="2200" step="50">
+                </div>
+              </div>
+            </details>
+
+            <!-- Provisional Players -->
+            <details style="margin-bottom: 15px;">
+              <summary style="cursor: pointer; font-weight: 600; color: var(--text-primary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
+                Provisional Players
+              </summary>
+              <div style="padding: 10px; margin-top: 10px;">
+                <div class="form-group">
+                  <label for="koc-provisional-games">Games Before Stable Ranking (Default: 2)</label>
+                  <input type="number" id="koc-provisional-games" min="1" max="10" value="2">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Number of games before a player stops being "provisional" and their ranking stabilizes</p>
+                </div>
+              </div>
+            </details>
+
+            <!-- Ranking Disparity -->
+            <details style="margin-bottom: 15px;">
+              <summary style="cursor: pointer; font-weight: 600; color: var(--text-primary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
+                Ranking Disparity Control
+              </summary>
+              <div style="padding: 10px; margin-top: 10px;">
+                <div class="form-group">
+                  <label for="koc-ranking-range">Matchmaking Range % (Default: 50%)</label>
+                  <input type="number" id="koc-ranking-range" min="25" max="100" value="50" step="5">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">
+                    Percentage of player pool that can be matched together. 50% means top half plays with top half, bottom half plays with bottom half.
+                  </p>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-close-rank">Close Rank Threshold (Default: 4)</label>
+                  <input type="number" id="koc-close-rank" min="1" max="10" value="4">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Maximum rank difference for "close" matchups</p>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-very-close-rank">Very Close Rank Threshold (Default: 3)</label>
+                  <input type="number" id="koc-very-close-rank" min="1" max="10" value="3">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Ideal rank difference for best matchups</p>
+                </div>
+              </div>
+            </details>
+
+            <!-- Waiting Strategy -->
+            <details style="margin-bottom: 15px;">
+              <summary style="cursor: pointer; font-weight: 600; color: var(--text-primary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
+                Strategic Waiting
+              </summary>
+              <div style="padding: 10px; margin-top: 10px;">
+                <div class="form-group">
+                  <label for="koc-max-consecutive-waits">Max Consecutive Waits (Default: 1)</label>
+                  <input type="number" id="koc-max-consecutive-waits" min="0" max="5" value="1">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Maximum times a player can wait before being forced into a match</p>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-min-completed-matches">Min Completed Matches for Waiting (Default: 6)</label>
+                  <input type="number" id="koc-min-completed-matches" min="0" max="20" value="6">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Minimum completed matches before strategic waiting begins</p>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-min-busy-courts">Min Busy Courts for Waiting (Default: 2)</label>
+                  <input type="number" id="koc-min-busy-courts" min="1" max="10" value="2">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Minimum busy courts before considering strategic waiting</p>
+                </div>
+              </div>
+            </details>
+
+            <!-- Variety Optimization -->
+            <details style="margin-bottom: 15px;">
+              <summary style="cursor: pointer; font-weight: 600; color: var(--text-primary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
+                Variety & Repetition Control
+              </summary>
+              <div style="padding: 10px; margin-top: 10px;">
+                <div class="form-group">
+                  <label for="koc-back-to-back-overlap">Back-to-Back Overlap Threshold (Default: 3)</label>
+                  <input type="number" id="koc-back-to-back-overlap" min="2" max="4" value="3">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Max overlapping players allowed in consecutive matches</p>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-single-court-loop">Single Court Loop Threshold (Default: 2)</label>
+                  <input type="number" id="koc-single-court-loop" min="1" max="5" value="2">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Times same group can play in last 10 matches before waiting</p>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-high-repetition">High Repetition Threshold % (Default: 60%)</label>
+                  <input type="number" id="koc-high-repetition" min="30" max="90" value="60" step="5">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Percentage threshold for detecting high repetition</p>
+                </div>
+              </div>
+            </details>
+
+            <!-- Team Assignment Penalties -->
+            <details style="margin-bottom: 15px;">
+              <summary style="cursor: pointer; font-weight: 600; color: var(--text-primary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
+                Team Assignment Penalties (Advanced)
+              </summary>
+              <div style="padding: 10px; margin-top: 10px;">
+                <div class="form-group">
+                  <label for="koc-partnership-penalty">Partnership Repeat Penalty (Default: 80)</label>
+                  <input type="number" id="koc-partnership-penalty" min="0" max="500" value="80" step="10">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Penalty for repeated partnerships (all-time)</p>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-recent-partnership-penalty">Recent Partnership Penalty (Default: 300)</label>
+                  <input type="number" id="koc-recent-partnership-penalty" min="0" max="1000" value="300" step="50">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Heavy penalty for recent partnerships (within last 2 rounds)</p>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-opponent-penalty">Opponent Repeat Penalty (Default: 25)</label>
+                  <input type="number" id="koc-opponent-penalty" min="0" max="200" value="25" step="5">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Penalty for repeated opponents (all-time)</p>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-recent-overlap-penalty">Recent Overlap Penalty (Default: 200)</label>
+                  <input type="number" id="koc-recent-overlap-penalty" min="0" max="1000" value="200" step="50">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Penalty for recent player overlap (3+ same players)</p>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-team-balance-penalty">Team Balance Penalty (Default: 20)</label>
+                  <input type="number" id="koc-team-balance-penalty" min="0" max="100" value="20" step="5">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Penalty for unbalanced teams (win rate difference)</p>
+                </div>
+              </div>
+            </details>
+          </div>
         </div>
         
         <!-- Player Input Section (hidden when locked teams is enabled) -->

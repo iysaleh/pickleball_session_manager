@@ -1,5 +1,5 @@
 import type { Session, SessionConfig, Match, Player, PlayerStats } from './types';
-import { generateId, createPlayerStats, getPlayersWhoWaitedMost, shuffleArray } from './utils';
+import { generateId, createPlayerStats, getPlayersWhoWaitedMost, shuffleArray, getDefaultAdvancedConfig } from './utils';
 import { selectPlayersForNextGame, createMatch } from './matchmaking';
 import { generateRoundRobinQueue } from './queue';
 import { generateKingOfCourtRound } from './kingofcourt';
@@ -28,6 +28,9 @@ export function createSession(config: SessionConfig, maxQueueSize: number = 100)
     ? generateRoundRobinQueue(playersToUse, finalConfig.sessionType, finalConfig.bannedPairs, maxQueueSize, finalConfig.lockedTeams)
     : [];
   
+  // Use provided advanced config or defaults
+  const advancedConfig = config.advancedConfig || getDefaultAdvancedConfig();
+  
   return {
     id: generateId(),
     config: finalConfig,
@@ -37,6 +40,7 @@ export function createSession(config: SessionConfig, maxQueueSize: number = 100)
     activePlayers,
     matchQueue,
     maxQueueSize,
+    advancedConfig,
   };
 }
 

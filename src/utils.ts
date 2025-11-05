@@ -1,7 +1,51 @@
-import type { Player, TeamPair, PlayerStats } from './types';
+import type { Player, TeamPair, PlayerStats, AdvancedConfig } from './types';
 
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+export function getDefaultAdvancedConfig(): AdvancedConfig {
+  return {
+    kingOfCourt: {
+      // ELO Rating System
+      baseRating: 1500,
+      kFactor: 32,
+      minRating: 800,
+      maxRating: 2200,
+      
+      // Provisional Player Settings
+      provisionalGamesThreshold: 2,
+      
+      // Ranking Disparity
+      rankingRangePercentage: 0.5,
+      
+      // Matchmaking Constraints
+      closeRankThreshold: 4,
+      veryCloseRankThreshold: 3,
+      
+      // Waiting Strategy
+      maxConsecutiveWaits: 1,
+      minCompletedMatchesForWaiting: 6,
+      minBusyCourtsForWaiting: 2,
+      
+      // Repetition Control
+      backToBackOverlapThreshold: 3,
+      recentMatchCheckCount: 3,
+      singleCourtLoopThreshold: 2,
+      
+      // Variety Optimization
+      softRepetitionFrequency: 3, // Will be calculated as Math.max(3, Math.floor(totalPlayers/6))
+      highRepetitionThreshold: 0.6,
+      
+      // Team Assignment Penalties
+      partnershipRepeatPenalty: 80,
+      recentPartnershipPenalty: 300,
+      opponentRepeatPenalty: 25,
+      recentOverlapPenalty: 200,
+      teamBalancePenalty: 20,
+    },
+    roundRobin: {},
+  };
 }
 
 export function shuffleArray<T>(array: T[]): T[] {

@@ -1,6 +1,6 @@
 import type { Session, Player, SessionConfig, Match } from './types';
 import { createSession, addPlayerToSession, removePlayerFromSession, addTeamToSession, removeTeamFromSession, startMatch, completeMatch, forfeitMatch, checkForAvailableCourts, evaluateAndCreateMatches, updateMaxQueueSize } from './session';
-import { generateId, calculatePlayerRankings, calculateTeamRankings } from './utils';
+import { generateId, calculatePlayerRankings, calculateTeamRankings, getDefaultAdvancedConfig } from './utils';
 import { generateRoundRobinQueue } from './queue';
 import { calculatePlayerRating } from './kingofcourt';
 
@@ -366,6 +366,7 @@ function deserializeSession(data: any): Session {
     activePlayers: new Set(data.activePlayers),
     matchQueue: data.matchQueue,
     maxQueueSize: data.maxQueueSize,
+    advancedConfig: data.advancedConfig || getDefaultAdvancedConfig(),
   };
 }
 
@@ -842,8 +843,9 @@ function handleStartSession() {
     bannedPairs: [...bannedPairs],
     lockedTeams: lockedTeamsCheckbox.checked ? [...lockedTeams] : undefined,
     randomizePlayerOrder: randomizePlayerOrderCheckbox.checked,
+    advancedConfig: getAdvancedConfigFromInputs(),
   };
-  
+
   const maxQueueSize = parseInt(setupMaxQueueSizeInput.value) || 100;
   currentSession = createSession(config, maxQueueSize);
   
@@ -1548,7 +1550,8 @@ function renderRankings() {
           const stats = currentSession!.playerStats.get(playerId);
           if (!stats) return null;
           
-          const rating = calculatePlayerRating(stats);
+          const kocConfig = currentSession!.advancedConfig.kingOfCourt;
+          const rating = calculatePlayerRating(stats, kocConfig.baseRating, kocConfig.minRating, kocConfig.maxRating);
           const avgPointDifferential = stats.gamesPlayed > 0
             ? (stats.totalPointsFor - stats.totalPointsAgainst) / stats.gamesPlayed
             : 0;
@@ -2560,7 +2563,75 @@ navModes.addEventListener('click', () => showPage('modes'));
 navAbout.addEventListener('click', () => showPage('about'));
 aboutGotoSetup.addEventListener('click', () => showPage('setup'));
 
+// Advanced Config - Get current config from inputs
+function getAdvancedConfigFromInputs(): import('./types').AdvancedConfig {
+  return {
+    kingOfCourt: {
+      baseRating: parseInt((document.getElementById('koc-base-rating') as HTMLInputElement).value) || 1500,
+      kFactor: 32, // Not exposed in UI
+      minRating: parseInt((document.getElementById('koc-min-rating') as HTMLInputElement).value) || 800,
+      maxRating: parseInt((document.getElementById('koc-max-rating') as HTMLInputElement).value) || 2200,
+      provisionalGamesThreshold: parseInt((document.getElementById('koc-provisional-games') as HTMLInputElement).value) || 2,
+      rankingRangePercentage: parseInt((document.getElementById('koc-ranking-range') as HTMLInputElement).value) / 100 || 0.5,
+      closeRankThreshold: parseInt((document.getElementById('koc-close-rank') as HTMLInputElement).value) || 4,
+      veryCloseRankThreshold: parseInt((document.getElementById('koc-very-close-rank') as HTMLInputElement).value) || 3,
+      maxConsecutiveWaits: parseInt((document.getElementById('koc-max-consecutive-waits') as HTMLInputElement).value) || 1,
+      minCompletedMatchesForWaiting: parseInt((document.getElementById('koc-min-completed-matches') as HTMLInputElement).value) || 6,
+      minBusyCourtsForWaiting: parseInt((document.getElementById('koc-min-busy-courts') as HTMLInputElement).value) || 2,
+      backToBackOverlapThreshold: parseInt((document.getElementById('koc-back-to-back-overlap') as HTMLInputElement).value) || 3,
+      recentMatchCheckCount: 3, // Not exposed in UI
+      singleCourtLoopThreshold: parseInt((document.getElementById('koc-single-court-loop') as HTMLInputElement).value) || 2,
+      softRepetitionFrequency: 3, // Calculated dynamically
+      highRepetitionThreshold: parseInt((document.getElementById('koc-high-repetition') as HTMLInputElement).value) / 100 || 0.6,
+      partnershipRepeatPenalty: parseInt((document.getElementById('koc-partnership-penalty') as HTMLInputElement).value) || 80,
+      recentPartnershipPenalty: parseInt((document.getElementById('koc-recent-partnership-penalty') as HTMLInputElement).value) || 300,
+      opponentRepeatPenalty: parseInt((document.getElementById('koc-opponent-penalty') as HTMLInputElement).value) || 25,
+      recentOverlapPenalty: parseInt((document.getElementById('koc-recent-overlap-penalty') as HTMLInputElement).value) || 200,
+      teamBalancePenalty: parseInt((document.getElementById('koc-team-balance-penalty') as HTMLInputElement).value) || 20,
+    },
+    roundRobin: {},
+  };
+}
+
+// Advanced Config - Update session with new config
+function updateSessionAdvancedConfig() {
+  if (!currentSession) return;
+  
+  const newConfig = getAdvancedConfigFromInputs();
+  currentSession.advancedConfig = newConfig;
+  
+  console.log('Advanced config updated:', newConfig);
+  
+  // Auto-save
+  saveStateToLocalStorage();
+}
+
+// Advanced Config - Add change listeners to all inputs
+function setupAdvancedConfigListeners() {
+  const configInputIds = [
+    'koc-base-rating', 'koc-min-rating', 'koc-max-rating',
+    'koc-provisional-games', 'koc-ranking-range',
+    'koc-close-rank', 'koc-very-close-rank',
+    'koc-max-consecutive-waits', 'koc-min-completed-matches', 'koc-min-busy-courts',
+    'koc-back-to-back-overlap', 'koc-single-court-loop', 'koc-high-repetition',
+    'koc-partnership-penalty', 'koc-recent-partnership-penalty',
+    'koc-opponent-penalty', 'koc-recent-overlap-penalty', 'koc-team-balance-penalty'
+  ];
+  
+  configInputIds.forEach(id => {
+    const input = document.getElementById(id) as HTMLInputElement;
+    if (input) {
+      input.addEventListener('change', () => {
+        if (currentSession) {
+          updateSessionAdvancedConfig();
+        }
+      });
+    }
+  });
+}
+
 // Initialize
+setupAdvancedConfigListeners();
 renderPlayerList();
 updateBannedPairSelects();
 showPage('setup'); // Start on setup page
