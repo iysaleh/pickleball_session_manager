@@ -74,7 +74,7 @@ function calculatePlayerRankings(
   const ratings: PlayerRating[] = playerIds.map(playerId => {
     const stats = playerStats.get(playerId)!;
     const rating = calculatePlayerRating(stats);
-    const isProvisional = stats.gamesPlayed < 3; // Need 3+ games for stable ranking
+    const isProvisional = stats.gamesPlayed < 2; // Need 2+ games for stable ranking
     
     return {
       playerId,
@@ -127,11 +127,16 @@ function canPlayTogether(
   const halfPool = Math.ceil(totalPlayers / 2);
   
   // HARD RULE: Never allow top half (1 to halfPool) to play bottom half (halfPool+1 to totalPlayers)
+  // EXCEPTION: If BOTH players are provisional (0-2 games), allow them to cross boundaries
+  // since we don't have enough data to know their true skill level yet
   const player1TopHalf = player1Rank <= halfPool;
   const player2TopHalf = player2Rank <= halfPool;
   
-  // Players must be in the same half
-  if (player1TopHalf !== player2TopHalf) {
+  // Allow crossing if both players are truly new (very few games)
+  const bothVeryNew = player1Provisional && player2Provisional;
+  
+  // Players must be in the same half (unless both are very new)
+  if (!bothVeryNew && player1TopHalf !== player2TopHalf) {
     return false; // Cannot cross the half-pool boundary
   }
   
@@ -205,18 +210,23 @@ export function generateKingOfCourtRound(
   const availableRankings = allRankings.filter(r => availablePlayerIds.includes(r.playerId));
   
   // Check if we should wait for better matchups
+  // CRITICAL: Only wait if ALL courts are busy - never leave courts empty!
   const shouldWait = shouldWaitForRankBasedMatchups(
     availableRankings,
     allRankings.length,
     playerStats,
     matches,
     occupiedCourts.size,
-    playersPerMatch
+    playersPerMatch,
+    courts
   );
   
   if (shouldWait) {
     return []; // Wait for more courts to finish for better matchups
   }
+  
+  // Check if there are empty courts - if so, be more lenient with matchmaking
+  const hasEmptyCourts = occupiedCourts.size < courts;
   
   // Generate matches with ranking-based constraints
   const newMatches = generateRankingBasedMatches(
@@ -228,7 +238,8 @@ export function generateKingOfCourtRound(
     matches,
     bannedPairs,
     occupiedCourts,
-    courts
+    courts,
+    hasEmptyCourts
   );
   
   return newMatches;
@@ -270,29 +281,46 @@ function isBackToBackGame(
 ): boolean {
   // Get the most recent completed match
   const completedMatches = matches.filter(m => m.status === 'completed');
-  if (completedMatches.length === 0) return false;
+  
+  // If no completed matches, check against in-progress matches (for initial round)
+  const matchesToCheck = completedMatches.length > 0 
+    ? completedMatches 
+    : matches.filter(m => m.status === 'in-progress' || m.status === 'waiting');
+  
+  if (matchesToCheck.length === 0) return false;
   
   // Sort by endTime to get the most recent
-  const sortedMatches = [...completedMatches].sort((a, b) => {
+  const sortedMatches = [...matchesToCheck].sort((a, b) => {
     const timeA = a.endTime || 0;
     const timeB = b.endTime || 0;
     return timeB - timeA;
   });
   
-  const lastMatch = sortedMatches[0];
-  const lastMatchPlayers = new Set([...lastMatch.team1, ...lastMatch.team2]);
+  // Check if these EXACT 4 players played together recently
+  const proposedSet = new Set(playerIds);
   
-  // Count how many players from the proposed group were in the last match
-  let overlapCount = 0;
-  for (const playerId of playerIds) {
-    if (lastMatchPlayers.has(playerId)) {
-      overlapCount++;
+  // Look at the last 3 matches to see if this exact group played
+  for (let i = 0; i < Math.min(3, sortedMatches.length); i++) {
+    const match = sortedMatches[i];
+    const matchPlayers = new Set([...match.team1, ...match.team2]);
+    
+    // Check if this is the exact same 4 players
+    if (matchPlayers.size === proposedSet.size) {
+      let allMatch = true;
+      for (const playerId of proposedSet) {
+        if (!matchPlayers.has(playerId)) {
+          allMatch = false;
+          break;
+        }
+      }
+      
+      if (allMatch) {
+        return true; // Exact same 4 players played recently
+      }
     }
   }
   
-  // Reject if 3 or more players are the same (75% overlap)
-  // This ensures at least 2 new players in each match for good variety
-  return overlapCount >= 3;
+  return false;
 }
 
 /**
@@ -343,6 +371,86 @@ function getOpponentCount(
 }
 
 /**
+ * Check if creating a match with available players would cause immediate opponent repetition
+ * OR if we're exhausting a small player pool
+ */
+function wouldCauseImmediateRepetition(
+  availableRankings: PlayerRating[],
+  matches: Match[],
+  playersPerMatch: number
+): boolean {
+  if (availableRankings.length < playersPerMatch) {
+    return false;
+  }
+  
+  // Get the most recent completed match
+  const completedMatches = matches.filter(m => m.status === 'completed');
+  if (completedMatches.length === 0) {
+    return false;
+  }
+  
+  const sortedMatches = [...completedMatches].sort((a, b) => {
+    const timeA = a.endTime || 0;
+    const timeB = b.endTime || 0;
+    return timeB - timeA;
+  });
+  
+  const availablePlayerIds = availableRankings.map(r => r.playerId);
+  
+  // Check if we're exhausting a small player pool
+  // Look at the last 3 completed matches and see what percentage of them
+  // used only the currently available players
+  const recentMatches = sortedMatches.slice(0, 3);
+  if (recentMatches.length >= 2) {
+    const availableSet = new Set(availablePlayerIds);
+    let matchesFromSamePool = 0;
+    
+    for (const match of recentMatches) {
+      const matchPlayers = [...match.team1, ...match.team2];
+      const allFromAvailable = matchPlayers.every(id => availableSet.has(id));
+      if (allFromAvailable) {
+        matchesFromSamePool++;
+      }
+    }
+    
+    // If 2+ of the last 3 matches used only the currently available players,
+    // we're burning through the same small pool - wait for variety
+    if (matchesFromSamePool >= 2 && availablePlayerIds.length <= 8) {
+      return true; // Same small pool being exhausted
+    }
+  }
+  
+  const lastMatch = sortedMatches[0];
+  const lastMatchPlayers = [...lastMatch.team1, ...lastMatch.team2];
+  
+  // Check if any of the available players were in the last match
+  // and if creating a match would have them face the same opponents
+  const playersFromLastMatch = availablePlayerIds.filter(id => lastMatchPlayers.includes(id));
+  const playersNotInLastMatch = availablePlayerIds.filter(id => !lastMatchPlayers.includes(id));
+  
+  // If we have 2+ new players available, they can mix with the old players for variety
+  // This is especially important for provisional players (0 games)
+  if (playersNotInLastMatch.length >= 2) {
+    return false; // We have enough new players to create variety, don't wait
+  }
+  
+  // If 2+ players from the last match are available, there's a risk of immediate repetition
+  if (playersFromLastMatch.length >= 2) {
+    // Check if these players were opponents in the last match
+    const team1Players = playersFromLastMatch.filter(id => lastMatch.team1.includes(id));
+    const team2Players = playersFromLastMatch.filter(id => lastMatch.team2.includes(id));
+    
+    // If we have players from both teams of the last match, and no new players to mix in,
+    // creating a match now would likely cause them to face each other again immediately
+    if (team1Players.length > 0 && team2Players.length > 0) {
+      return true; // Would cause immediate opponent repetition
+    }
+  }
+  
+  return false;
+}
+
+/**
  * Determine if we should wait for more courts to finish before scheduling (ranking-based)
  */
 function shouldWaitForRankBasedMatchups(
@@ -351,11 +459,24 @@ function shouldWaitForRankBasedMatchups(
   playerStats: Map<string, PlayerStats>,
   matches: Match[],
   numBusyCourts: number,
-  playersPerMatch: number
+  playersPerMatch: number,
+  totalCourts: number
 ): boolean {
   // Don't wait if no courts are busy (first round or all courts idle)
   if (numBusyCourts === 0) {
     return false;
+  }
+  
+  // CRITICAL: Balance between filling courts and maintaining variety
+  // If there are empty courts, we should fill them UNLESS it would cause immediate repetition
+  const allCourtsBusy = numBusyCourts >= totalCourts;
+  if (!allCourtsBusy) {
+    // There are empty courts - but check if filling them would cause immediate repetition
+    // If it would, wait for other courts to finish for better variety
+    if (wouldCauseImmediateRepetition(availableRankings, matches, playersPerMatch)) {
+      return true; // Wait for better variety even with empty courts
+    }
+    return false; // Fill the courts
   }
   
   // Don't wait if we don't have enough players for even one match
@@ -654,7 +775,8 @@ function generateRankingBasedMatches(
   matches: Match[],
   bannedPairs: [string, string][],
   occupiedCourts: Set<number>,
-  totalCourts: number
+  totalCourts: number,
+  hasEmptyCourts: boolean
 ): Match[] {
   const newMatches: Match[] = [];
   const usedPlayers = new Set<string>();
@@ -686,12 +808,15 @@ function generateRankingBasedMatches(
     }
     
     // Try to select players for this match
+    // Include newly created matches in this round so isBackToBackGame can check against them
+    const allMatches = [...matches, ...newMatches];
     const selectedPlayers = selectPlayersForRankMatch(
       remainingRankings,
       totalActivePlayers,
       playersPerMatch,
       playerStats,
-      matches
+      allMatches,
+      hasEmptyCourts
     );
     
     if (!selectedPlayers || selectedPlayers.length < playersPerMatch) {
@@ -699,11 +824,12 @@ function generateRankingBasedMatches(
     }
     
     // Divide into teams
+    // Include newly created matches so team assignment can avoid repetition
     const teamAssignment = assignTeams(
       selectedPlayers,
       playersPerTeam,
       playerStats,
-      matches,
+      allMatches,
       bannedPairs
     );
     
@@ -736,7 +862,8 @@ function selectPlayersForRankMatch(
   totalActivePlayers: number,
   playersPerMatch: number,
   playerStats: Map<string, PlayerStats>,
-  matches: Match[]
+  matches: Match[],
+  hasEmptyCourts: boolean
 ): string[] | null {
   if (availableRankings.length < playersPerMatch) {
     return null;
@@ -746,8 +873,64 @@ function selectPlayersForRankMatch(
   // Rankings don't exist yet, so just take first available players
   const completedMatches = matches.filter(m => m.status === 'completed');
   if (completedMatches.length === 0) {
-    // Simply take the first playersPerMatch available players
+    // Try to find a group that doesn't duplicate the first match
+    for (let i = 0; i < availableRankings.length - playersPerMatch + 1; i++) {
+      const groupPlayerIds = availableRankings.slice(i, i + playersPerMatch).map(r => r.playerId);
+      if (!isBackToBackGame(groupPlayerIds, matches)) {
+        return groupPlayerIds;
+      }
+    }
+    // If all groups would be back-to-back (shouldn't happen), return first group anyway
     return availableRankings.slice(0, playersPerMatch).map(r => r.playerId);
+  }
+  
+  // IMPORTANT: If courts are empty, prioritize filling them over perfect matchups
+  // Skip straight to "last resort" strategy (rank-constrained but allow repetition)
+  if (hasEmptyCourts) {
+    // Use last-resort logic: find ANY valid rank-constrained group
+    for (let i = 0; i < availableRankings.length; i++) {
+      const anchor = availableRankings[i];
+      const validGroup: PlayerRating[] = [anchor];
+      
+      for (let j = 0; j < availableRankings.length; j++) {
+        if (i === j) continue;
+        const candidate = availableRankings[j];
+        
+        let canJoin = true;
+        for (const member of validGroup) {
+          if (!canPlayTogether(
+            member.rank,
+            candidate.rank,
+            totalActivePlayers,
+            member.isProvisional,
+            candidate.isProvisional
+          )) {
+            canJoin = false;
+            break;
+          }
+        }
+        
+        if (canJoin) {
+          validGroup.push(candidate);
+        }
+        
+        if (validGroup.length >= playersPerMatch) {
+          break;
+        }
+      }
+      
+      if (validGroup.length >= playersPerMatch) {
+        const groupPlayerIds = validGroup.slice(0, playersPerMatch).map(r => r.playerId);
+        
+        // Still enforce the ONE hard constraint: no back-to-back with same players
+        if (!isBackToBackGame(groupPlayerIds, matches)) {
+          return groupPlayerIds;
+        }
+      }
+    }
+    
+	// If even the lenient approach failed, return null
+    return null;
   }
   
   // Calculate soft preference frequency (used for scoring)

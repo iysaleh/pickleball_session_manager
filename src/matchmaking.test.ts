@@ -100,7 +100,7 @@ describe('Matchmaking', () => {
       expect(match.id).toBeTruthy();
     });
     
-    it('should update games played for all players', () => {
+    it('should NOT update games played until match completes', () => {
       const statsMap = new Map<string, PlayerStats>();
       ['p1', 'p2', 'p3', 'p4'].forEach((p) =>
         statsMap.set(p, createPlayerStats(p))
@@ -108,10 +108,12 @@ describe('Matchmaking', () => {
       
       createMatch(1, ['p1', 'p2'], ['p3', 'p4'], statsMap);
       
-      expect(statsMap.get('p1')?.gamesPlayed).toBe(1);
-      expect(statsMap.get('p2')?.gamesPlayed).toBe(1);
-      expect(statsMap.get('p3')?.gamesPlayed).toBe(1);
-      expect(statsMap.get('p4')?.gamesPlayed).toBe(1);
+      // Games played should NOT be incremented when creating a match
+      // It's only incremented when the match is completed
+      expect(statsMap.get('p1')?.gamesPlayed).toBe(0);
+      expect(statsMap.get('p2')?.gamesPlayed).toBe(0);
+      expect(statsMap.get('p3')?.gamesPlayed).toBe(0);
+      expect(statsMap.get('p4')?.gamesPlayed).toBe(0);
     });
     
     it('should track partners correctly', () => {
@@ -150,8 +152,12 @@ describe('Matchmaking', () => {
       
       expect(match.team1).toEqual(['p1']);
       expect(match.team2).toEqual(['p2']);
-      expect(statsMap.get('p1')?.gamesPlayed).toBe(1);
-      expect(statsMap.get('p2')?.gamesPlayed).toBe(1);
+      // Games played not incremented until completion
+      expect(statsMap.get('p1')?.gamesPlayed).toBe(0);
+      expect(statsMap.get('p2')?.gamesPlayed).toBe(0);
+      // But opponents should be tracked
+      expect(statsMap.get('p1')?.opponentsPlayed.has('p2')).toBe(true);
+      expect(statsMap.get('p2')?.opponentsPlayed.has('p1')).toBe(true);
     });
   });
 });

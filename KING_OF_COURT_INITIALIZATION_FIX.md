@@ -27,6 +27,25 @@ In `selectPlayersForRankMatch()` function:
 
 **Location**: `src/kingofcourt.ts` lines 734-756
 
+### 3. Waiting for "Better" Matchups While Courts Sit Empty
+In `shouldWaitForRankBasedMatchups()` function:
+- The function would decide to "wait" for better matchups when detecting repetition or loops
+- However, it didn't consider whether there were **empty courts available**
+- This caused scenarios where 5 players were waiting while only 2 of 4 courts were being used
+- The system was waiting for "perfect" matchups that would never come, leaving courts idle
+
+**Location**: `src/kingofcourt.ts` lines 350-436
+
+### 4. New Players Locked by Rank Constraints
+In `canPlayTogether()` function:
+- The HARD RULE prevented crossing the half-pool boundary (top half vs bottom half)
+- When new players joined mid-session, they were immediately assigned to a rank
+- But with 0 games played, we have no data about their actual skill level
+- This could lock them out of matchmaking if their half didn't have enough waiting players
+- Example: 8 players waiting, but 5 in top half and 3 in bottom half → can't make a second match
+
+**Location**: `src/kingofcourt.ts` lines 120-158
+
 ## Solution
 
 ### Change 1: Continue Instead of Break
@@ -59,6 +78,45 @@ if (completedMatches.length === 0) {
 
 This bypasses all ranking logic when starting a session, since rankings are meaningless without match history.
 
+### Change 3: Smart Waiting Logic for Empty Courts
+Modified the waiting logic to balance quality matchups with court utilization:
+
+**In `shouldWaitForRankBasedMatchups()`:**
+```typescript
+// CRITICAL: Only wait if ALL courts are busy
+// If there are empty courts, we should fill them rather than wait indefinitely
+const allCourtsBusy = numBusyCourts >= totalCourts;
+if (!allCourtsBusy) {
+  return false; // Don't wait, try to fill empty courts
+}
+```
+
+**In `selectPlayersForRankMatch()`:**
+When courts are empty, use more lenient matchmaking that prioritizes court utilization:
+- Skip the strict variety and close-rank requirements
+- Still enforce rank-based constraints (top half vs top half, bottom vs bottom)
+- Only hard constraint: no back-to-back games with the exact same 4 players
+- This allows some repetition if needed to keep courts filled
+
+**Result**: The system still waits for better matchups when all courts are busy, but will fill empty courts even if the matchup isn't perfect.
+
+### Change 4: Allow Provisional Players to Cross Rank Boundaries
+Modified `canPlayTogether()` to allow very new players to play across half-pool boundaries:
+
+```typescript
+// Allow crossing if both players are truly new (very few games)
+const bothVeryNew = player1Provisional && player2Provisional;
+
+// Players must be in the same half (unless both are very new)
+if (!bothVeryNew && player1TopHalf !== player2TopHalf) {
+  return false; // Cannot cross the half-pool boundary
+}
+```
+
+**Rationale**: When players have played fewer than 3 games, we don't have enough data to know their true skill level. Their initial BASE_RATING of 1500 is arbitrary. Allowing two provisional players to play together (even from different halves) prevents matchmaking gridlock when new players join mid-session.
+
+**Example**: If 5 top-half players and 3 bottom-half players (including 2 new) are waiting, the new players can now form a match together, allowing courts to fill.
+
 ## Expected Behavior After Fix
 
 | Players | Courts | Expected Matches | Expected Waiting |
@@ -73,7 +131,11 @@ This bypasses all ranking logic when starting a session, since rankings are mean
 - `src/kingofcourt.ts`
   - Line 698: Changed `break` to `continue` for player selection failure
   - Line 711: Changed `break` to `continue` for team assignment failure  
-  - Lines 745-751: Added aggressive court filling at session start
+  - Lines 760-763: Added aggressive court filling at session start (0 completed matches)
+  - Lines 208-224: Pass `hasEmptyCourts` flag through matchmaking pipeline
+  - Lines 358-367: Only wait for better matchups if ALL courts are busy
+  - Lines 769-818: When courts are empty, use lenient matchmaking (rank-constrained but allow repetition)
+  - Lines 127-141: Allow two provisional players to cross half-pool boundary
 
 ## Testing
 
@@ -103,4 +165,15 @@ This fix ensures that King of Court mode utilizes available courts efficiently f
 
 ## Related Issues
 
-This fix addresses the issue reported in the session export file `pickleball-session-11-04-2025-20-52.txt` where only 2 courts were being used with 14 players.
+This fix addresses two issues:
+
+1. **Session Start Issue** (`pickleball-session-11-04-2025-20-52.txt`): Only 2 courts were being used at the start with 14 players and 4 courts available.
+
+2. **Mid-Session Issue** (`pickleball-session-11-04-2025-21-30.txt`): Started with 10 players, then grew to 13 active players with 4 courts, but only 2 courts were ever used throughout the session. With 5 players waiting, a 3rd court should have been consistently filled.
+
+3. **New Player Addition Issue** (`pickleball-session-11-04-2025-21-40.txt`): 12 active players (10 original + 2 new), 4 courts available, but only 1 court in use with 8 players waiting. When new players joined mid-session, they were immediately ranked but had no game data. The half-pool ranking constraints prevented them from forming matches with available players.
+
+The root cause was the algorithm being too conservative:
+- Enforcing ranking constraints when no data existed (session start)
+- Waiting for "perfect" matchups while leaving courts empty (mid-session)  
+- Applying strict rank boundaries to brand-new players with 0 games (new player addition)

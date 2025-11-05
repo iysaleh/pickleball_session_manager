@@ -1591,8 +1591,8 @@ function renderRankings() {
         
         const diffSign = ranking.avgPointDifferential >= 0 ? '+' : '';
         
-        // Provisional badge for new players (< 3 games)
-        const provisionalBadge = ranking.gamesPlayed < 3 ? '<span style="font-size: 10px; color: var(--text-secondary); margin-left: 5px;">(Provisional)</span>' : '';
+        // Provisional badge for new players (< 2 games)
+        const provisionalBadge = ranking.gamesPlayed < 2 ? '<span style="font-size: 10px; color: var(--text-secondary); margin-left: 5px;">(Provisional)</span>' : '';
         
         item.innerHTML = `
           <div class="rank-badge ${rankClass}">
