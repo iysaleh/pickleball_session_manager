@@ -695,7 +695,7 @@ function generateRankingBasedMatches(
     );
     
     if (!selectedPlayers || selectedPlayers.length < playersPerMatch) {
-      break;
+      continue; // Try next court instead of breaking
     }
     
     // Divide into teams
@@ -708,7 +708,7 @@ function generateRankingBasedMatches(
     );
     
     if (!teamAssignment) {
-      break;
+      continue; // Try next court instead of breaking
     }
     
     const match = createKingOfCourtMatch(
@@ -740,6 +740,14 @@ function selectPlayersForRankMatch(
 ): string[] | null {
   if (availableRankings.length < playersPerMatch) {
     return null;
+  }
+  
+  // CRITICAL: At session start (no completed matches), be very aggressive about filling courts
+  // Rankings don't exist yet, so just take first available players
+  const completedMatches = matches.filter(m => m.status === 'completed');
+  if (completedMatches.length === 0) {
+    // Simply take the first playersPerMatch available players
+    return availableRankings.slice(0, playersPerMatch).map(r => r.playerId);
   }
   
   // Calculate soft preference frequency (used for scoring)

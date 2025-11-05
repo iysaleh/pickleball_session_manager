@@ -344,6 +344,7 @@ http://localhost:5173?test=true
    🚀 How to Run Tests
    Run King of Court Tests:
      npx vitest run src/kingofcourt.test.ts
+	 npx vitest run src/test-14-players.test.ts
    Run Round Robin Tests:
      npx vitest run src/roundrobin.test.ts
    Run All Unit Tests:
