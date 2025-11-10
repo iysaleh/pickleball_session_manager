@@ -325,6 +325,10 @@ This is great. Some improvements if you please:
 ### Revision 46
 * Please add the current game mode to the Active Session page after the Session Controls label, EG "Session Controls - King of the Court" or "Session Controls - Round Robin"
 
+For the session stalled condition in @pickleball-session-11-05-2025-10-11.txt that you fixed, you added the comment: "CRITICAL: If ALL courts are empty (session stalled), be ULTRA lenient Just take the first available players to get things moving again", but that's not right, we still want to be as fair as possible with regards to the number of times people have waited that are currently waiting -- and then consider making the most balanced match possible from the most-waited players if they have even waits +/- 1!!!
+
+
+
 ### Revision TODO
 * King of the Court doesn't really make sense for 4 players, but I tried it anyways. After 3 games, there were no more games to play and all 4 players just sat there waiting. Is something wrong with the algorithm? Shouldn't it never end, regardless of the configuration?
 * Please add a test for 20 players and make sure the algorithm continues to work for 400 games, make the winners random...
@@ -345,6 +349,7 @@ http://localhost:5173?test=true
    Run King of Court Tests:
      npx vitest run src/kingofcourt.test.ts
 	 npx vitest run src/test-14-players.test.ts
+	 npm test -- seven-player-wait-bug
    Run Round Robin Tests:
      npx vitest run src/roundrobin.test.ts
    Run All Unit Tests:
@@ -371,3 +376,15 @@ http://localhost:5173?test=true
 
      # View results
      npx playwright show-report
+	 
+	 
+	 
+	 
+	 
+	 # Manual Tests
+	 Players[1-6,Ibraheem] --> 11-5, 4-11, 11-2, 5-11, Add Jeremy, 
+	 
+	 /model gpt-5
+	 /model claude-sonnet-4.5
+	 /model claude-sonnet-4
+	 /model claude-haiku-4.5 (.33% speed -- must be good!)

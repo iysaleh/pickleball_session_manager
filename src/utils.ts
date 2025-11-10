@@ -27,6 +27,7 @@ export function getDefaultAdvancedConfig(): AdvancedConfig {
       maxConsecutiveWaits: 1,
       minCompletedMatchesForWaiting: 6,
       minBusyCourtsForWaiting: 2,
+      courtSyncThreshold: 2, // Wait for 2 courts to finish when we have players for 2+ courts
       
       // Repetition Control
       backToBackOverlapThreshold: 3,
@@ -36,13 +37,15 @@ export function getDefaultAdvancedConfig(): AdvancedConfig {
       // Variety Optimization
       softRepetitionFrequency: 3, // Will be calculated as Math.max(3, Math.floor(totalPlayers/6))
       highRepetitionThreshold: 0.6,
+      partnershipVarietyWeight: 100,
+      opponentVarietyWeight: 50,
       
       // Team Assignment Penalties
       partnershipRepeatPenalty: 80,
       recentPartnershipPenalty: 300,
       opponentRepeatPenalty: 25,
       recentOverlapPenalty: 200,
-      teamBalancePenalty: 20,
+      teamBalancePenalty: 200, // Increased from 20 to 200 - skill balance is critical!
     },
     roundRobin: {},
   };

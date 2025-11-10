@@ -45,6 +45,7 @@ export type KingOfCourtConfig = {
   maxConsecutiveWaits: number; // Max waits before forcing a match (default: 1)
   minCompletedMatchesForWaiting: number; // Min completed matches before strategic waiting (default: 6)
   minBusyCourtsForWaiting: number; // Min busy courts before considering waiting (default: 2)
+  courtSyncThreshold: number; // Wait for N courts to finish when we have players for N+ courts (default: 2)
   
   // Repetition Control
   backToBackOverlapThreshold: number; // Max overlapping players for back-to-back (default: 3)
@@ -54,6 +55,8 @@ export type KingOfCourtConfig = {
   // Variety Optimization
   softRepetitionFrequency: number; // Target frequency for playing with same person (default: Math.floor(totalPlayers/6))
   highRepetitionThreshold: number; // Percentage threshold for high repetition (default: 0.6)
+  partnershipVarietyWeight: number; // Weight for partnership variety in team assignment (default: 100)
+  opponentVarietyWeight: number; // Weight for opponent variety in team assignment (default: 50)
   
   // Team Assignment Penalties
   partnershipRepeatPenalty: number; // Penalty for repeated partnerships (default: 80)

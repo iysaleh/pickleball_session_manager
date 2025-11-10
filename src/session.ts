@@ -1,4 +1,4 @@
-import type { Session, SessionConfig, Match, Player, PlayerStats } from './types';
+import type { Session, SessionConfig, Match, Player, PlayerStats, AdvancedConfig } from './types';
 import { generateId, createPlayerStats, getPlayersWhoWaitedMost, shuffleArray, getDefaultAdvancedConfig } from './utils';
 import { selectPlayersForNextGame, createMatch } from './matchmaking';
 import { generateRoundRobinQueue } from './queue';
@@ -41,6 +41,24 @@ export function createSession(config: SessionConfig, maxQueueSize: number = 100)
     matchQueue,
     maxQueueSize,
     advancedConfig,
+  };
+}
+
+export function updateAdvancedConfig(session: Session, newConfig: Partial<AdvancedConfig>): Session {
+  const updatedConfig: AdvancedConfig = {
+    kingOfCourt: {
+      ...session.advancedConfig.kingOfCourt,
+      ...(newConfig.kingOfCourt || {}),
+    },
+    roundRobin: {
+      ...session.advancedConfig.roundRobin,
+      ...(newConfig.roundRobin || {}),
+    },
+  };
+  
+  return {
+    ...session,
+    advancedConfig: updatedConfig,
   };
 }
 
@@ -218,7 +236,21 @@ export function evaluateAndCreateMatches(session: Session): Session {
     const newMatches = generateKingOfCourtRound(session);
     
     if (newMatches.length === 0) {
-      return session;
+      // Even if no new matches, update waiting list for currently non-playing players
+      const currentlyPlaying = new Set<string>();
+      session.matches.forEach(match => {
+        if (match.status === 'in-progress' || match.status === 'waiting') {
+          [...match.team1, ...match.team2].forEach(id => currentlyPlaying.add(id));
+        }
+      });
+      
+      const waitingPlayers = Array.from(session.activePlayers)
+        .filter(id => !currentlyPlaying.has(id));
+      
+      return {
+        ...session,
+        waitingPlayers,
+      };
     }
     
     // Update waiting players stats for those not selected
@@ -241,12 +273,16 @@ export function evaluateAndCreateMatches(session: Session): Session {
     const waitingPlayers = Array.from(session.activePlayers)
       .filter(id => !currentlyPlaying.has(id));
     
-    waitingPlayers.forEach(id => {
-      const stats = session.playerStats.get(id);
-      if (stats) {
-        stats.gamesWaited++;
-      }
-    });
+    // CRITICAL: Increment gamesWaited for players who are waiting when new matches are created
+    // This ensures wait priority is properly tracked
+    if (newMatches.length > 0) {
+      waitingPlayers.forEach(id => {
+        const stats = session.playerStats.get(id);
+        if (stats) {
+          stats.gamesWaited++;
+        }
+      });
+    }
     
     return {
       ...session,

@@ -1248,6 +1248,11 @@
                   <input type="number" id="koc-min-busy-courts" min="1" max="10" value="2">
                   <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Minimum busy courts before considering strategic waiting</p>
                 </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="koc-court-sync-threshold">Court Sync Threshold (Default: 2)</label>
+                  <input type="number" id="koc-court-sync-threshold" min="1" max="10" value="2">
+                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Wait for N courts to finish when we have players for N+ courts (improves variety by batching matches)</p>
+                </div>
               </div>
             </details>
 

@@ -2578,11 +2578,14 @@ function getAdvancedConfigFromInputs(): import('./types').AdvancedConfig {
       maxConsecutiveWaits: parseInt((document.getElementById('koc-max-consecutive-waits') as HTMLInputElement).value) || 1,
       minCompletedMatchesForWaiting: parseInt((document.getElementById('koc-min-completed-matches') as HTMLInputElement).value) || 6,
       minBusyCourtsForWaiting: parseInt((document.getElementById('koc-min-busy-courts') as HTMLInputElement).value) || 2,
+      courtSyncThreshold: parseInt((document.getElementById('koc-court-sync-threshold') as HTMLInputElement).value) || 2,
       backToBackOverlapThreshold: parseInt((document.getElementById('koc-back-to-back-overlap') as HTMLInputElement).value) || 3,
       recentMatchCheckCount: 3, // Not exposed in UI
       singleCourtLoopThreshold: parseInt((document.getElementById('koc-single-court-loop') as HTMLInputElement).value) || 2,
       softRepetitionFrequency: 3, // Calculated dynamically
       highRepetitionThreshold: parseInt((document.getElementById('koc-high-repetition') as HTMLInputElement).value) / 100 || 0.6,
+      partnershipVarietyWeight: 100, // Not exposed in UI
+      opponentVarietyWeight: 50, // Not exposed in UI
       partnershipRepeatPenalty: parseInt((document.getElementById('koc-partnership-penalty') as HTMLInputElement).value) || 80,
       recentPartnershipPenalty: parseInt((document.getElementById('koc-recent-partnership-penalty') as HTMLInputElement).value) || 300,
       opponentRepeatPenalty: parseInt((document.getElementById('koc-opponent-penalty') as HTMLInputElement).value) || 25,
@@ -2612,7 +2615,7 @@ function setupAdvancedConfigListeners() {
     'koc-base-rating', 'koc-min-rating', 'koc-max-rating',
     'koc-provisional-games', 'koc-ranking-range',
     'koc-close-rank', 'koc-very-close-rank',
-    'koc-max-consecutive-waits', 'koc-min-completed-matches', 'koc-min-busy-courts',
+    'koc-max-consecutive-waits', 'koc-min-completed-matches', 'koc-min-busy-courts', 'koc-court-sync-threshold',
     'koc-back-to-back-overlap', 'koc-single-court-loop', 'koc-high-repetition',
     'koc-partnership-penalty', 'koc-recent-partnership-penalty',
     'koc-opponent-penalty', 'koc-recent-overlap-penalty', 'koc-team-balance-penalty'

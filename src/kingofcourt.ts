@@ -164,6 +164,12 @@ function canPlayTogether(
 /**
  * Generate matches for King of the Court (Ranking-Based Matchmaking)
  * Creates matches for available courts, with strict rank-based constraints
+ * 
+ * CRITICAL RULES:
+ * 1. If ALL courts are empty and players are available, create matches immediately
+ * 2. If we have enough players for 2+ courts, wait for courtSyncThreshold courts to finish
+ * 3. Prioritize wait fairness (most-waited players play first)
+ * 4. Create balanced matches from most-waited players
  */
 export function generateKingOfCourtRound(
   session: Session
@@ -172,12 +178,13 @@ export function generateKingOfCourtRound(
   const { courts, sessionType, bannedPairs, lockedTeams } = config;
   const playersPerTeam = sessionType === 'singles' ? 1 : 2;
   const playersPerMatch = playersPerTeam * 2;
-  
+  const algConfig = session.advancedConfig.kingOfCourt;
+
   // If locked teams mode, use special logic
   if (lockedTeams && lockedTeams.length > 0) {
     return generateLockedTeamsKingOfCourtRound(session);
   }
-  
+
   // Get players currently in active matches (in-progress or waiting)
   const busyPlayers = new Set<string>();
   matches.forEach(match => {
@@ -185,7 +192,7 @@ export function generateKingOfCourtRound(
       [...match.team1, ...match.team2].forEach(id => busyPlayers.add(id));
     }
   });
-  
+
   // Get currently occupied courts
   const occupiedCourts = new Set<number>();
   matches.forEach(match => {
@@ -193,41 +200,138 @@ export function generateKingOfCourtRound(
       occupiedCourts.add(match.courtNumber);
     }
   });
-  
+
   // Get available players (active but not currently playing)
   const availablePlayerIds = Array.from(activePlayers).filter(id => !busyPlayers.has(id));
-  
+
   if (availablePlayerIds.length < playersPerMatch) {
     return [];
   }
-  
+
   // Calculate rankings for ALL active players (not just available)
   const allActivePlayerIds = Array.from(activePlayers);
   const allRankings = calculatePlayerRankings(allActivePlayerIds, playerStats, session);
-  
+
   // Get rankings for available players
   const availableRankings = allRankings.filter(r => availablePlayerIds.includes(r.playerId));
-  
-  // Check if we should wait for better matchups
-  // CRITICAL: Only wait if ALL courts are busy - never leave courts empty!
-  const shouldWait = shouldWaitForRankBasedMatchups(
-    availableRankings,
-    allRankings.length,
-    playerStats,
-    matches,
-    occupiedCourts.size,
-    playersPerMatch,
-    courts,
-    session
+
+  // CRITICAL: Determine how many courts we can potentially fill
+  const possibleCourts = Math.min(
+    Math.floor(availablePlayerIds.length / playersPerMatch),
+    courts
   );
   
-  if (shouldWait) {
-    return []; // Wait for more courts to finish for better matchups
+  // CRITICAL: If ALL courts are empty, create matches immediately (session stalled)
+  const allCourtsEmpty = occupiedCourts.size === 0;
+  
+  if (allCourtsEmpty && availablePlayerIds.length >= playersPerMatch) {
+    // SESSION STALLED: Create matches immediately to get things moving
+    // But still respect wait fairness and create balanced matches
+    const hasEmptyCourts = true; // All courts are empty
+    const newMatches = generateRankingBasedMatches(
+      availableRankings,
+      allRankings.length,
+      playersPerTeam,
+      playersPerMatch,
+      playerStats,
+      matches,
+      bannedPairs,
+      occupiedCourts,
+      courts,
+      hasEmptyCourts,
+      session
+    );
+    return newMatches;
+  }
+
+  // COURT UTILIZATION STRATEGY:
+  // Priority 1: Wait fairness - players who waited longest MUST get priority
+  // Priority 2: When we have enough players for 2+ courts, wait for multiple courts to finish for variety
+  // Priority 3: When empty courts exist, fill them (but respect wait fairness)
+  // Priority 4: Respect ranking constraints
+  
+  const hasEmptyCourts = occupiedCourts.size < courts;
+  const emptyCourtCount = courts - occupiedCourts.size;
+  
+  // CRITICAL DECISION POINT: Should we create matches now or wait?
+  
+  // Check max wait times to determine if we must create a match immediately
+  const maxWaits = Math.max(
+    ...availableRankings.map(r => playerStats.get(r.playerId)?.gamesWaited || 0)
+  );
+  
+  // CRITICAL: Check if we should wait for court synchronization
+  // This applies whether we have 1 court's worth or 2+ courts' worth of available players
+  if (occupiedCourts.size > 0 && availablePlayerIds.length >= playersPerMatch && maxWaits < algConfig.maxConsecutiveWaits) {
+    // We have available players, courts are busy, and nobody has waited too long
+    // Check if we should wait for other courts to finish
+    const shouldWait = shouldWaitForRankBasedMatchups(
+      availableRankings,
+      allRankings.length,
+      playerStats,
+      matches,
+      occupiedCourts.size,
+      playersPerMatch,
+      courts,
+      session
+    );
+    
+    if (shouldWait) {
+      return []; // Wait for more courts to finish for better variety
+    }
   }
   
-  // Check if there are empty courts - if so, be more lenient with matchmaking
-  const hasEmptyCourts = occupiedCourts.size < courts;
+  // Case 1: If we have enough players for 2+ courts AND multiple courts are busy,
+  // check if we should wait for court synchronization (for variety)
+  if (possibleCourts >= 2 && occupiedCourts.size >= algConfig.minBusyCourtsForWaiting) {
+    // We have enough players for multiple courts AND courts are busy
+    // Should we wait for more courts to finish for better variety?
+    
+    // Never wait if someone has waited maxConsecutiveWaits+ times
+    if (maxWaits >= algConfig.maxConsecutiveWaits) {
+      // Someone has waited too long - create a match immediately
+      // Fall through to Case 3
+    } else {
+      // Check if we should wait for court synchronization
+      const shouldWait = shouldWaitForRankBasedMatchups(
+        availableRankings,
+        allRankings.length,
+        playerStats,
+        matches,
+        occupiedCourts.size,
+        playersPerMatch,
+        courts,
+        session
+      );
+
+      if (shouldWait) {
+        return []; // Wait for more courts to finish for better matchups
+      }
+    }
+  }
   
+  // Case 2: Special handling when adding a player creates enough for a 2nd court
+  // If we have 1 court occupied and enough players for 2 courts, fill ONE more court
+  if (occupiedCourts.size === 1 && possibleCourts >= 2 && emptyCourtCount > 0) {
+    // Fill one additional court immediately
+    const newMatches = generateRankingBasedMatches(
+      availableRankings,
+      allRankings.length,
+      playersPerTeam,
+      playersPerMatch,
+      playerStats,
+      matches,
+      bannedPairs,
+      occupiedCourts,
+      courts,
+      hasEmptyCourts,
+      session,
+      1 // maxMatchesToCreate = 1 (fill one court)
+    );
+    return newMatches;
+  }
+
+  // Case 3: Create matches for available courts
   // Generate matches with ranking-based constraints
   const newMatches = generateRankingBasedMatches(
     availableRankings,
@@ -242,7 +346,7 @@ export function generateKingOfCourtRound(
     hasEmptyCourts,
     session
   );
-  
+
   return newMatches;
 }
 
@@ -473,103 +577,49 @@ function shouldWaitForRankBasedMatchups(
     return false;
   }
   
-  // CRITICAL: Balance between filling courts and maintaining variety
-  // If there are empty courts, we should fill them UNLESS it would cause immediate repetition
-  const allCourtsBusy = numBusyCourts >= totalCourts;
-  if (!allCourtsBusy) {
-    // PRIORITY: If we have enough players for multiple courts, ALWAYS fill them
-    // Court utilization > variety concerns when we can run 2+ matches simultaneously
-    const emptyCourtCount = totalCourts - numBusyCourts;
-    const possibleMatches = Math.floor(availableRankings.length / playersPerMatch);
-    
-    if (possibleMatches >= 2 || possibleMatches >= emptyCourtCount) {
-      // We have enough players for multiple courts OR enough to fill all empty courts
-      // Fill them! Court utilization is priority #1
-      return false;
+  // CRITICAL: Court synchronization strategy to prevent same players from playing repeatedly
+  // When multiple courts are running, wait for all to finish before creating new matches
+  // This creates variety by batching match creation
+  const possibleCourts = Math.floor(availableRankings.length / playersPerMatch);
+  
+  // Check if anyone has waited too long (would override waiting strategy)
+  const playerIds = availableRankings.map(r => r.playerId);
+  const waitsPerPlayer = countConsecutiveWaits(playerIds, matches);
+  const maxWaitCount = Math.max(...Array.from(waitsPerPlayer.values()));
+  
+  // CRITICAL COURT SYNC LOGIC:
+  // The key insight is that when we have multiple courts running (e.g., 2 courts with 8 players),
+  // we should wait for BOTH courts to finish before creating new matches. This prevents the
+  // same 4 players from playing repeatedly while the other 4 are stuck in their own loop.
+  
+  // Exception: Never wait if someone has waited too long
+  if (maxWaitCount >= config.maxConsecutiveWaits) {
+    return false; // Someone waited too long, create match now
+  }
+  
+  // Key scenario: We have exactly 1 court's worth of players available (4 in doubles)
+  // This means ONE court just finished. Check if we should wait for more courts.
+  if (availableRankings.length === playersPerMatch) {
+    // If ANY courts are still busy, WAIT
+    // This ensures we don't immediately schedule the same 4 players again while other courts are still playing
+    if (numBusyCourts >= 1) {
+      return true; // Wait for other courts to finish for variety
     }
-    
-    // Only 1 match possible with empty courts - check if it would cause immediate repetition
-    // If it would, wait for other courts to finish for better variety
-    if (wouldCauseImmediateRepetition(availableRankings, matches, playersPerMatch, config)) {
-      return true; // Wait for better variety even with empty courts
+    // Otherwise, fill the court (all other courts are idle)
+    return false;
+  }
+  
+  // Key scenario: We have 2 courts' worth of players (8 in doubles) but some courts are still busy
+  // This means some courts finished but not all. We should wait for the rest.
+  if (possibleCourts >= 2) {
+    // If we have players for 2+ courts AND courtSyncThreshold+ courts are busy, WAIT
+    // This batches match creation for variety
+    if (numBusyCourts >= config.courtSyncThreshold) {
+      return true; // Wait for more courts to finish to create better variety
     }
-    return false; // Fill the courts
   }
   
-  // Don't wait if we don't have enough players for even one match
-  if (availableRankings.length < playersPerMatch) {
-    return false;
-  }
-  
-  // Check if anyone has waited too long
-  const availablePlayerIds = availableRankings.map(r => r.playerId);
-  const consecutiveWaits = countConsecutiveWaits(availablePlayerIds, matches);
-  const maxConsecutiveWaits = Math.max(...Array.from(consecutiveWaits.values()));
-  
-  // Never wait if someone has already waited maxConsecutiveWaits+ times
-  if (maxConsecutiveWaits >= config.maxConsecutiveWaits) {
-    return false;
-  }
-  
-  // Don't wait if we have enough players for multiple matches (reduced from 3x to 2x)
-  if (availableRankings.length >= playersPerMatch * 2) {
-    return false;
-  }
-  
-  // Need at least X completed matches to make meaningful ranking decisions
-  const completedMatches = matches.filter(m => m.status === 'completed');
-  if (completedMatches.length < config.minCompletedMatchesForWaiting) {
-    return false;
-  }
-  
-  // Only consider waiting if we have at least X busy courts
-  if (numBusyCourts < config.minBusyCourtsForWaiting) {
-    return false;
-  }
-  
-  // Check if we can make a valid rank-based match with current players
-  const canMakeValidMatch = canCreateValidRankMatch(
-    availableRankings,
-    totalActivePlayers,
-    playersPerMatch
-  );
-  
-  // If we can't make a valid match at all, don't wait - just accept what we have
-  if (!canMakeValidMatch) {
-    return false;
-  }
-  
-  // CRITICAL CHECK: Detect if we're in a "single court loop" scenario
-  // (same small group playing repeatedly while other courts are idle)
-  const inSingleCourtLoop = detectSingleCourtLoop(
-    availableRankings.map(r => r.playerId),
-    matches,
-    numBusyCourts,
-    playersPerMatch,
-    config
-  );
-  
-  // If we're in a single court loop AND have multiple busy courts, WAIT for other courts to finish
-  if (inSingleCourtLoop && numBusyCourts >= config.minBusyCourtsForWaiting) {
-    return true;
-  }
-  
-  // NEW: Check for high-repetition matchups even if not a perfect "loop"
-  // If the available players have very high overlap with recent matches, wait for variety
-  const hasHighRepetition = detectHighRepetitionMatchup(
-    availablePlayerIds,
-    matches,
-    numBusyCourts,
-    playersPerMatch,
-    config
-  );
-  
-  // If we have high repetition AND multiple courts finishing soon, wait
-  if (hasHighRepetition && numBusyCourts >= config.minBusyCourtsForWaiting) {
-    return true;
-  }
-  
-  // Generally prefer to fill courts rather than wait for perfect matchups
+  // If we have fewer than 2 courts' worth, or fewer than courtSyncThreshold busy courts, don't wait
   return false;
 }
 
@@ -797,7 +847,8 @@ function generateRankingBasedMatches(
   occupiedCourts: Set<number>,
   totalCourts: number,
   hasEmptyCourts: boolean,
-  session: Session
+  session: Session,
+  maxMatchesToCreate?: number // Optional: limit number of matches to create
 ): Match[] {
   const newMatches: Match[] = [];
   const usedPlayers = new Set<string>();
@@ -806,24 +857,50 @@ function generateRankingBasedMatches(
   // This determines if we should use lenient matching for ALL matches in this batch
   const allCourtsEmptyAtStart = occupiedCourts.size === 0;
   
+  // CRITICAL: Check if players just finished a match
+  // Find the most recently completed match and de-prioritize those players
+  const recentlyPlayed = new Set<string>();
+  const completedMatches = matches.filter(m => m.status === 'completed' && m.endTime);
+  if (completedMatches.length > 0) {
+    // Sort by endTime to find the most recent
+    const sortedByEnd = [...completedMatches].sort((a, b) => (b.endTime || 0) - (a.endTime || 0));
+    const mostRecentMatch = sortedByEnd[0];
+    
+    // Add players from the most recent match to recentlyPlayed set
+    [...mostRecentMatch.team1, ...mostRecentMatch.team2].forEach(id => recentlyPlayed.add(id));
+  }
+  
   // Sort available players by wait priority
   const sortedRankings = [...availableRankings].sort((a, b) => {
     const statsA = playerStats.get(a.playerId)!;
     const statsB = playerStats.get(b.playerId)!;
     
-    // Prioritize by games waited
+    // HIGHEST PRIORITY: Prioritize by games waited (most-waited FIRST)
     if (statsA.gamesWaited !== statsB.gamesWaited) {
       return statsB.gamesWaited - statsA.gamesWaited;
     }
     
-    // Then by games played (fewer = higher priority)
+    // SECOND PRIORITY: De-prioritize players who just finished a match (as tiebreaker)
+    const aRecentlyPlayed = recentlyPlayed.has(a.playerId);
+    const bRecentlyPlayed = recentlyPlayed.has(b.playerId);
+    if (aRecentlyPlayed !== bRecentlyPlayed) {
+      return aRecentlyPlayed ? 1 : -1; // Non-recent players first
+    }
+    
+    // THIRD PRIORITY: Then by games played (fewer = higher priority)
     return statsA.gamesPlayed - statsB.gamesPlayed;
   });
   
   // Try to create matches for each available court
+  let matchesCreated = 0;
   for (let courtNum = 1; courtNum <= totalCourts; courtNum++) {
     if (occupiedCourts.has(courtNum)) {
       continue;
+    }
+    
+    // Check if we've hit the max matches limit
+    if (maxMatchesToCreate !== undefined && matchesCreated >= maxMatchesToCreate) {
+      break;
     }
     
     const remainingRankings = sortedRankings.filter(r => !usedPlayers.has(r.playerId));
@@ -874,6 +951,7 @@ function generateRankingBasedMatches(
     );
     
     newMatches.push(match);
+    matchesCreated++;
     
     // Mark these players as used
     selectedPlayers.forEach(id => usedPlayers.add(id));
@@ -954,10 +1032,36 @@ function findMostBalancedMatch(
           for (const config of configs) {
             const team1Avg = (config.team1[0].rating + config.team1[1].rating) / 2;
             const team2Avg = (config.team2[0].rating + config.team2[1].rating) / 2;
-            const balance = Math.abs(team1Avg - team2Avg);
+            const ratingBalance = Math.abs(team1Avg - team2Avg);
             
-            if (balance < bestBalance) {
-              bestBalance = balance;
+            // Factor in partnership variety
+            // Count how many times these partnerships have happened
+            const team1PartnerId1 = config.team1[0].playerId;
+            const team1PartnerId2 = config.team1[1].playerId;
+            const team2PartnerId1 = config.team2[0].playerId;
+            const team2PartnerId2 = config.team2[1].playerId;
+            
+            const team1PartnerCount = getPartnershipCount(team1PartnerId1, team1PartnerId2, matches);
+            const team2PartnerCount = getPartnershipCount(team2PartnerId1, team2PartnerId2, matches);
+            const totalPartnerRepetition = team1PartnerCount + team2PartnerCount;
+            
+            // CRITICAL: Also count opponent repetition!
+            // This prevents the same players from being in matches together too often
+            let totalOpponentRepetition = 0;
+            for (const p1 of config.team1) {
+              for (const p2 of config.team2) {
+                totalOpponentRepetition += getOpponentCount(p1.playerId, p2.playerId, matches);
+              }
+            }
+            
+            // Combined score: balance + partnership penalty + opponent penalty
+            // Partnership repetition: 50 rating points per occurrence (teammates)
+            // Opponent repetition: 30 rating points per occurrence (opponents)
+            // Opponents can repeat more than partners, but still should have variety
+            const combinedScore = ratingBalance + (totalPartnerRepetition * 50) + (totalOpponentRepetition * 30);
+            
+            if (combinedScore < bestBalance) {
+              bestBalance = combinedScore;
               bestMatch = playerIds;
             }
           }
@@ -1019,144 +1123,163 @@ function selectPlayersForRankMatch(
   }
 
   // IMPORTANT: If courts are empty, prioritize filling them over perfect matchups
-  // Skip straight to "last resort" strategy (rank-constrained but allow repetition)
+  // BUT: Always respect wait fairness - most-waited players MUST get priority
   if (hasEmptyCourts) {
-    // CRITICAL: Use allCourtsWereEmpty instead of checking dynamically
-    // This ensures all matches in a batch get the same lenient treatment
-    const allCourtsEmpty = allCourtsWereEmpty;
-    
-    if (allCourtsEmpty && availableRankings.length >= playersPerMatch) {
-      // Session is completely stalled - need to create a match
-      // Priority: Most-waited players first, then create balanced match
-      
-      // Get wait counts for available players
-      const playersWithWaits = availableRankings.map(r => ({
-        ranking: r,
-        waits: playerStats.get(r.playerId)?.gamesWaited || 0
-      }));
-      
-      // Sort by waits (descending), then by rating for stability
-      playersWithWaits.sort((a, b) => {
-        if (b.waits !== a.waits) return b.waits - a.waits;
-        return b.ranking.rating - a.ranking.rating;
-      });
-      
-      // Find the max wait count among available players
-      const maxWaits = playersWithWaits[0].waits;
-      
-      // Get all players with EXACTLY maxWaits (strictest fairness)
-      const topWaiters = playersWithWaits.filter(p => p.waits === maxWaits);
-      
-      // CRITICAL: If we don't have enough top waiters for a full match,
-      // include ALL top waiters + fill remaining spots with next-best players
-      if (topWaiters.length < playersPerMatch && topWaiters.length > 0) {
-        // Start with all top waiters
-        const selectedPlayers = [...topWaiters];
-        
-        // Add next-best players (by wait count) to fill the match
-        const remainingPlayers = playersWithWaits.filter(
-          p => !topWaiters.some(tw => tw.ranking.playerId === p.ranking.playerId)
-        );
-        
-        for (const player of remainingPlayers) {
-          selectedPlayers.push(player);
-          if (selectedPlayers.length >= playersPerMatch) break;
-        }
-        
-        // Create most balanced match from this group
-        if (selectedPlayers.length >= playersPerMatch) {
-          const bestMatch = findMostBalancedMatch(
-            selectedPlayers.map(p => p.ranking),
-            playersPerMatch,
-            playerStats,
-            matches,
-            config.backToBackOverlapThreshold
-          );
-          
-          if (bestMatch) {
-            return bestMatch;
-          }
-          
-          // Fallback: just take first playersPerMatch
-          return selectedPlayers.slice(0, playersPerMatch).map(p => p.ranking.playerId);
-        }
-      }
-      
-      if (topWaiters.length >= playersPerMatch) {
-        // Try to create the most balanced match from top waiters
-        const bestMatch = findMostBalancedMatch(
-          topWaiters.map(p => p.ranking),
-          playersPerMatch,
-          playerStats,
-          matches,
-          config.backToBackOverlapThreshold
-        );
-        
-        if (bestMatch) {
-          return bestMatch;
-        }
-        
-        // Fallback: Just take first playersPerMatch top waiters (avoid back-to-back if possible)
-        for (let i = 0; i <= topWaiters.length - playersPerMatch; i++) {
-          const groupPlayerIds = topWaiters.slice(i, i + playersPerMatch).map(p => p.ranking.playerId);
-          if (!isBackToBackGame(groupPlayerIds, matches, config.backToBackOverlapThreshold)) {
-            return groupPlayerIds;
-          }
-        }
-        
-        // Last resort: take first players even if back-to-back
-        return topWaiters.slice(0, playersPerMatch).map(p => p.ranking.playerId);
-      }
-      
-      // Not enough players to make any match (edge case)
-      // Take first available playersPerMatch by wait priority
-      const groupPlayerIds = playersWithWaits.slice(0, playersPerMatch).map(p => p.ranking.playerId);
-      return groupPlayerIds;
+    // CRITICAL: Check if players just finished a match (most recent completed match)
+    // De-prioritize those players
+    const recentlyPlayed = new Set<string>();
+    const completedMatches = matches.filter(m => m.status === 'completed' && m.endTime);
+    if (completedMatches.length > 0) {
+      const sortedByEnd = [...completedMatches].sort((a, b) => (b.endTime || 0) - (a.endTime || 0));
+      const mostRecentMatch = sortedByEnd[0];
+      [...mostRecentMatch.team1, ...mostRecentMatch.team2].forEach(id => recentlyPlayed.add(id));
     }
     
-    // Use last-resort logic: find ANY valid rank-constrained group
-    for (let i = 0; i < availableRankings.length; i++) {
-      const anchor = availableRankings[i];
-      const validGroup: PlayerRating[] = [anchor];
-      
-      for (let j = 0; j < availableRankings.length; j++) {
-        if (i === j) continue;
-        const candidate = availableRankings[j];
-        
-        let canJoin = true;
-        for (const member of validGroup) {
-          if (!canPlayTogether(
-            member.rank,
-            candidate.rank,
-            totalActivePlayers,
-            member.isProvisional,
-            candidate.isProvisional
-          )) {
-            canJoin = false;
-            break;
-          }
-        }
-        
-        if (canJoin) {
-          validGroup.push(candidate);
-        }
-        
-        if (validGroup.length >= playersPerMatch) {
-          break;
-        }
+    // Get wait counts and sort properly - THIS IS THE CRITICAL SORT
+    const playersWithWaits = availableRankings.map(r => ({
+      ranking: r,
+      waits: playerStats.get(r.playerId)?.gamesWaited || 0,
+      gamesPlayed: playerStats.get(r.playerId)?.gamesPlayed || 0,
+      recentlyPlayed: recentlyPlayed.has(r.playerId)
+    }));
+    
+    // Sort by: 1. Most waits FIRST (absolute priority), 2. Not recently played (tiebreaker), 3. Fewest games played
+    playersWithWaits.sort((a, b) => {
+      // HIGHEST PRIORITY: Most waits first (people who waited longer go first)
+      if (b.waits !== a.waits) return b.waits - a.waits;
+      // SECOND PRIORITY: De-prioritize recently played (tiebreaker for equal waits)
+      if (a.recentlyPlayed !== b.recentlyPlayed) {
+        return a.recentlyPlayed ? 1 : -1;
       }
-      
-      if (validGroup.length >= playersPerMatch) {
-        const groupPlayerIds = validGroup.slice(0, playersPerMatch).map(r => r.playerId);
-        
-        // Still enforce the ONE hard constraint: no back-to-back with same players
+      // THIRD PRIORITY: Fewest games played (new players get priority)
+      return a.gamesPlayed - b.gamesPlayed;
+    });
+    
+    // Now playersWithWaits is sorted by wait priority (most waits first)
+    // CRITICAL: We need to ensure the top waiters ALL get to play
+    // Strategy: Take all players with the MAX wait count (or within +/-1), then fill remaining slots
+    
+    if (playersWithWaits.length < playersPerMatch) {
+      return null; // Not enough players
+    }
+    
+    const maxWaits = playersWithWaits[0].waits;
+    // CRITICAL FIX: Include players within maxWaits and maxWaits-1 as "top waiters"
+    // This handles the 7-player case where 3 are waiting (some may have waited 1 time, some 2 times)
+    const topWaiters = playersWithWaits.filter(p => p.waits >= maxWaits - 1 && p.waits > 0);
+    
+    // If no one has waited yet (session start), just take first available
+    if (topWaiters.length === 0 || maxWaits === 0) {
+      // Try to find a group that doesn't duplicate recent matches
+      for (let i = 0; i <= playersWithWaits.length - playersPerMatch; i++) {
+        const groupPlayerIds = playersWithWaits.slice(i, i + playersPerMatch).map(p => p.ranking.playerId);
         if (!isBackToBackGame(groupPlayerIds, matches, config.backToBackOverlapThreshold)) {
           return groupPlayerIds;
         }
       }
+      // If all groups would be back-to-back, return first group anyway
+      return playersWithWaits.slice(0, playersPerMatch).map(p => p.ranking.playerId);
     }
     
-	// If even the lenient approach failed, return null
+    // CRITICAL DECISION POINT:
+    // If we have exactly playersPerMatch top waiters, use them (they all waited equally)
+    if (topWaiters.length === playersPerMatch) {
+      const playerIds = topWaiters.map(p => p.ranking.playerId);
+      // Check if this would be back-to-back - if so, still allow it because wait fairness is paramount
+      return playerIds;
+    }
+    
+    // If we have MORE than playersPerMatch top waiters, find best balanced match from them
+    if (topWaiters.length > playersPerMatch) {
+      const bestMatch = findMostBalancedMatch(
+        topWaiters.map(p => p.ranking),
+        playersPerMatch,
+        playerStats,
+        matches,
+        config.backToBackOverlapThreshold
+      );
+      
+      if (bestMatch) {
+        return bestMatch;
+      }
+      
+      // Fallback: take first playersPerMatch top waiters (they all waited equally)
+      return topWaiters.slice(0, playersPerMatch).map(p => p.ranking.playerId);
+    }
+    
+    // If we have FEWER than playersPerMatch top waiters, include them all + fill remaining slots
+    // CRITICAL: All top waiters MUST be included - wait fairness is PARAMOUNT
+    const remainingSlots = playersPerMatch - topWaiters.length;
+    const additionalPlayers = playersWithWaits.slice(topWaiters.length);
+    
+    // Check if all players are provisional (no games played yet or very few games)
+    // If so, ignore rank constraints entirely - we don't have enough data for rankings yet
+    const mostPlayersProvisional = playersWithWaits.filter(p => p.ranking.isProvisional).length >= playersWithWaits.length * 0.7;
+    
+    if (mostPlayersProvisional) {
+      // At session start or with mostly provisional players: Just take top waiters + next players
+      // Ignore rank constraints completely
+      const selectedIds = [...topWaiters.map(p => p.ranking.playerId)];
+      for (let i = 0; i < additionalPlayers.length && selectedIds.length < playersPerMatch; i++) {
+        selectedIds.push(additionalPlayers[i].ranking.playerId);
+      }
+      if (selectedIds.length >= playersPerMatch) {
+        return selectedIds.slice(0, playersPerMatch);
+      }
+    }
+    
+    // Try to find rank-compatible additional players
+    const selectedPlayers = [...topWaiters];
+    
+    for (const additionalPlayer of additionalPlayers) {
+      if (selectedPlayers.length >= playersPerMatch) break;
+      
+      // Check if this player can play with all selected top waiters (rank constraints)
+      // For provisional players, be VERY lenient
+      const allProvisional = selectedPlayers.every(p => p.ranking.isProvisional) && additionalPlayer.ranking.isProvisional;
+      
+      let canPlayWithAll = allProvisional; // If all provisional, allow
+      if (!allProvisional) {
+        // Check rank compatibility
+        canPlayWithAll = true;
+        for (const selectedPlayer of selectedPlayers) {
+          if (!canPlayTogether(
+            selectedPlayer.ranking.rank,
+            additionalPlayer.ranking.rank,
+            totalActivePlayers,
+            selectedPlayer.ranking.isProvisional,
+            additionalPlayer.ranking.isProvisional
+          )) {
+            canPlayWithAll = false;
+            break;
+          }
+        }
+      }
+      
+      if (canPlayWithAll) {
+        selectedPlayers.push(additionalPlayer);
+      }
+    }
+    
+    // If we successfully found enough rank-compatible players, use them
+    if (selectedPlayers.length >= playersPerMatch) {
+      const playerIds = selectedPlayers.slice(0, playersPerMatch).map(p => p.ranking.playerId);
+      return playerIds;
+    }
+    
+    // ABSOLUTE LAST RESORT: If rank constraints prevent us from making a match,
+    // FORCE all top waiters + next players, ignoring rank constraints
+    // Wait fairness is MORE important than rank constraints when courts are empty
+    const forcedSelection = [...topWaiters.map(p => p.ranking.playerId)];
+    for (let i = topWaiters.length; i < playersWithWaits.length && forcedSelection.length < playersPerMatch; i++) {
+      forcedSelection.push(playersWithWaits[i].ranking.playerId);
+    }
+    
+    if (forcedSelection.length >= playersPerMatch) {
+      return forcedSelection.slice(0, playersPerMatch);
+    }
+    
+    // Edge case: Not enough players
     return null;
   }
   
@@ -1576,18 +1699,30 @@ function assignTeams(
     // Lighter penalty for repeated opponent matchups
     score += totalOpponentCount * algConfig.opponentRepeatPenalty;
     
-    // Prefer balanced teams (similar win rates)
-    const team1WinRate = config.team1.reduce((sum, id) => {
-      const stats = playerStats.get(id)!;
-      return sum + (stats.gamesPlayed > 0 ? stats.wins / stats.gamesPlayed : 0.5);
-    }, 0) / config.team1.length;
+    // Prefer balanced teams (similar strength)
+    // Calculate team strength using both win rate and point differential
+    const getTeamStrength = (teamPlayers: string[]): number => {
+      let totalStrength = 0;
+      for (const playerId of teamPlayers) {
+        const stats = playerStats.get(playerId)!;
+        // Win rate contribution (0.5 to 1.0 range typically)
+        const winRateStrength = stats.gamesPlayed > 0 ? stats.wins / stats.gamesPlayed : 0.5;
+        // Point differential contribution (normalized)
+        const pointDiff = stats.gamesPlayed > 0 ? 
+          (stats.totalPointsFor - stats.totalPointsAgainst) / (stats.gamesPlayed * 11) : 0;
+        // Combine: 70% win rate, 30% point differential for total strength
+        const playerStrength = (winRateStrength * 0.7) + ((pointDiff * 0.5 + 0.5) * 0.3);
+        totalStrength += playerStrength;
+      }
+      return totalStrength / teamPlayers.length;
+    };
     
-    const team2WinRate = config.team2.reduce((sum, id) => {
-      const stats = playerStats.get(id)!;
-      return sum + (stats.gamesPlayed > 0 ? stats.wins / stats.gamesPlayed : 0.5);
-    }, 0) / config.team2.length;
+    const team1Strength = getTeamStrength(config.team1);
+    const team2Strength = getTeamStrength(config.team2);
+    const strengthDifference = Math.abs(team1Strength - team2Strength);
     
-    score += Math.abs(team1WinRate - team2WinRate) * algConfig.teamBalancePenalty;
+    // Apply HEAVY penalty for unbalanced teams (increased from basic win rate comparison)
+    score += strengthDifference * algConfig.teamBalancePenalty * 2;
     
     if (bestConfig === null || score < bestConfig.score) {
       bestConfig = { ...config, score };
