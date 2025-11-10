@@ -44,6 +44,9 @@ export function initializeCourtVarietyState(totalCourts: number): CourtVarietySt
     totalCourtFinishes: new Map(
       Array.from({ length: totalCourts + 1 }, (_, i) => [i, 0])
     ),
+    consecutiveWaitlistMixes: new Map(
+      Array.from({ length: totalCourts + 1 }, (_, i) => [i, 0])
+    ),
   };
 }
 
@@ -71,8 +74,23 @@ export function recordCourtFinish(
  * HARD CAP: Record which courts mixed in this round
  * Returns true if successful, false if HARD CAP would be violated
  * 
- * CRITICAL: The waitlist (Court 0) accumulates history across multiple mixes in the same round.
- * This prevents the same physical courts from mixing with the waitlist repeatedly.
+ * CRITICAL: When courts actually mix and create games, ALL involved courts
+ * get their lastMixedWith cleared (reset). This prevents the same combination
+ * from mixing again immediately. 
+ * 
+ * IMPORTANT: Waitlist court (0) is EXCLUDED from HARD CAP checks because:
+ * - The waitlist is ephemeral (different players each round)
+ * - The same physical court should be able to use the waitlist multiple times in a row
+ * - But NOT infinitely - we limit to 2 consecutive times to enforce court synchronization
+ * 
+ * IMPORTANT LOGIC FLOW:
+ * 1. First, check if this mix would violate HARD CAP (same physical courts mixing twice in a row)
+ * 2. Check if a single physical court is using waitlist too many times consecutively
+ * 3. If violation detected, return false immediately - DO NOT record anything
+ * 4. If no violation, CLEAR the lastMixedWith for ALL courts involved (the reset)
+ * 5. Then record this specific mix in each court's history
+ * 6. Update consecutive waitlist mix counters
+ * 7. Increment the mix round counter
  */
 export function recordCourtMix(
   session: Session,
@@ -81,38 +99,55 @@ export function recordCourtMix(
   const state = session.courtVarietyState;
   
   // HARD CAP CHECK: Courts cannot use the same combination twice in a row
-  if (courtsInvolved.length > 0 && state.lastMixRound > 0) {
-    // Only check HARD CAP if we've already done at least one round
-    const allMixedLastRound = courtsInvolved.every(courtNum => {
-      const courtData = state.courtMixes.get(courtNum);
-      if (!courtData) return false;
-      
-      // Check if this court mixed with ALL other courts in proposed mix
-      return courtsInvolved.every(other => 
-        other === courtNum || courtData.lastMixedWith.has(other)
-      );
-    });
-    
-    if (allMixedLastRound && courtsInvolved.length > 0) {
-      // HARD CAP VIOLATION: Same courts cannot mix again
-      return false;
-    }
-  }
+  // CRITICAL: Filter out the waitlist court (0) for HARD CAP checks
+  // Waitlist is ephemeral and shouldn't block physical court mixing
+  const physicalCourtsInvolved = courtsInvolved.filter(c => c !== WAITLIST_COURT_NUMBER);
+  const hasWaitlist = courtsInvolved.includes(WAITLIST_COURT_NUMBER);
   
-  // IMPORTANT: Only clear lastMixedWith for NON-WAITLIST courts that are currently mixing
-  // This allows multiple matches to be created in the same evaluation without
-  // interfering with each other's mix history
-  // CRITICAL: Keep the waitlist court's history intact - it accumulates during the round
-  courtsInvolved.forEach(courtNum => {
-    if (courtNum !== 0) { // Don't clear waitlist history
-      const courtData = state.courtMixes.get(courtNum);
-      if (courtData) {
-        courtData.lastMixedWith.clear();
+  if (physicalCourtsInvolved.length > 0 && state.lastMixRound > 0) {
+    // Only check HARD CAP if we've already done at least one round AND have physical courts
+    // Only check if mixing multiple physical courts (single court + waitlist is always OK for now)
+    if (physicalCourtsInvolved.length > 1) {
+      const allMixedLastRound = physicalCourtsInvolved.every(courtNum => {
+        const courtData = state.courtMixes.get(courtNum);
+        if (!courtData) return false;
+        
+        // Check if this court mixed with ALL other PHYSICAL courts in proposed mix
+        // We EXCLUDE waitlist from this check
+        return physicalCourtsInvolved.every(other => 
+          other === courtNum || courtData.lastMixedWith.has(other)
+        );
+      });
+      
+      if (allMixedLastRound && physicalCourtsInvolved.length > 0) {
+        // HARD CAP VIOLATION: Same physical courts cannot mix again
+        return false;
       }
     }
+    
+    // SOFT CAP: Limit consecutive waitlist mixing
+    // If a single physical court keeps using waitlist, force it to wait for court synchronization
+    if (physicalCourtsInvolved.length === 1 && hasWaitlist && state.lastMixRound > 0) {
+      const court = physicalCourtsInvolved[0];
+      const consecutiveCount = state.consecutiveWaitlistMixes.get(court) || 0;
+      
+      // After 2 consecutive waitlist mixes, force a wait
+      if (consecutiveCount >= 2) {
+        return false; // Block this mix - time for court synchronization
+      }
+    }
+  }
+
+  // CRITICAL FIX: Clear lastMixedWith for ALL courts involved BEFORE recording new mix
+  // This is the key fix for the mixing counter reset issue
+  courtsInvolved.forEach(courtNum => {
+    const courtData = state.courtMixes.get(courtNum);
+    if (courtData) {
+      courtData.lastMixedWith.clear();
+    }
   });
-  
-  // Record this mix
+
+  // Record this mix for all involved courts (after reset)
   courtsInvolved.forEach(courtNum => {
     const courtData = state.courtMixes.get(courtNum);
     if (courtData) {
@@ -123,7 +158,24 @@ export function recordCourtMix(
       });
     }
   });
+
+  // Update consecutive waitlist mix counters
+  // If this mix includes waitlist + single physical court, increment counter
+  // Otherwise reset counter for that court
+  const physicalCourts = courtsInvolved.filter(c => c !== WAITLIST_COURT_NUMBER);
+  const hasWaitlistInMix = courtsInvolved.includes(WAITLIST_COURT_NUMBER);
   
+  // Reset ALL courts' waitlist counters, then increment if they used waitlist this round
+  state.consecutiveWaitlistMixes.forEach((_, courtNum) => {
+    if (physicalCourts.includes(courtNum) && hasWaitlistInMix && physicalCourts.length === 1) {
+      // This court used waitlist this round - increment
+      state.consecutiveWaitlistMixes.set(courtNum, (state.consecutiveWaitlistMixes.get(courtNum) || 0) + 1);
+    } else {
+      // This court didn't use waitlist alone - reset
+      state.consecutiveWaitlistMixes.set(courtNum, 0);
+    }
+  });
+
   state.lastMixRound++;
   return true;
 }
@@ -187,10 +239,16 @@ export function updateWaitlistCourt(session: Session, waitlistSize: number): voi
 
 /**
  * Check if a court combination violates the HARD CAP
- * HARD CAP: Same courts cannot mix twice in a row
+ * HARD CAP: Same physical courts cannot mix twice in a row
  * 
- * This means: If courts [1, 2, 0] mixed last round, they cannot mix again this round.
- * But [1, 3, 0] can mix (different combination).
+ * CRITICAL: Waitlist court (0) is EXCLUDED from HARD CAP checks because:
+ * - The waitlist is ephemeral (different players each round)
+ * - The same physical court should be able to use the waitlist multiple times
+ * - We only apply HARD CAP to physical-court-to-physical-court mixing
+ * 
+ * This means: If courts [1, 2] mixed last round, they cannot mix again this round.
+ * But if courts [1, 0] (court 1 + waitlist) mixed, [1, 0] can mix again.
+ * And [1, 3, 0] can mix (different physical court combination).
  */
 export function violatesHardCap(
   session: Session,
@@ -207,15 +265,24 @@ export function violatesHardCap(
     return false; // No previous rounds, so no violation possible
   }
   
-  // For every court in this mix, check if it mixed with the exact same set last round
-  // If ALL courts mixed with the exact same combination, it violates HARD CAP
-  return courtsToMix.every(courtNum => {
+  // CRITICAL: Filter out waitlist court (0) - it doesn't count for HARD CAP
+  const physicalCourts = courtsToMix.filter(c => c !== WAITLIST_COURT_NUMBER);
+  
+  // If only 0 or 1 physical courts, HARD CAP doesn't apply
+  if (physicalCourts.length <= 1) {
+    return false;
+  }
+  
+  // For every physical court in this mix, check if it mixed with the exact same set last round
+  // If ALL physical courts mixed with the exact same combination, it violates HARD CAP
+  return physicalCourts.every(courtNum => {
     const courtData = state.courtMixes.get(courtNum);
     if (!courtData) return false;
     
-    // For each court, check if it has records of mixing with ALL other courts in proposed mix
-    // This confirms the same combination was used last round
-    return courtsToMix.every(other =>
+    // For each physical court, check if it has records of mixing with ALL other physical courts in proposed mix
+    // This confirms the same physical court combination was used last round
+    // We EXCLUDE waitlist from this check
+    return physicalCourts.every(other =>
       other === courtNum || courtData.lastMixedWith.has(other)
     );
   });

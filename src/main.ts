@@ -425,6 +425,7 @@ function deserializeSession(data: any): Session {
       lastMixRound: data.courtVarietyState?.lastMixRound || 0,
       totalCourtFinishes: totalCourtFinishes,
     },
+    debugLogs: data.debugLogs || [],
   };
 }
 
@@ -1923,6 +1924,21 @@ function handleExportSession() {
         exportText += `   Avg Point Diff: ${ranking.avgPointDifferential >= 0 ? '+' : ''}${ranking.avgPointDifferential.toFixed(1)}\n\n`;
       }
     });
+  }
+  
+  // DEBUG LOGS - Algorithm decision tracking
+  if (currentSession.debugLogs && currentSession.debugLogs.length > 0) {
+    exportText += '═══════════════════════════════════════════════════════\n';
+    exportText += '   MATCHMAKING DEBUG LOG\n';
+    exportText += '═══════════════════════════════════════════════════════\n\n';
+    exportText += 'Recent algorithm decisions (most recent first):\n\n';
+    
+    // Show last 50 debug logs in reverse order (most recent first)
+    const recentLogs = currentSession.debugLogs.slice(-50).reverse();
+    recentLogs.forEach(log => {
+      exportText += `${log}\n`;
+    });
+    exportText += '\n';
   }
   
   exportText += '═══════════════════════════════════════════════════════\n';

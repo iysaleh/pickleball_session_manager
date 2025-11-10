@@ -46,6 +46,7 @@ export function createSession(config: SessionConfig, maxQueueSize: number = 100)
     maxQueueSize,
     advancedConfig,
     courtVarietyState,
+    debugLogs: [],
   };
 }
 

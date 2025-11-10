@@ -3,6 +3,19 @@ import { generateId, isPairBanned } from './utils';
 import { recordCourtMix, violatesHardCap, updateWaitlistCourt } from './court-variety';
 
 /**
+ * Helper function to log debug information during matchmaking
+ */
+function addDebugLog(session: Session, message: string): void {
+  const timestamp = new Date().toISOString().split('T')[1].split('.')[0]; // HH:MM:SS
+  session.debugLogs.push(`[${timestamp}] ${message}`);
+  
+  // Keep only last 500 logs to avoid unbounded growth
+  if (session.debugLogs.length > 500) {
+    session.debugLogs.shift();
+  }
+}
+
+/**
  * King of the Court scheduling algorithm (Ranking-Based Matchmaking)
  * 
  * Core Principles:
@@ -205,7 +218,10 @@ export function generateKingOfCourtRound(
   // Get available players (active but not currently playing)
   const availablePlayerIds = Array.from(activePlayers).filter(id => !busyPlayers.has(id));
 
+  addDebugLog(session, `--- MATCHMAKING EVAL: ${availablePlayerIds.length} available, ${occupiedCourts.size}/${courts} courts busy`);
+
   if (availablePlayerIds.length < playersPerMatch) {
+    addDebugLog(session, `SKIP: Not enough available players (${availablePlayerIds.length} < ${playersPerMatch})`);
     return [];
   }
 
@@ -222,12 +238,16 @@ export function generateKingOfCourtRound(
     courts
   );
   
+  addDebugLog(session, `INFO: Can make ${possibleCourts} courts with available players (${availablePlayerIds.length} players / ${playersPerMatch} per match)`);
+  addDebugLog(session, `INFO: ${occupiedCourts.size}/${courts} courts currently busy`);
+  
   // CRITICAL: If ALL courts are empty, create matches immediately (session stalled)
   const allCourtsEmpty = occupiedCourts.size === 0;
   
   if (allCourtsEmpty && availablePlayerIds.length >= playersPerMatch) {
     // SESSION STALLED: Create matches immediately to get things moving
     // But still respect wait fairness and create balanced matches
+    addDebugLog(session, `ACTION: All courts empty, creating matches immediately to restart session`);
     const hasEmptyCourts = true; // All courts are empty
     const newMatches = generateRankingBasedMatches(
       availableRankings,
@@ -252,6 +272,7 @@ export function generateKingOfCourtRound(
       recordCourtMix(session, courtsInvolved);
     }
     
+    addDebugLog(session, `RESULT: Created ${newMatches.length} matches in empty courts`);
     return newMatches;
   }
 
@@ -271,11 +292,13 @@ export function generateKingOfCourtRound(
     ...availableRankings.map(r => playerStats.get(r.playerId)?.gamesWaited || 0)
   );
   
-  // CRITICAL: Check if we should wait for court synchronization
-  // This applies whether we have 1 court's worth or 2+ courts' worth of available players
-  if (occupiedCourts.size > 0 && availablePlayerIds.length >= playersPerMatch && maxWaits < algConfig.maxConsecutiveWaits) {
-    // We have available players, courts are busy, and nobody has waited too long
-    // Check if we should wait for other courts to finish
+  addDebugLog(session, `INFO: Max wait count = ${maxWaits}, threshold = ${algConfig.maxConsecutiveWaits}`);
+
+  // CRITICAL: For exactly 1 court's worth of players, apply special waiting logic
+  // This prevents endless loops of the same 4 players playing together
+  if (possibleCourts === 1 && occupiedCourts.size > 0 && maxWaits < algConfig.maxConsecutiveWaits) {
+    // We have exactly 1 court's worth of players and courts are busy
+    // Should we wait for other courts to finish?
     const shouldWait = shouldWaitForRankBasedMatchups(
       availableRankings,
       allRankings.length,
@@ -288,22 +311,28 @@ export function generateKingOfCourtRound(
     );
     
     if (shouldWait) {
-      return []; // Wait for more courts to finish for better variety
+      addDebugLog(session, `WAIT: 1-court's worth of players, waiting for variety`);
+      return [];
     }
   }
   
   // Case 1: If we have enough players for 2+ courts AND multiple courts are busy,
   // check if we should wait for court synchronization (for variety)
-  // IMPORTANT: We check this for ANY number of busy courts, not just when minBusyCourtsForWaiting are busy
-  if (possibleCourts >= 2) {
-    // We have enough players for multiple courts
+  // IMPORTANT: This is the PRIMARY decision point for aggressive court creation
+  if (possibleCourts >= 2 && occupiedCourts.size > 0) {
+    // We have enough players for multiple courts AND some courts are already busy
     // Should we wait for more courts to finish for better variety?
     
     // Never wait if someone has waited maxConsecutiveWaits+ times
     if (maxWaits >= algConfig.maxConsecutiveWaits) {
       // Someone has waited too long - create a match immediately
       // Fall through to Case 3
+      addDebugLog(session, `Case1: Someone waited too long (${maxWaits}), will create matches`);
     } else {
+      // CRITICAL: For 2+ courts worth of players, be VERY aggressive about creating them
+      // We only wait if there's strong evidence we should (e.g., repetitive combinations)
+      addDebugLog(session, `Case1: Have ${possibleCourts} possible courts, checking if should create immediately`);
+      
       // Check if we should wait for court synchronization
       const shouldWait = shouldWaitForRankBasedMatchups(
         availableRankings,
@@ -317,8 +346,12 @@ export function generateKingOfCourtRound(
       );
 
       if (shouldWait) {
+        addDebugLog(session, `Case1: shouldWaitForRankBasedMatchups=true, waiting for better matchups`);
         return []; // Wait for more courts to finish for better matchups
       }
+      
+      addDebugLog(session, `Case1: shouldWaitForRankBasedMatchups=false, creating ${possibleCourts} courts NOW`);
+      // Fall through to Case 3 to create matches
     }
   }
   
@@ -369,6 +402,8 @@ export function generateKingOfCourtRound(
 
   // Case 3: Create matches for available courts
   // Generate matches with ranking-based constraints
+  addDebugLog(session, `CASE3: Creating matches - ${possibleCourts} possible, ${emptyCourtCount} empty courts`);
+  
   const newMatches = generateRankingBasedMatches(
     availableRankings,
     allRankings.length,
@@ -392,9 +427,12 @@ export function generateKingOfCourtRound(
       courtsInvolved.push(0); // Waitlist court number
     }
     
+    addDebugLog(session, `CASE3: Created ${newMatches.length} matches on courts [${courtsInvolved.join(',')}]`);
+    
     // Check if this mix violates HARD CAP
     if (violatesHardCap(session, courtsInvolved)) {
       // HARD CAP violation - don't create these matches, wait for different courts
+      addDebugLog(session, `CASE3: HARD CAP VIOLATION detected - courts [${courtsInvolved.join(',')}] mixed last round, REJECTING matches`);
       return [];
     }
     
@@ -402,8 +440,13 @@ export function generateKingOfCourtRound(
     const mixRecorded = recordCourtMix(session, courtsInvolved);
     if (!mixRecorded) {
       // Mix was rejected by HARD CAP - wait
+      addDebugLog(session, `CASE3: recordCourtMix returned false - HARD CAP rejected this combination, waiting`);
       return [];
     }
+    
+    addDebugLog(session, `CASE3: Successfully recorded court mix and returning ${newMatches.length} matches`);
+  } else {
+    addDebugLog(session, `CASE3: No matches generated (insufficient players or rank constraints)`);
   }
 
   return newMatches;
@@ -617,6 +660,22 @@ function wouldCauseImmediateRepetition(
 }
 
 /**
+ * Check if we recently created multiple courts that immediately started mixing
+ */
+function checkIfRecentlyMadeMultipleCourts(session: Session, matches: Match[]): boolean {
+  // Check recent matches to see if we just made multiple courts that started mixing
+  const recentMatches = matches
+    .filter(m => m.status === 'in-progress' || m.status === 'waiting')
+    .slice(-3); // Look at last 3 matches
+  
+  // If all 3 recent matches have different court numbers, we just made multiple courts
+  const courts = new Set(recentMatches.map(m => m.courtNumber));
+  
+  // If we have 3+ different courts with waiting/in-progress matches, we recently made multiple courts
+  return courts.size >= 3;
+}
+
+/**
  * Determine if we should wait for more courts to finish before scheduling (ranking-based)
  */
 function shouldWaitForRankBasedMatchups(
@@ -631,55 +690,64 @@ function shouldWaitForRankBasedMatchups(
 ): boolean {
   const config = session.advancedConfig.kingOfCourt;
   
+  addDebugLog(session, `shouldWait EVAL: ${availableRankings.length} available players, ${numBusyCourts} busy courts, playersPerMatch=${playersPerMatch}`);
+  
   // Don't wait if no courts are busy (first round or all courts idle)
   if (numBusyCourts === 0) {
+    addDebugLog(session, `shouldWait RESULT: FALSE - no courts busy, always create`);
     return false;
   }
-  
-  // CRITICAL: Court synchronization strategy to prevent same players from playing repeatedly
-  // When multiple courts are running, wait for all to finish before creating new matches
-  // This creates variety by batching match creation
+
   const possibleCourts = Math.floor(availableRankings.length / playersPerMatch);
+  
+  addDebugLog(session, `shouldWait EVAL: ${possibleCourts} possible courts from available players`);
   
   // Check if anyone has waited too long (would override waiting strategy)
   const playerIds = availableRankings.map(r => r.playerId);
   const waitsPerPlayer = countConsecutiveWaits(playerIds, matches);
-  const maxWaitCount = Math.max(...Array.from(waitsPerPlayer.values()));
-  
-  // CRITICAL COURT SYNC LOGIC:
-  // The key insight is that when we have multiple courts running (e.g., 2 courts with 8 players),
-  // we should wait for BOTH courts to finish before creating new matches. This prevents the
-  // same 4 players from playing repeatedly while the other 4 are stuck in their own loop.
-  
+  const maxWaitCount = Math.max(...Array.from(waitsPerPlayer.values()), 0);
+
   // Exception: Never wait if someone has waited too long
   if (maxWaitCount >= config.maxConsecutiveWaits) {
-    return false; // Someone waited too long, create match now
+    addDebugLog(session, `shouldWait RESULT: FALSE - max wait exceeded (${maxWaitCount} >= ${config.maxConsecutiveWaits})`);
+    return false;
   }
-  
-  // Key scenario: We have exactly 1 court's worth of players available (4 in doubles)
-  // This means ONE court just finished. Check if we should wait for more courts.
-  if (availableRankings.length === playersPerMatch) {
-    // If ANY courts are still busy, WAIT
-    // This ensures we don't immediately schedule the same 4 players again while other courts are still playing
+
+  // Scenario 1: Exactly 1 court's worth of players
+  if (possibleCourts === 1) {
     if (numBusyCourts >= 1) {
-      return true; // Wait for other courts to finish for variety
+      addDebugLog(session, `shouldWait RESULT: TRUE - exactly 1 court worth (${availableRankings.length} players), ${numBusyCourts} courts busy, wait for variety`);
+      return true;
     }
-    // Otherwise, fill the court (all other courts are idle)
+    addDebugLog(session, `shouldWait RESULT: FALSE - exactly 1 court worth but no courts busy`);
+    return false;
+  }
+
+  // Scenario 2: 2+ courts' worth of players 
+  // THIS IS THE CRITICAL DECISION POINT - We have enough for 2-3+ courts
+  // Be VERY AGGRESSIVE about creating them unless there's a strong reason to wait
+  if (possibleCourts >= 2) {
+    addDebugLog(session, `shouldWait EVAL: 2+ courts possible (${possibleCourts} from ${availableRankings.length} players)`);
+    
+    // The ONLY reason to wait with 2+ courts' worth is if we JUST made multiple courts
+    // and they're ALL still active
+    const recentlyMadeMultipleCourts = checkIfRecentlyMadeMultipleCourts(session, matches);
+    addDebugLog(session, `shouldWait EVAL: recentlyMadeMultipleCourts=${recentlyMadeMultipleCourts}`);
+    
+    if (recentlyMadeMultipleCourts && numBusyCourts >= 3) {
+      // We JUST made 3+ courts and they're ALL still busy
+      // Wait briefly for one to finish so we can have variety
+      addDebugLog(session, `shouldWait RESULT: TRUE - Just made ${numBusyCourts}+ courts that are ALL still active, let one finish`);
+      return true;
+    }
+    
+    // OTHERWISE: With 2+ courts' worth of players AND enough diversity, CREATE IMMEDIATELY
+    addDebugLog(session, `shouldWait RESULT: FALSE - Have ${possibleCourts} courts possible with diversity, create NOW`);
     return false;
   }
   
-  // Key scenario: We have 2 courts' worth of players (8 in doubles) but some courts are still busy
-  // This means some courts finished but not all. We should wait for the rest.
-  if (possibleCourts >= 2) {
-    // If we have players for 2+ courts AND (totalCourts - 1) courts are busy, WAIT
-    // This means we should wait for all-but-one court to finish before creating more matches
-    // This creates synchronization and prevents one court from running in a loop
-    if (numBusyCourts >= (totalCourts - 1)) {
-      return true; // Wait for more courts to finish to create better variety
-    }
-  }
-  
-  // If we have fewer than 2 courts' worth, or most courts are not busy, don't wait
+  // This shouldn't happen since we checked possibleCourts >= 2 above
+  addDebugLog(session, `shouldWait RESULT: FALSE - Fewer than 2 courts possible`);
   return false;
 }
 
@@ -2189,4 +2257,53 @@ function getRecentTeamOpponents(
   });
   
   return opponents;
+}
+
+/**
+ * Get the numbers of courts that are currently idle (not in-progress)
+ */
+function getIdleCourtNumbers(session: Session, totalCourts: number, numBusyCourts: number): number[] {
+  const busyCourts = new Set<number>();
+  session.matches.forEach(match => {
+    if (match.status === 'in-progress' || match.status === 'waiting') {
+      busyCourts.add(match.courtNumber);
+    }
+  });
+  
+  const idleCourts: number[] = [];
+  for (let i = 1; i <= totalCourts; i++) {
+    if (!busyCourts.has(i)) {
+      idleCourts.push(i);
+    }
+  }
+  
+  return idleCourts;
+}
+
+/**
+ * Check if a set of courts have been mixing with each other repeatedly
+ * Returns true if the courts in the list have mixed with each other (as shown in lastMixedWith)
+ */
+function haveCourtsMixedRepeatedly(session: Session, courtNumbers: number[]): boolean {
+  if (courtNumbers.length < 2) {
+    return false; // Can't mix with yourself, need at least 2 courts
+  }
+  
+  const state = session.courtVarietyState;
+  
+  // Check if each court has mixed with at least one other court in the list
+  for (const courtNum of courtNumbers) {
+    const courtData = state.courtMixes.get(courtNum);
+    if (!courtData) continue;
+    
+    // Check if this court has mixed with any other court in our list
+    for (const otherCourtNum of courtNumbers) {
+      if (courtNum !== otherCourtNum && courtData.lastMixedWith.has(otherCourtNum)) {
+        // Found evidence of mixing between these courts
+        return true;
+      }
+    }
+  }
+  
+  return false; // These courts haven't mixed with each other yet
 }

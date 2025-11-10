@@ -103,6 +103,7 @@ export type Session = {
   maxQueueSize: number; // Maximum number of matches to pre-generate
   advancedConfig: AdvancedConfig; // Algorithm tuning configuration (always present with defaults)
   courtVarietyState: CourtVarietyState; // Track court mixing and variety
+  debugLogs: string[]; // Debug logs for troubleshooting algorithm decisions
 };
 
 export type PlayerStats = {
@@ -138,4 +139,5 @@ export type CourtVarietyState = {
   waitlistCourtCount: number; // How many "virtual courts" the waitlist represents
   lastMixRound: number; // Track which round we're in for mix tracking
   totalCourtFinishes: Map<number, number>; // Track total finishes per court (for balancing)
+  consecutiveWaitlistMixes: Map<number, number>; // Track how many times each court used waitlist in a row
 };
