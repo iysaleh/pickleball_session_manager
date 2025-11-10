@@ -1,5 +1,6 @@
 import type { Player, Session, Match, PlayerStats, LockedTeam } from './types';
 import { generateId, isPairBanned } from './utils';
+import { recordCourtMix, violatesHardCap, updateWaitlistCourt } from './court-variety';
 
 /**
  * King of the Court scheduling algorithm (Ranking-Based Matchmaking)
@@ -241,6 +242,16 @@ export function generateKingOfCourtRound(
       hasEmptyCourts,
       session
     );
+    
+    // Record the mix in court variety system  
+    if (newMatches.length > 0) {
+      const courtsInvolved = newMatches.map(m => m.courtNumber);
+      if (session.waitingPlayers.length > 0) {
+        courtsInvolved.push(0);
+      }
+      recordCourtMix(session, courtsInvolved);
+    }
+    
     return newMatches;
   }
 
@@ -283,8 +294,9 @@ export function generateKingOfCourtRound(
   
   // Case 1: If we have enough players for 2+ courts AND multiple courts are busy,
   // check if we should wait for court synchronization (for variety)
-  if (possibleCourts >= 2 && occupiedCourts.size >= algConfig.minBusyCourtsForWaiting) {
-    // We have enough players for multiple courts AND courts are busy
+  // IMPORTANT: We check this for ANY number of busy courts, not just when minBusyCourtsForWaiting are busy
+  if (possibleCourts >= 2) {
+    // We have enough players for multiple courts
     // Should we wait for more courts to finish for better variety?
     
     // Never wait if someone has waited maxConsecutiveWaits+ times
@@ -328,6 +340,30 @@ export function generateKingOfCourtRound(
       session,
       1 // maxMatchesToCreate = 1 (fill one court)
     );
+    
+    // HARD CAP validation
+    if (newMatches.length > 0) {
+      const courtsInvolved = newMatches.map(m => m.courtNumber);
+      
+      // Include waitlist as a court if there are waiting players
+      if (session.waitingPlayers.length > 0) {
+        courtsInvolved.push(0);
+      }
+      
+      // Check if this mix violates HARD CAP
+      if (violatesHardCap(session, courtsInvolved)) {
+        // HARD CAP violation - don't create this match, wait for different court
+        return [];
+      }
+      
+      // Record the mix in court variety system
+      const mixRecorded = recordCourtMix(session, courtsInvolved);
+      if (!mixRecorded) {
+        // Mix was rejected by HARD CAP - wait
+        return [];
+      }
+    }
+    
     return newMatches;
   }
 
@@ -346,6 +382,29 @@ export function generateKingOfCourtRound(
     hasEmptyCourts,
     session
   );
+
+  // HARD CAP: Validate that matches don't violate court mixing rules
+  if (newMatches.length > 0) {
+    const courtsInvolved = newMatches.map(m => m.courtNumber);
+    
+    // Include waitlist as a court if there are waiting players
+    if (session.waitingPlayers.length > 0) {
+      courtsInvolved.push(0); // Waitlist court number
+    }
+    
+    // Check if this mix violates HARD CAP
+    if (violatesHardCap(session, courtsInvolved)) {
+      // HARD CAP violation - don't create these matches, wait for different courts
+      return [];
+    }
+    
+    // Record the mix in court variety system
+    const mixRecorded = recordCourtMix(session, courtsInvolved);
+    if (!mixRecorded) {
+      // Mix was rejected by HARD CAP - wait
+      return [];
+    }
+  }
 
   return newMatches;
 }
@@ -612,14 +671,15 @@ function shouldWaitForRankBasedMatchups(
   // Key scenario: We have 2 courts' worth of players (8 in doubles) but some courts are still busy
   // This means some courts finished but not all. We should wait for the rest.
   if (possibleCourts >= 2) {
-    // If we have players for 2+ courts AND courtSyncThreshold+ courts are busy, WAIT
-    // This batches match creation for variety
-    if (numBusyCourts >= config.courtSyncThreshold) {
+    // If we have players for 2+ courts AND (totalCourts - 1) courts are busy, WAIT
+    // This means we should wait for all-but-one court to finish before creating more matches
+    // This creates synchronization and prevents one court from running in a loop
+    if (numBusyCourts >= (totalCourts - 1)) {
       return true; // Wait for more courts to finish to create better variety
     }
   }
   
-  // If we have fewer than 2 courts' worth, or fewer than courtSyncThreshold busy courts, don't wait
+  // If we have fewer than 2 courts' worth, or most courts are not busy, don't wait
   return false;
 }
 

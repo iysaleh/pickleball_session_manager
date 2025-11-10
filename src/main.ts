@@ -365,6 +365,17 @@ function serializeSession(session: Session): any {
     activePlayers: Array.from(session.activePlayers),
     matchQueue: session.matchQueue,
     maxQueueSize: session.maxQueueSize,
+    courtVarietyState: {
+      courtMixes: Array.from(session.courtVarietyState.courtMixes.entries()).map(([num, data]) => ({
+        courtNumber: data.courtNumber,
+        lastMixedWith: Array.from(data.lastMixedWith),
+        finishCount: data.finishCount,
+        varietyThreshold: data.varietyThreshold,
+      })),
+      waitlistCourtCount: session.courtVarietyState.waitlistCourtCount,
+      lastMixRound: session.courtVarietyState.lastMixRound,
+      totalCourtFinishes: Array.from(session.courtVarietyState.totalCourtFinishes.entries()),
+    },
   };
 }
 
@@ -378,6 +389,26 @@ function deserializeSession(data: any): Session {
     });
   });
   
+  // Deserialize court variety state
+  const courtMixes = new Map();
+  if (data.courtVarietyState && data.courtVarietyState.courtMixes) {
+    data.courtVarietyState.courtMixes.forEach((mData: any) => {
+      courtMixes.set(mData.courtNumber, {
+        courtNumber: mData.courtNumber,
+        lastMixedWith: new Set(mData.lastMixedWith),
+        finishCount: mData.finishCount,
+        varietyThreshold: mData.varietyThreshold,
+      });
+    });
+  }
+  
+  const totalCourtFinishes = new Map();
+  if (data.courtVarietyState && data.courtVarietyState.totalCourtFinishes) {
+    data.courtVarietyState.totalCourtFinishes.forEach((entry: any) => {
+      totalCourtFinishes.set(entry[0], entry[1]);
+    });
+  }
+  
   return {
     id: data.id,
     config: data.config,
@@ -388,6 +419,12 @@ function deserializeSession(data: any): Session {
     matchQueue: data.matchQueue,
     maxQueueSize: data.maxQueueSize,
     advancedConfig: data.advancedConfig || getDefaultAdvancedConfig(),
+    courtVarietyState: {
+      courtMixes: courtMixes,
+      waitlistCourtCount: data.courtVarietyState?.waitlistCourtCount || 0,
+      lastMixRound: data.courtVarietyState?.lastMixRound || 0,
+      totalCourtFinishes: totalCourtFinishes,
+    },
   };
 }
 
@@ -2662,6 +2699,7 @@ function openMakeCourtModal() {
   }
 
   const modal = document.getElementById('make-court-modal') as HTMLElement;
+  const courtSelect = document.getElementById('make-court-court-select') as HTMLSelectElement;
   const team1P1 = document.getElementById('make-court-team1-player1') as HTMLSelectElement;
   const team1P2 = document.getElementById('make-court-team1-player2') as HTMLSelectElement;
   const team2P1 = document.getElementById('make-court-team2-player1') as HTMLSelectElement;
@@ -2679,7 +2717,24 @@ function openMakeCourtModal() {
     return;
   }
 
-  // Populate dropdowns
+  // Populate court dropdown - exclude in-progress courts
+  const inProgressCourtNumbers = new Set(
+    currentSession.matches
+      .filter(m => m.status === 'in-progress')
+      .map(m => m.courtNumber)
+  );
+
+  courtSelect.innerHTML = '';
+  for (let i = 1; i <= currentSession.config.courts; i++) {
+    if (!inProgressCourtNumbers.has(i)) {
+      const option = document.createElement('option');
+      option.value = i.toString();
+      option.textContent = `Court ${i}`;
+      courtSelect.appendChild(option);
+    }
+  }
+
+  // Populate player dropdowns
   const selects = [team1P1, team1P2, team2P1, team2P2];
   selects.forEach((select, index) => {
     select.innerHTML = '<option value="">Select a player</option>';
@@ -2849,6 +2904,7 @@ function handleCreateCustomCourt() {
     return;
   }
 
+  const courtSelect = (document.getElementById('make-court-court-select') as HTMLSelectElement).value;
   const team1P1 = (document.getElementById('make-court-team1-player1') as HTMLSelectElement).value;
   const team1P2 = (document.getElementById('make-court-team1-player2') as HTMLSelectElement).value;
   const team2P1 = (document.getElementById('make-court-team2-player1') as HTMLSelectElement).value;
@@ -2856,8 +2912,8 @@ function handleCreateCustomCourt() {
 
   // Validation
   const selectedPlayers = [team1P1, team1P2, team2P1, team2P2];
-  if (selectedPlayers.includes('')) {
-    alert('Please select all 4 players');
+  if (selectedPlayers.includes('') || courtSelect === '') {
+    alert('Please select court and all 4 players');
     return;
   }
 
@@ -2867,16 +2923,16 @@ function handleCreateCustomCourt() {
     return;
   }
 
-  // Create the match
+  // Create the match on the selected court (bypasses all HARD CAP checks)
   const matchId = generateId();
-  const nextCourtNumber = Math.max(0, ...currentSession.matches.map(m => m.courtNumber)) + 1;
+  const courtNumber = parseInt(courtSelect, 10);
   
   const newMatch: Match = {
     id: matchId,
-    courtNumber: nextCourtNumber,
+    courtNumber: courtNumber,
     team1: [team1P1, team1P2],
     team2: [team2P1, team2P2],
-    status: 'waiting',
+    status: 'in-progress',
   };
 
   currentSession.matches.push(newMatch);

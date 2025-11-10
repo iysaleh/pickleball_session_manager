@@ -102,6 +102,7 @@ export type Session = {
   matchQueue: QueuedMatch[]; // Pre-generated matches for round-robin
   maxQueueSize: number; // Maximum number of matches to pre-generate
   advancedConfig: AdvancedConfig; // Algorithm tuning configuration (always present with defaults)
+  courtVarietyState: CourtVarietyState; // Track court mixing and variety
 };
 
 export type PlayerStats = {
@@ -122,4 +123,19 @@ export type PlayerRanking = {
   wins: number;
   losses: number;
   avgPointDifferential: number; // Average point differential per game
+};
+
+// Court mixing and variety tracking
+export type CourtMixHistory = {
+  courtNumber: number;
+  lastMixedWith: Set<number>; // Set of court numbers mixed with in last round
+  finishCount: number; // How many times this court has finished
+  varietyThreshold: number; // Current variety counter (0-100)
+};
+
+export type CourtVarietyState = {
+  courtMixes: Map<number, CourtMixHistory>; // Track each court's mix history
+  waitlistCourtCount: number; // How many "virtual courts" the waitlist represents
+  lastMixRound: number; // Track which round we're in for mix tracking
+  totalCourtFinishes: Map<number, number>; // Track total finishes per court (for balancing)
 };

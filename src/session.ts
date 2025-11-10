@@ -3,6 +3,7 @@ import { generateId, createPlayerStats, getPlayersWhoWaitedMost, shuffleArray, g
 import { selectPlayersForNextGame, createMatch } from './matchmaking';
 import { generateRoundRobinQueue } from './queue';
 import { generateKingOfCourtRound } from './kingofcourt';
+import { initializeCourtVarietyState, recordCourtFinish, updateVarietyThresholds, updateWaitlistCourt } from './court-variety';
 
 export function createSession(config: SessionConfig, maxQueueSize: number = 100): Session {
   const playerStats = new Map<string, PlayerStats>();
@@ -31,6 +32,9 @@ export function createSession(config: SessionConfig, maxQueueSize: number = 100)
   // Use provided advanced config or defaults
   const advancedConfig = config.advancedConfig || getDefaultAdvancedConfig();
   
+  // Initialize court variety tracking
+  const courtVarietyState = initializeCourtVarietyState(config.courts);
+  
   return {
     id: generateId(),
     config: finalConfig,
@@ -41,6 +45,7 @@ export function createSession(config: SessionConfig, maxQueueSize: number = 100)
     matchQueue,
     maxQueueSize,
     advancedConfig,
+    courtVarietyState,
   };
 }
 
@@ -264,6 +269,7 @@ export function evaluateAndCreateMatches(session: Session): Session {
         ...session,
         waitingPlayers,
         playerStats: newPlayerStats,
+        courtVarietyState: sessionWithClonedStats.courtVarietyState, // Preserve court variety state
       };
     }
 
@@ -303,6 +309,7 @@ export function evaluateAndCreateMatches(session: Session): Session {
       matches: [...session.matches, ...newMatches],
       waitingPlayers,
       playerStats: newPlayerStats,
+      courtVarietyState: sessionWithClonedStats.courtVarietyState, // Preserve court variety state
     };
   }
   
@@ -557,6 +564,15 @@ export function completeMatch(
     matches: updatedMatches,
     playerStats: newPlayerStats,
   };
+
+  // Record court finish in variety tracking (only on first completion, not edits)
+  if (!isEdit) {
+    recordCourtFinish(updated, match.courtNumber);
+    updateVarietyThresholds(updated);
+    
+    // Update waitlist court representation
+    updateWaitlistCourt(updated, updated.waitingPlayers.length);
+  }
   
   // Re-evaluate to create new matches (only if not an edit)
   // For king of the court, this allows continuous flow - new matches as courts free up
