@@ -71,18 +71,21 @@ export function addPlayerToSession(session: Session, player: Player): Session {
   const newActivePlayers = new Set(session.activePlayers);
   newActivePlayers.add(player.id);
   
+  // Clone playerStats to avoid mutating original map
+  const newPlayerStats = new Map(session.playerStats);
+
   // Create player stats with wait time set to max waited + 1
   const newStats = createPlayerStats(player.id);
   let maxWaited = 0;
-  session.playerStats.forEach(stats => {
+  newPlayerStats.forEach(stats => {
     if (stats.gamesWaited > maxWaited) {
       maxWaited = stats.gamesWaited;
     }
   });
   newStats.gamesWaited = maxWaited + 1;
-  
-  session.playerStats.set(player.id, newStats);
-  
+
+  newPlayerStats.set(player.id, newStats);
+
   const updated = {
     ...session,
     config: {
@@ -90,6 +93,7 @@ export function addPlayerToSession(session: Session, player: Player): Session {
       players: updatedPlayers,
     },
     activePlayers: newActivePlayers,
+    playerStats: newPlayerStats,
   };
   
   // For round-robin, regenerate the entire queue
@@ -152,21 +156,24 @@ export function addTeamToSession(session: Session, player1: Player, player2: Pla
   newActivePlayers.add(player1.id);
   newActivePlayers.add(player2.id);
   
+  // Clone playerStats to avoid mutating the original
+  const newPlayerStats = new Map(session.playerStats);
+
   // Create player stats with wait time set to max waited + 1 for both players
   const newStats1 = createPlayerStats(player1.id);
   const newStats2 = createPlayerStats(player2.id);
   let maxWaited = 0;
-  session.playerStats.forEach(stats => {
+  newPlayerStats.forEach(stats => {
     if (stats.gamesWaited > maxWaited) {
       maxWaited = stats.gamesWaited;
     }
   });
   newStats1.gamesWaited = maxWaited + 1;
   newStats2.gamesWaited = maxWaited + 1;
-  
-  session.playerStats.set(player1.id, newStats1);
-  session.playerStats.set(player2.id, newStats2);
-  
+
+  newPlayerStats.set(player1.id, newStats1);
+  newPlayerStats.set(player2.id, newStats2);
+
   // Add to locked teams
   const updatedLockedTeams = [...(session.config.lockedTeams || []), [player1.id, player2.id]];
   
@@ -178,6 +185,7 @@ export function addTeamToSession(session: Session, player1: Player, player2: Pla
       lockedTeams: updatedLockedTeams,
     },
     activePlayers: newActivePlayers,
+    playerStats: newPlayerStats,
   };
   
   // For round-robin, regenerate the entire queue
@@ -231,10 +239,15 @@ export function removeTeamFromSession(session: Session, player1Id: string, playe
 }
 
 export function evaluateAndCreateMatches(session: Session): Session {
+  // Clone playerStats so all mutations in this function operate on a fresh map
+  const newPlayerStats = new Map(session.playerStats);
+
   // King of the court uses continuous flow - generate matches for available courts
   if (session.config.mode === 'king-of-court') {
-    const newMatches = generateKingOfCourtRound(session);
-    
+    // Pass a shallow-cloned session that uses the cloned playerStats so internals update the same map
+    const sessionWithClonedStats: Session = { ...session, playerStats: newPlayerStats };
+    const newMatches = generateKingOfCourtRound(sessionWithClonedStats);
+
     if (newMatches.length === 0) {
       // Even if no new matches, update waiting list for currently non-playing players
       const currentlyPlaying = new Set<string>();
@@ -250,15 +263,16 @@ export function evaluateAndCreateMatches(session: Session): Session {
       return {
         ...session,
         waitingPlayers,
+        playerStats: newPlayerStats,
       };
     }
-    
+
     // Update waiting players stats for those not selected
     const selectedPlayers = new Set<string>();
     newMatches.forEach(match => {
       [...match.team1, ...match.team2].forEach(id => selectedPlayers.add(id));
     });
-    
+
     // Get players who are not currently in any match (active or new)
     const currentlyPlaying = new Set<string>();
     session.matches.forEach(match => {
@@ -269,25 +283,26 @@ export function evaluateAndCreateMatches(session: Session): Session {
     newMatches.forEach(match => {
       [...match.team1, ...match.team2].forEach(id => currentlyPlaying.add(id));
     });
-    
+
     const waitingPlayers = Array.from(session.activePlayers)
       .filter(id => !currentlyPlaying.has(id));
-    
+
     // CRITICAL: Increment gamesWaited for players who are waiting when new matches are created
     // This ensures wait priority is properly tracked
     if (newMatches.length > 0) {
       waitingPlayers.forEach(id => {
-        const stats = session.playerStats.get(id);
+        const stats = newPlayerStats.get(id);
         if (stats) {
           stats.gamesWaited++;
         }
       });
     }
-    
+
     return {
       ...session,
       matches: [...session.matches, ...newMatches],
       waitingPlayers,
+      playerStats: newPlayerStats,
     };
   }
   
@@ -349,7 +364,7 @@ export function evaluateAndCreateMatches(session: Session): Session {
         }
         
         // This match is valid - use it
-        const match = createMatch(courtNum, queuedMatch.team1, queuedMatch.team2, session.playerStats);
+        const match = createMatch(courtNum, queuedMatch.team1, queuedMatch.team2, newPlayerStats);
         newMatches.push(match);
         
         matchPlayers.forEach(id => assignedPlayers.add(id));
@@ -367,7 +382,7 @@ export function evaluateAndCreateMatches(session: Session): Session {
     // Update waiting players stats
     const stillWaiting = availablePlayers.filter((id) => !assignedPlayers.has(id));
     stillWaiting.forEach((id) => {
-      const stats = session.playerStats.get(id);
+      const stats = newPlayerStats.get(id);
       if (stats) {
         stats.gamesWaited++;
       }
@@ -378,6 +393,7 @@ export function evaluateAndCreateMatches(session: Session): Session {
       matches: [...session.matches, ...newMatches],
       waitingPlayers: stillWaiting,
       matchQueue: updatedQueue,
+      playerStats: newPlayerStats,
     };
     
     // Check if we need to refill the queue
@@ -393,7 +409,7 @@ export function evaluateAndCreateMatches(session: Session): Session {
     const selectedPlayers = selectPlayersForNextGame(
       stillAvailable,
       playersPerTeam,
-      session.playerStats,
+      newPlayerStats,
       session.config.bannedPairs
     );
     
@@ -402,7 +418,7 @@ export function evaluateAndCreateMatches(session: Session): Session {
     const team1 = selectedPlayers.slice(0, playersPerTeam);
     const team2 = selectedPlayers.slice(playersPerTeam);
     
-    const match = createMatch(courtNum, team1, team2, session.playerStats);
+    const match = createMatch(courtNum, team1, team2, newPlayerStats);
     newMatches.push(match);
     
     selectedPlayers.forEach((id) => assignedPlayers.add(id));
@@ -411,7 +427,7 @@ export function evaluateAndCreateMatches(session: Session): Session {
   // Update waiting players stats
   const stillWaiting = availablePlayers.filter((id) => !assignedPlayers.has(id));
   stillWaiting.forEach((id) => {
-    const stats = session.playerStats.get(id);
+    const stats = newPlayerStats.get(id);
     if (stats) {
       stats.gamesWaited++;
     }
@@ -421,6 +437,7 @@ export function evaluateAndCreateMatches(session: Session): Session {
     ...session,
     matches: [...session.matches, ...newMatches],
     waitingPlayers: stillWaiting,
+    playerStats: newPlayerStats,
   };
 }
 
@@ -446,6 +463,9 @@ export function completeMatch(
   const match = session.matches.find((m) => m.id === matchId);
   if (!match) return session;
   
+  // Clone playerStats so changes are applied to a fresh map and returned
+  const newPlayerStats = new Map(session.playerStats);
+
   // If match is already completed, this is an edit - need to recalculate stats
   const isEdit = match.status === 'completed';
   
@@ -455,18 +475,18 @@ export function completeMatch(
     const oldLosingTeam = match.score.team1Score > match.score.team2Score ? match.team2 : match.team1;
     
     oldWinningTeam.forEach((playerId) => {
-      const stats = session.playerStats.get(playerId);
+      const stats = newPlayerStats.get(playerId);
       if (stats) stats.wins--;
     });
     
     oldLosingTeam.forEach((playerId) => {
-      const stats = session.playerStats.get(playerId);
+      const stats = newPlayerStats.get(playerId);
       if (stats) stats.losses--;
     });
     
     // Revert point differential
     match.team1.forEach((playerId) => {
-      const stats = session.playerStats.get(playerId);
+      const stats = newPlayerStats.get(playerId);
       if (stats) {
         stats.totalPointsFor -= match.score!.team1Score;
         stats.totalPointsAgainst -= match.score!.team2Score;
@@ -474,7 +494,7 @@ export function completeMatch(
     });
     
     match.team2.forEach((playerId) => {
-      const stats = session.playerStats.get(playerId);
+      const stats = newPlayerStats.get(playerId);
       if (stats) {
         stats.totalPointsFor -= match.score!.team2Score;
         stats.totalPointsAgainst -= match.score!.team1Score;
@@ -484,7 +504,7 @@ export function completeMatch(
     // Not an edit - this is the first time completing this match
     // Increment gamesPlayed for all players
     [...match.team1, ...match.team2].forEach((playerId) => {
-      const stats = session.playerStats.get(playerId);
+      const stats = newPlayerStats.get(playerId);
       if (stats) stats.gamesPlayed++;
     });
   }
@@ -506,18 +526,18 @@ export function completeMatch(
   const losingTeam = team1Score > team2Score ? match.team2 : match.team1;
   
   winningTeam.forEach((playerId) => {
-    const stats = session.playerStats.get(playerId);
+    const stats = newPlayerStats.get(playerId);
     if (stats) stats.wins++;
   });
   
   losingTeam.forEach((playerId) => {
-    const stats = session.playerStats.get(playerId);
+    const stats = newPlayerStats.get(playerId);
     if (stats) stats.losses++;
   });
   
   // Update point differential
   match.team1.forEach((playerId) => {
-    const stats = session.playerStats.get(playerId);
+    const stats = newPlayerStats.get(playerId);
     if (stats) {
       stats.totalPointsFor += team1Score;
       stats.totalPointsAgainst += team2Score;
@@ -525,7 +545,7 @@ export function completeMatch(
   });
   
   match.team2.forEach((playerId) => {
-    const stats = session.playerStats.get(playerId);
+    const stats = newPlayerStats.get(playerId);
     if (stats) {
       stats.totalPointsFor += team2Score;
       stats.totalPointsAgainst += team1Score;
@@ -535,6 +555,7 @@ export function completeMatch(
   const updated = {
     ...session,
     matches: updatedMatches,
+    playerStats: newPlayerStats,
   };
   
   // Re-evaluate to create new matches (only if not an edit)
