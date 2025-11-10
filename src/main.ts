@@ -163,6 +163,27 @@ applyQueuePaginationBtn.addEventListener('click', handleApplyQueuePagination);
 queuePrevBtn.addEventListener('click', () => { queuePage = Math.max(0, queuePage - 1); renderQueue(); });
 queueNextBtn.addEventListener('click', () => { queuePage++; renderQueue(); });
 
+// Make Court event listeners
+const makeCourtBtn = document.getElementById('make-court-btn') as HTMLButtonElement;
+const makeCourtModal = document.getElementById('make-court-modal') as HTMLElement;
+const makeCourtModalClose = document.getElementById('make-court-modal-close') as HTMLButtonElement;
+const makeCourtCreateBtn = document.getElementById('make-court-create-btn') as HTMLButtonElement;
+const makeCourtCancelBtn = document.getElementById('make-court-cancel-btn') as HTMLButtonElement;
+const makeCourtApplySuggested = document.getElementById('make-court-apply-suggested') as HTMLButtonElement;
+const makeCourtSelects = document.querySelectorAll('.make-court-select') as NodeListOf<HTMLSelectElement>;
+
+makeCourtBtn?.addEventListener('click', openMakeCourtModal);
+makeCourtModalClose?.addEventListener('click', closeMakeCourtModal);
+makeCourtCancelBtn?.addEventListener('click', closeMakeCourtModal);
+makeCourtCreateBtn?.addEventListener('click', handleCreateCustomCourt);
+makeCourtApplySuggested?.addEventListener('click', applySuggestedTeamComposition);
+makeCourtModal?.addEventListener('click', (e) => {
+  if (e.target === makeCourtModal) closeMakeCourtModal();
+});
+makeCourtSelects.forEach(select => {
+  select.addEventListener('change', updateMakeCourtProbabilities);
+});
+
 // Locked teams event listeners
 sessionTypeSelect.addEventListener('change', handleSessionTypeChange);
 lockedTeamsCheckbox.addEventListener('change', handleLockedTeamsToggle);
@@ -2631,6 +2652,244 @@ function setupAdvancedConfigListeners() {
       });
     }
   });
+}
+
+// Make Court Modal Functions
+function openMakeCourtModal() {
+  if (!currentSession) {
+    alert('No active session');
+    return;
+  }
+
+  const modal = document.getElementById('make-court-modal') as HTMLElement;
+  const team1P1 = document.getElementById('make-court-team1-player1') as HTMLSelectElement;
+  const team1P2 = document.getElementById('make-court-team1-player2') as HTMLSelectElement;
+  const team2P1 = document.getElementById('make-court-team2-player1') as HTMLSelectElement;
+  const team2P2 = document.getElementById('make-court-team2-player2') as HTMLSelectElement;
+
+  // Get waiting players
+  const waitingPlayerIds = currentSession.waitingPlayers;
+  const playerMap = new Map(currentSession.config.players.map(p => [p.id, p]));
+  const waitingPlayers = waitingPlayerIds
+    .map(id => playerMap.get(id))
+    .filter((p): p is typeof playerMap extends Map<any, infer V> ? V : never => p !== undefined);
+
+  if (waitingPlayers.length < 4) {
+    alert(`Need at least 4 available players. Currently have ${waitingPlayers.length} waiting.`);
+    return;
+  }
+
+  // Populate dropdowns
+  const selects = [team1P1, team1P2, team2P1, team2P2];
+  selects.forEach((select, index) => {
+    select.innerHTML = '<option value="">Select a player</option>';
+    waitingPlayers.forEach(player => {
+      const option = document.createElement('option');
+      option.value = player.id;
+      option.textContent = player.name;
+      select.appendChild(option);
+    });
+  });
+
+  // Calculate and suggest best team composition
+  suggestBalancedTeamComposition(waitingPlayers);
+
+  modal.classList.add('show');
+}
+
+function closeMakeCourtModal() {
+  const modal = document.getElementById('make-court-modal') as HTMLElement;
+  modal.classList.remove('show');
+}
+
+function calculateTeamStrength(playerIds: string[]): number {
+  if (!currentSession) return 0;
+  
+  let totalWinRate = 0;
+  playerIds.forEach(id => {
+    const stats = currentSession!.playerStats.get(id);
+    if (stats && stats.gamesPlayed > 0) {
+      totalWinRate += stats.wins / stats.gamesPlayed;
+    }
+  });
+  
+  return totalWinRate / playerIds.length;
+}
+
+function calculateWinProbability(team1Ids: string[], team2Ids: string[]): { team1: number; team2: number } {
+  const team1Strength = calculateTeamStrength(team1Ids);
+  const team2Strength = calculateTeamStrength(team2Ids);
+  
+  const totalStrength = team1Strength + team2Strength;
+  if (totalStrength === 0) {
+    return { team1: 50, team2: 50 };
+  }
+  
+  const team1Prob = Math.round((team1Strength / totalStrength) * 100);
+  const team2Prob = 100 - team1Prob;
+  
+  return { team1: team1Prob, team2: team2Prob };
+}
+
+function updateMakeCourtProbabilities() {
+  if (!currentSession) return;
+
+  const team1P1 = (document.getElementById('make-court-team1-player1') as HTMLSelectElement).value;
+  const team1P2 = (document.getElementById('make-court-team1-player2') as HTMLSelectElement).value;
+  const team2P1 = (document.getElementById('make-court-team2-player1') as HTMLSelectElement).value;
+  const team2P2 = (document.getElementById('make-court-team2-player2') as HTMLSelectElement).value;
+
+  const validationMsg = document.getElementById('make-court-validation-message') as HTMLElement;
+  const team1ProbDiv = document.getElementById('make-court-team1-prob') as HTMLElement;
+  const team2ProbDiv = document.getElementById('make-court-team2-prob') as HTMLElement;
+
+  // Validation
+  const selectedPlayers = [team1P1, team1P2, team2P1, team2P2].filter(p => p !== '');
+  const uniqueSelected = new Set(selectedPlayers);
+  
+  validationMsg.style.display = 'none';
+  
+  if (uniqueSelected.size !== selectedPlayers.length) {
+    validationMsg.style.display = 'block';
+    validationMsg.style.background = '#f8d7da';
+    validationMsg.style.color = '#721c24';
+    validationMsg.style.border = '1px solid #f5c6cb';
+    validationMsg.textContent = '⚠️ Each player can only play once';
+    team1ProbDiv.textContent = '?';
+    team2ProbDiv.textContent = '?';
+    return;
+  }
+
+  // If all 4 selected, calculate probabilities
+  if (selectedPlayers.length === 4) {
+    const probs = calculateWinProbability(
+      [team1P1, team1P2],
+      [team2P1, team2P2]
+    );
+    team1ProbDiv.textContent = `${probs.team1}%`;
+    team2ProbDiv.textContent = `${probs.team2}%`;
+  } else {
+    team1ProbDiv.textContent = '?';
+    team2ProbDiv.textContent = '?';
+  }
+}
+
+function suggestBalancedTeamComposition(availablePlayers: Array<{id: string; name: string}>) {
+  if (!currentSession || availablePlayers.length < 4) return;
+
+  let bestComposition: any = null;
+  let bestBalance = Infinity;
+
+  // Try different combinations to find most balanced
+  for (let i = 0; i < Math.min(availablePlayers.length, 8); i++) {
+    for (let j = i + 1; j < Math.min(availablePlayers.length, 8); j++) {
+      for (let k = j + 1; k < Math.min(availablePlayers.length, 8); k++) {
+        for (let l = k + 1; l < Math.min(availablePlayers.length, 8); l++) {
+          // Try different team compositions
+          const compositions = [
+            { team1: [i, j], team2: [k, l] },
+            { team1: [i, k], team2: [j, l] },
+            { team1: [i, l], team2: [j, k] },
+          ];
+
+          compositions.forEach(comp => {
+            const team1Ids = [availablePlayers[comp.team1[0]].id, availablePlayers[comp.team1[1]].id];
+            const team2Ids = [availablePlayers[comp.team2[0]].id, availablePlayers[comp.team2[1]].id];
+            
+            const probs = calculateWinProbability(team1Ids, team2Ids);
+            const balance = Math.abs(probs.team1 - 50);
+            
+            if (balance < bestBalance) {
+              bestBalance = balance;
+              bestComposition = {
+                team1: comp.team1,
+                team2: comp.team2,
+                balance: Math.round(probs.team1),
+              };
+            }
+          });
+        }
+      }
+    }
+  }
+
+  if (bestComposition) {
+    // Store suggestion for later use
+    (window as any).suggestedComposition = {
+      team1Indices: bestComposition.team1,
+      team2Indices: bestComposition.team2,
+      players: availablePlayers,
+    };
+
+    const suggestionSection = document.getElementById('make-court-suggested-section') as HTMLElement;
+    suggestionSection.style.display = 'block';
+  }
+}
+
+function applySuggestedTeamComposition() {
+  const suggestion = (window as any).suggestedComposition;
+  if (!suggestion) return;
+
+  const team1P1 = document.getElementById('make-court-team1-player1') as HTMLSelectElement;
+  const team1P2 = document.getElementById('make-court-team1-player2') as HTMLSelectElement;
+  const team2P1 = document.getElementById('make-court-team2-player1') as HTMLSelectElement;
+  const team2P2 = document.getElementById('make-court-team2-player2') as HTMLSelectElement;
+
+  team1P1.value = suggestion.players[suggestion.team1Indices[0]].id;
+  team1P2.value = suggestion.players[suggestion.team1Indices[1]].id;
+  team2P1.value = suggestion.players[suggestion.team2Indices[0]].id;
+  team2P2.value = suggestion.players[suggestion.team2Indices[1]].id;
+
+  updateMakeCourtProbabilities();
+}
+
+function handleCreateCustomCourt() {
+  if (!currentSession) {
+    alert('No active session');
+    return;
+  }
+
+  const team1P1 = (document.getElementById('make-court-team1-player1') as HTMLSelectElement).value;
+  const team1P2 = (document.getElementById('make-court-team1-player2') as HTMLSelectElement).value;
+  const team2P1 = (document.getElementById('make-court-team2-player1') as HTMLSelectElement).value;
+  const team2P2 = (document.getElementById('make-court-team2-player2') as HTMLSelectElement).value;
+
+  // Validation
+  const selectedPlayers = [team1P1, team1P2, team2P1, team2P2];
+  if (selectedPlayers.includes('')) {
+    alert('Please select all 4 players');
+    return;
+  }
+
+  const uniqueSelected = new Set(selectedPlayers);
+  if (uniqueSelected.size !== 4) {
+    alert('Each player can only play once');
+    return;
+  }
+
+  // Create the match
+  const matchId = generateId();
+  const nextCourtNumber = Math.max(0, ...currentSession.matches.map(m => m.courtNumber)) + 1;
+  
+  const newMatch: Match = {
+    id: matchId,
+    courtNumber: nextCourtNumber,
+    team1: [team1P1, team1P2],
+    team2: [team2P1, team2P2],
+    status: 'waiting',
+  };
+
+  currentSession.matches.push(newMatch);
+
+  // Remove players from waiting list
+  currentSession.waitingPlayers = currentSession.waitingPlayers.filter(
+    id => !selectedPlayers.includes(id)
+  );
+
+  closeMakeCourtModal();
+  saveStateToLocalStorage();
+  renderSession();
+  renderActivePlayers();
 }
 
 // Initialize
