@@ -424,6 +424,7 @@ function deserializeSession(data: any): Session {
       waitlistCourtCount: data.courtVarietyState?.waitlistCourtCount || 0,
       lastMixRound: data.courtVarietyState?.lastMixRound || 0,
       totalCourtFinishes: totalCourtFinishes,
+      consecutiveWaitlistMixes: new Map(data.courtVarietyState?.consecutiveWaitlistMixes || []),
     },
     debugLogs: data.debugLogs || [],
   };
