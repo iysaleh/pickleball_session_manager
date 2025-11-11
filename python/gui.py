@@ -283,20 +283,22 @@ class CourtDisplayWidget(QWidget):
         # Score input area
         score_layout = QHBoxLayout()
         score_label = QLabel("Scores:")
-        score_label.setStyleSheet("QLabel { color: black; background-color: #e0e0e0; padding: 5px; border-radius: 3px; }")
+        score_label.setStyleSheet("QLabel { color: black; font-weight: bold; font-size: 12px; }")
         score_layout.addWidget(score_label)
         self.team1_score = QSpinBox()
         self.team1_score.setMinimum(0)
         self.team1_score.setMaximum(20)
-        self.team1_score.setStyleSheet("QSpinBox { background-color: #e0e0e0; color: black; border: 1px solid #999; border-radius: 3px; padding: 3px; }")
+        self.team1_score.setStyleSheet("QSpinBox { background-color: white; color: black; border: 1px solid #999; border-radius: 3px; padding: 5px; font-size: 12px; font-weight: bold; }")
+        self.team1_score.setMinimumWidth(50)
         score_layout.addWidget(self.team1_score)
         dash_label = QLabel("-")
-        dash_label.setStyleSheet("QLabel { color: black; background-color: #e0e0e0; padding: 5px; border-radius: 3px; }")
+        dash_label.setStyleSheet("QLabel { color: black; font-weight: bold; font-size: 14px; }")
         score_layout.addWidget(dash_label)
         self.team2_score = QSpinBox()
         self.team2_score.setMinimum(0)
         self.team2_score.setMaximum(20)
-        self.team2_score.setStyleSheet("QSpinBox { background-color: #e0e0e0; color: black; border: 1px solid #999; border-radius: 3px; padding: 3px; }")
+        self.team2_score.setStyleSheet("QSpinBox { background-color: white; color: black; border: 1px solid #999; border-radius: 3px; padding: 5px; font-size: 12px; font-weight: bold; }")
+        self.team2_score.setMinimumWidth(50)
         score_layout.addWidget(self.team2_score)
         score_layout.addStretch()
         layout.addLayout(score_layout)
@@ -357,14 +359,65 @@ class CourtDisplayWidget(QWidget):
             QMessageBox.warning(self, "Error", "Scores must be different (winner must have higher score)")
             return
         
-        msgbox = QMessageBox(self)
-        msgbox.setWindowTitle("Confirm Match Completion")
-        msgbox.setText(f"Team 1: {team1_score}\nTeam 2: {team2_score}\n\nConfirm result?")
-        msgbox.setStyleSheet("QMessageBox { background-color: #e0e0e0; } QMessageBox QLabel { color: black; background-color: #e0e0e0; } QPushButton { background-color: #d0d0d0; color: black; padding: 5px; border-radius: 3px; }")
-        msgbox.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        reply = msgbox.exec()
+        # Get player names for the match
+        team1_names = [get_player_name(self.session, pid) for pid in self.current_match.team1]
+        team2_names = [get_player_name(self.session, pid) for pid in self.current_match.team2]
+        team1_str = ", ".join(team1_names)
+        team2_str = ", ".join(team2_names)
         
-        if reply == QMessageBox.StandardButton.Yes:
+        # Order by winning score (higher score on top)
+        if team1_score > team2_score:
+            winner_str = team1_str
+            winner_score = team1_score
+            loser_str = team2_str
+            loser_score = team2_score
+        else:
+            winner_str = team2_str
+            winner_score = team2_score
+            loser_str = team1_str
+            loser_score = team1_score
+        
+        # Create custom dialog with large colored buttons
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Confirm Match Completion")
+        dialog.setStyleSheet("QDialog { background-color: #e0e0e0; } QLabel { color: black; background-color: #e0e0e0; }")
+        
+        layout = QVBoxLayout()
+        
+        # Score text - make it large and readable with player names, winner on top
+        score_text = QLabel(f"{winner_str}: {winner_score}\nbeat\n{loser_str}: {loser_score}\n\nConfirm result?")
+        score_text.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        score_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        score_text.setStyleSheet("QLabel { color: black; background-color: #e0e0e0; padding: 20px; line-height: 1.5; }")
+        layout.addWidget(score_text)
+        
+        # Button layout
+        button_layout = QHBoxLayout()
+        
+        # Yes button - large green
+        yes_btn = QPushButton("✓ Yes")
+        yes_btn.setMinimumHeight(60)
+        yes_btn.setMinimumWidth(120)
+        yes_btn.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        yes_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; border: none; border-radius: 5px; padding: 10px; } QPushButton:hover { background-color: #45a049; }")
+        yes_btn.clicked.connect(dialog.accept)
+        
+        # No button - large red
+        no_btn = QPushButton("✗ No")
+        no_btn.setMinimumHeight(60)
+        no_btn.setMinimumWidth(120)
+        no_btn.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        no_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; border: none; border-radius: 5px; padding: 10px; } QPushButton:hover { background-color: #da190b; }")
+        no_btn.clicked.connect(dialog.reject)
+        
+        button_layout.addWidget(yes_btn)
+        button_layout.addWidget(no_btn)
+        layout.addLayout(button_layout)
+        
+        dialog.setLayout(layout)
+        dialog.setMinimumWidth(400)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             if complete_match(self.session, self.current_match.id, team1_score, team2_score):
                 self.team1_score.setValue(0)
                 self.team2_score.setValue(0)
