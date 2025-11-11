@@ -11,10 +11,11 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLineEdit, QSpinBox, QComboBox, QLabel, QListWidget,
     QListWidgetItem, QDialog, QTabWidget, QTableWidget, QTableWidgetItem,
-    QMessageBox, QInputDialog, QSpinBox, QGroupBox, QCheckBox
+    QMessageBox, QInputDialog, QSpinBox, QGroupBox, QCheckBox, QFrame, QScrollArea,
+    QGridLayout, QSpacerItem, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtCore import Qt, QTimer, QRect, QSize
+from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen
 
 from python.types import (
     Player, Session, SessionConfig, GameMode, SessionType, Match,
@@ -214,7 +215,7 @@ class SetupDialog(QDialog):
 
 
 class CourtDisplayWidget(QWidget):
-    """Display for a single court"""
+    """Visual display of a court with team rectangles"""
     
     def __init__(self, court_number: int, session: Session, parent=None):
         super().__init__(parent)
@@ -225,74 +226,119 @@ class CourtDisplayWidget(QWidget):
     
     def init_ui(self):
         layout = QVBoxLayout()
+        layout.setContentsMargins(5, 5, 5, 5)
         
-        # Court title
-        title = QLabel(f"Court {self.court_number}")
-        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        layout.addWidget(title)
+        # Court header
+        header = QHBoxLayout()
+        self.title = QLabel(f"Court {self.court_number}")
+        self.title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        self.title.setStyleSheet("QLabel { color: black; }")
+        header.addWidget(self.title)
+        header.addStretch()
+        layout.addLayout(header)
         
-        # Team displays
-        content_layout = QHBoxLayout()
+        # Court visual area
+        self.court_area = QFrame()
+        self.court_area.setStyleSheet("QFrame { background-color: #c4d76d; border: 2px solid #333; border-radius: 5px; }")
+        self.court_area.setMinimumHeight(120)
+        court_layout = QVBoxLayout(self.court_area)
+        court_layout.setContentsMargins(10, 10, 10, 10)
         
-        # Team 1
-        self.team1_label = QLabel("Team 1:")
-        content_layout.addWidget(self.team1_label)
+        # Teams display
+        teams_layout = QHBoxLayout()
         
-        # VS text
-        content_layout.addWidget(QLabel("vs"))
+        # Team 1 side
+        team1_box = QFrame()
+        team1_box.setStyleSheet("QFrame { background-color: #ff9999; border: 2px solid #cc0000; border-radius: 3px; }")
+        team1_layout = QVBoxLayout(team1_box)
+        team1_layout.setContentsMargins(10, 10, 10, 10)
+        self.team1_label = QLabel("Team 1")
+        self.team1_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        self.team1_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.team1_label.setStyleSheet("QLabel { color: black; }")
+        team1_layout.addWidget(self.team1_label)
+        teams_layout.addWidget(team1_box)
         
-        # Team 2
-        self.team2_label = QLabel("Team 2:")
-        content_layout.addWidget(self.team2_label)
+        # Net separator
+        net = QFrame()
+        net.setStyleSheet("QFrame { background-color: #333; }")
+        net.setFixedWidth(4)
+        teams_layout.addWidget(net)
         
-        layout.addLayout(content_layout)
+        # Team 2 side
+        team2_box = QFrame()
+        team2_box.setStyleSheet("QFrame { background-color: #99ccff; border: 2px solid #0066cc; border-radius: 3px; }")
+        team2_layout = QVBoxLayout(team2_box)
+        team2_layout.setContentsMargins(10, 10, 10, 10)
+        self.team2_label = QLabel("Team 2")
+        self.team2_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        self.team2_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.team2_label.setStyleSheet("QLabel { color: black; }")
+        team2_layout.addWidget(self.team2_label)
+        teams_layout.addWidget(team2_box)
+        
+        court_layout.addLayout(teams_layout, 1)
+        layout.addWidget(self.court_area, 1)
         
         # Score input area
         score_layout = QHBoxLayout()
-        score_layout.addWidget(QLabel("Team 1 Score:"))
+        score_label = QLabel("Scores:")
+        score_label.setStyleSheet("QLabel { color: black; background-color: #e0e0e0; padding: 5px; border-radius: 3px; }")
+        score_layout.addWidget(score_label)
         self.team1_score = QSpinBox()
         self.team1_score.setMinimum(0)
+        self.team1_score.setMaximum(20)
+        self.team1_score.setStyleSheet("QSpinBox { background-color: #e0e0e0; color: black; border: 1px solid #999; border-radius: 3px; padding: 3px; }")
         score_layout.addWidget(self.team1_score)
-        
-        score_layout.addWidget(QLabel("Team 2 Score:"))
+        dash_label = QLabel("-")
+        dash_label.setStyleSheet("QLabel { color: black; background-color: #e0e0e0; padding: 5px; border-radius: 3px; }")
+        score_layout.addWidget(dash_label)
         self.team2_score = QSpinBox()
         self.team2_score.setMinimum(0)
+        self.team2_score.setMaximum(20)
+        self.team2_score.setStyleSheet("QSpinBox { background-color: #e0e0e0; color: black; border: 1px solid #999; border-radius: 3px; padding: 3px; }")
         score_layout.addWidget(self.team2_score)
-        
+        score_layout.addStretch()
         layout.addLayout(score_layout)
         
         # Buttons
         button_layout = QHBoxLayout()
         
-        complete_btn = QPushButton("Complete Match")
+        complete_btn = QPushButton("✓ Complete")
+        complete_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 5px; border-radius: 3px; }")
         complete_btn.clicked.connect(self.complete_match_clicked)
         button_layout.addWidget(complete_btn)
         
-        forfeit_btn = QPushButton("Forfeit")
+        forfeit_btn = QPushButton("✗ Forfeit")
+        forfeit_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 5px; border-radius: 3px; }")
         forfeit_btn.clicked.connect(self.forfeit_match_clicked)
         button_layout.addWidget(forfeit_btn)
         
         layout.addLayout(button_layout)
         
         self.setLayout(layout)
+        self.setStyleSheet("QWidget { border: 1px solid #ddd; border-radius: 5px; padding: 5px; background-color: #f9f9f9; }")
     
     def set_match(self, match: Optional[Match]):
         """Update display with a match"""
         self.current_match = match
         
         if not match:
-            self.team1_label.setText("Team 1: (waiting for match)")
-            self.team2_label.setText("Team 2: (waiting for match)")
+            self.team1_label.setText("Waiting for\nplayers...")
+            self.team2_label.setText("Waiting for\nplayers...")
             self.team1_score.setValue(0)
             self.team2_score.setValue(0)
+            self.court_area.setStyleSheet("QFrame { background-color: #e0e0e0; border: 2px dashed #999; border-radius: 5px; }")
             return
+        
+        self.court_area.setStyleSheet("QFrame { background-color: #c4d76d; border: 2px solid #333; border-radius: 5px; }")
         
         # Get player names
         team1_names = [get_player_name(self.session, pid) for pid in match.team1]
         team2_names = [get_player_name(self.session, pid) for pid in match.team2]
         
-        self.team1_label.setText(f"Team 1: {', '.join(team1_names)}")
-        self.team2_label.setText(f"Team 2: {', '.join(team2_names)}")
+        self.team1_label.setText("\n".join(team1_names))
+        self.team2_label.setText("\n".join(team2_names))
         
         if match.score:
             self.team1_score.setValue(match.score.get('team1_score', 0))
@@ -311,12 +357,19 @@ class CourtDisplayWidget(QWidget):
             QMessageBox.warning(self, "Error", "Scores must be different (winner must have higher score)")
             return
         
-        if complete_match(self.session, self.current_match.id, team1_score, team2_score):
-            QMessageBox.information(self, "Success", "Match completed!")
-            self.team1_score.setValue(0)
-            self.team2_score.setValue(0)
-        else:
-            QMessageBox.warning(self, "Error", "Failed to complete match")
+        msgbox = QMessageBox(self)
+        msgbox.setWindowTitle("Confirm Match Completion")
+        msgbox.setText(f"Team 1: {team1_score}\nTeam 2: {team2_score}\n\nConfirm result?")
+        msgbox.setStyleSheet("QMessageBox { background-color: #e0e0e0; } QMessageBox QLabel { color: black; background-color: #e0e0e0; } QPushButton { background-color: #d0d0d0; color: black; padding: 5px; border-radius: 3px; }")
+        msgbox.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        reply = msgbox.exec()
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            if complete_match(self.session, self.current_match.id, team1_score, team2_score):
+                self.team1_score.setValue(0)
+                self.team2_score.setValue(0)
+            else:
+                QMessageBox.warning(self, "Error", "Failed to complete match")
     
     def forfeit_match_clicked(self):
         """Handle forfeit button"""
@@ -324,12 +377,16 @@ class CourtDisplayWidget(QWidget):
             QMessageBox.warning(self, "Error", "No match to forfeit")
             return
         
-        reply = QMessageBox.question(self, "Confirm", "Forfeit this match?", 
-                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msgbox = QMessageBox(self)
+        msgbox.setWindowTitle("Confirm Forfeit")
+        msgbox.setText("Are you sure you want to forfeit this match?")
+        msgbox.setStyleSheet("QMessageBox { background-color: #e0e0e0; } QMessageBox QLabel { color: black; background-color: #e0e0e0; } QPushButton { background-color: #d0d0d0; color: black; padding: 5px; border-radius: 3px; }")
+        msgbox.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        reply = msgbox.exec()
         
         if reply == QMessageBox.StandardButton.Yes:
             if forfeit_match(self.session, self.current_match.id):
-                QMessageBox.information(self, "Success", "Match forfeited!")
+                pass
             else:
                 QMessageBox.warning(self, "Error", "Failed to forfeit match")
 
@@ -341,13 +398,12 @@ class SessionWindow(QMainWindow):
         super().__init__()
         try:
             self.session = session
-            self.parent_window = parent_window  # Keep reference to parent
+            self.parent_window = parent_window
             self.court_widgets: Dict[int, CourtDisplayWidget] = {}
             self.init_ui()
             self.update_timer = QTimer()
             self.update_timer.timeout.connect(self.refresh_display)
             self.update_timer.start(1000)
-            # Initial populate - AFTER court_widgets are created
             self.refresh_display()
         except Exception as e:
             error_msg = f"Error initializing SessionWindow:\n{str(e)}\n\nType: {type(e).__name__}"
@@ -359,7 +415,6 @@ class SessionWindow(QMainWindow):
     def closeEvent(self, event):
         """Handle window close"""
         self.update_timer.stop()
-        # Show parent window if it exists
         if self.parent_window:
             self.parent_window.show()
         event.accept()
@@ -369,68 +424,119 @@ class SessionWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        layout = QVBoxLayout()
+        main_layout = QVBoxLayout()
         
         # Title with info
         self.title = QLabel(f"{self.session.config.mode} - {self.session.config.session_type.title()}")
         self.title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        layout.addWidget(self.title)
+        self.title.setStyleSheet("QLabel { color: white; background-color: black; padding: 10px; border-radius: 3px; }")
+        main_layout.addWidget(self.title)
         
-        # Courts display
-        courts_layout = QHBoxLayout()
+        # Main content area (courts + waiting list)
+        content_layout = QHBoxLayout()
+        
+        # Courts section
+        courts_section = QVBoxLayout()
+        courts_label = QLabel("Active Courts")
+        courts_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        courts_label.setStyleSheet("QLabel { color: white; background-color: black; padding: 8px; border-radius: 3px; }")
+        courts_section.addWidget(courts_label)
+        
+        # Courts scroll area
+        courts_scroll = QScrollArea()
+        courts_scroll.setWidgetResizable(True)
+        courts_container = QWidget()
+        courts_layout = QGridLayout(courts_container)
+        courts_layout.setSpacing(10)
         
         for court_num in range(1, self.session.config.courts + 1):
             widget = CourtDisplayWidget(court_num, self.session)
             self.court_widgets[court_num] = widget
-            courts_layout.addWidget(widget)
+            row = (court_num - 1) // 2
+            col = (court_num - 1) % 2
+            courts_layout.addWidget(widget, row, col)
         
-        layout.addLayout(courts_layout)
+        courts_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding), 
+                            (self.session.config.courts + 1) // 2, 0, 1, 2)
+        courts_scroll.setWidget(courts_container)
+        courts_section.addWidget(courts_scroll, 1)
+        content_layout.addLayout(courts_section, 3)
         
-        # Waiting players info
-        self.waiting_info = QLabel("Waiting: 0 players")
-        layout.addWidget(self.waiting_info)
+        # Divider
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.VLine)
+        divider.setFrameShadow(QFrame.Shadow.Sunken)
+        content_layout.addWidget(divider)
+        
+        # Waiting list section
+        waiting_section = QVBoxLayout()
+        waiting_label = QLabel("⏳ Waitlist")
+        waiting_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        waiting_label.setStyleSheet("QLabel { color: white; background-color: black; padding: 8px; border-radius: 3px; }")
+        waiting_section.addWidget(waiting_label)
+        
+        self.waiting_list = QListWidget()
+        self.waiting_list.setMinimumWidth(200)
+        waiting_section.addWidget(self.waiting_list, 1)
+        
+        self.waiting_count = QLabel("0 players waiting")
+        self.waiting_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.waiting_count.setStyleSheet("QLabel { color: #666; font-weight: bold; }")
+        waiting_section.addWidget(self.waiting_count)
+        
+        content_layout.addLayout(waiting_section, 1)
+        main_layout.addLayout(content_layout, 1)
         
         # Control buttons
         button_layout = QHBoxLayout()
         
         end_btn = QPushButton("End Session")
+        end_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
         end_btn.clicked.connect(self.end_session)
         button_layout.addWidget(end_btn)
         
         button_layout.addStretch()
         
-        layout.addLayout(button_layout)
+        main_layout.addLayout(button_layout)
         
-        central_widget.setLayout(layout)
+        central_widget.setLayout(main_layout)
         self.setWindowTitle("Pickleball Session Manager")
-        self.resize(1200, 700)
+        self.resize(1400, 800)
     
     def update_title(self, summary: Dict):
         """Update title with session info"""
-        info = f"{self.session.config.mode} - {self.session.config.session_type.title()} | "
+        info = f"{self.session.config.mode.title()} - {self.session.config.session_type.title()} | "
         info += f"Courts: {summary['active_matches']}/{summary['total_courts']} | "
         info += f"Queued: {summary['queued_matches']} | "
         info += f"Completed: {summary['completed_matches']}"
         
         self.title.setText(info)
-        
-        self.waiting_info.setText(f"⏳ Waiting: {summary['waiting_players']} players")
     
     def refresh_display(self):
         """Refresh court displays"""
         try:
-            # Advance session (populate empty courts)
-            from python.queue_manager import populate_empty_courts, get_match_for_court, get_session_summary
+            from python.queue_manager import (
+                populate_empty_courts, get_match_for_court, get_session_summary,
+                get_waiting_players
+            )
             populate_empty_courts(self.session)
             
             # Update court displays
             for court_num in range(1, self.session.config.courts + 1):
                 widget = self.court_widgets.get(court_num)
                 if widget is None:
-                    print(f"WARNING: Court widget {court_num} not found in court_widgets")
                     continue
                 match = get_match_for_court(self.session, court_num)
                 widget.set_match(match)
+            
+            # Update waiting players list
+            waiting_ids = get_waiting_players(self.session)
+            self.waiting_list.clear()
+            for player_id in waiting_ids:
+                player_name = get_player_name(self.session, player_id)
+                self.waiting_list.addItem(player_name)
+            
+            self.waiting_count.setText(f"{len(waiting_ids)} player{'s' if len(waiting_ids) != 1 else ''} waiting")
             
             # Update summary info
             summary = get_session_summary(self.session)
@@ -443,8 +549,11 @@ class SessionWindow(QMainWindow):
     
     def end_session(self):
         """End the session"""
-        reply = QMessageBox.question(self, "Confirm", "End session?",
-                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        reply = QMessageBox.question(
+            self, "Confirm",
+            "End session?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
         
         if reply == QMessageBox.StandardButton.Yes:
             self.update_timer.stop()

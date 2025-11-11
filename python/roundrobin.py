@@ -159,17 +159,35 @@ def generate_round_robin_queue(
     
     iterations = 0
     max_iterations = len(all_matchups) * 10
+    used_players_this_round: Set[str] = set()
     
     while iterations < max_iterations and len(matches) < max_matches:
-        # Score all remaining matchups
+        # Score all remaining matchups, excluding players already in this iteration
         scored = []
+        
         for team1, team2 in all_matchups:
+            # Skip if any player is already scheduled in this round
+            all_players_in_matchup = set(team1 + team2)
+            if all_players_in_matchup & used_players_this_round:
+                continue
+            
             score = score_matchup(team1, team2)
             if score >= 0:
                 scored.append((score, team1, team2))
         
         if not scored:
-            break
+            # No more valid matchups this round - reset for next round
+            used_players_this_round.clear()
+            
+            # Try to find any valid matchup for next round
+            scored = []
+            for team1, team2 in all_matchups:
+                score = score_matchup(team1, team2)
+                if score >= 0:
+                    scored.append((score, team1, team2))
+            
+            if not scored:
+                break
         
         # Pick best matchup
         scored.sort(reverse=True, key=lambda x: x[0])
@@ -179,6 +197,10 @@ def generate_round_robin_queue(
         matches.append(QueuedMatch(team1=best_team1, team2=best_team2))
         matchup_key = get_matchup_key(best_team1, best_team2)
         used_matchups.add(matchup_key)
+        
+        # Track players used in this round
+        used_players_this_round.update(best_team1)
+        used_players_this_round.update(best_team2)
         
         # Update tracking
         for player_id in best_team1:
@@ -199,6 +221,12 @@ def generate_round_robin_queue(
         
         four_key = get_four_player_key(best_team1, best_team2)
         four_player_group_count[four_key] = four_player_group_count.get(four_key, 0) + 1
+        
+        # Check if we can fit more matches in this round
+        unused_players = set(player_ids) - used_players_this_round
+        if len(unused_players) < players_per_match:
+            # Not enough unused players for another match - reset for next round
+            used_players_this_round.clear()
         
         iterations += 1
     
