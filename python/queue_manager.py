@@ -226,11 +226,19 @@ def populate_empty_courts(session: Session) -> Session:
     Only assigns matches where no players are already in active games.
     Prioritizes matches with players who have waited longest.
     
+    For Competitive Variety mode, uses specialized matching rules.
+    
     For variety: With 12+ players, only creates dynamic matches if they have
     low repetition (0-1 prior pairings). Otherwise waits for queue matches.
     """
+    # Handle competitive-variety mode separately
+    if session.config.mode == 'competitive-variety':
+        from .competitive_variety import populate_empty_courts_competitive_variety
+        populate_empty_courts_competitive_variety(session)
+        return session
+    
     if session.config.mode != 'round-robin':
-        # Only auto-populate for round-robin for now
+        # Only auto-populate for round-robin and competitive-variety for now
         return session
     
     # Find empty courts

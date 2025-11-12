@@ -64,9 +64,21 @@ class PlayerListWidget(QWidget):
         add_btn = QPushButton("Add Player")
         add_btn.clicked.connect(self.add_player)
         
+        remove_btn = QPushButton("Remove Selected")
+        remove_btn.clicked.connect(self.remove_selected_player)
+        
         input_layout.addWidget(self.player_input)
         input_layout.addWidget(add_btn)
+        input_layout.addWidget(remove_btn)
         layout.addLayout(input_layout)
+        
+        # Player count
+        count_layout = QHBoxLayout()
+        self.player_count_label = QLabel("Total Players: 0")
+        self.player_count_label.setStyleSheet("font-weight: bold; font-size: 12px;")
+        count_layout.addWidget(self.player_count_label)
+        count_layout.addStretch()
+        layout.addLayout(count_layout)
         
         # Player list
         self.player_list = QListWidget()
@@ -78,7 +90,6 @@ class PlayerListWidget(QWidget):
         """Add a player to the list"""
         name = self.player_input.text().strip()
         if not name:
-            QMessageBox.warning(self, "Error", "Please enter a player name")
             return
         
         player = Player(id=f"player_{len(self.players)}_{datetime.now().timestamp()}", name=name)
@@ -90,6 +101,7 @@ class PlayerListWidget(QWidget):
         
         self.player_input.clear()
         self.player_input.setFocus()
+        self.update_player_count()
     
     def remove_selected_player(self):
         """Remove selected player from list"""
@@ -101,15 +113,21 @@ class PlayerListWidget(QWidget):
         player_id = current_item.data(Qt.ItemDataRole.UserRole)
         self.players = [p for p in self.players if p.id != player_id]
         self.player_list.takeItem(self.player_list.row(current_item))
+        self.update_player_count()
     
     def get_players(self) -> List[Player]:
         """Get current player list"""
         return self.players.copy()
     
+    def update_player_count(self):
+        """Update the player count label"""
+        self.player_count_label.setText(f"Total Players: {len(self.players)}")
+    
     def clear(self):
         """Clear all players"""
         self.players = []
         self.player_list.clear()
+        self.update_player_count()
 
 
 class SetupDialog(QDialog):
@@ -127,7 +145,7 @@ class SetupDialog(QDialog):
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel("Game Mode:"))
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Round Robin", "King of the Court"])
+        self.mode_combo.addItems(["Round Robin", "King of the Court", "Competitive Variety"])
         mode_layout.addWidget(self.mode_combo)
         mode_layout.addStretch()
         layout.addLayout(mode_layout)
@@ -193,6 +211,8 @@ class SetupDialog(QDialog):
             item = QListWidgetItem(name)
             item.setData(Qt.ItemDataRole.UserRole, player.id)
             self.player_widget.player_list.addItem(item)
+        
+        self.player_widget.update_player_count()
     
     def start_session(self):
         """Create and start a session"""
@@ -204,7 +224,12 @@ class SetupDialog(QDialog):
                 return
             
             mode_text = self.mode_combo.currentText()
-            mode: GameMode = 'round-robin' if mode_text == "Round Robin" else 'king-of-court'
+            if mode_text == "Round Robin":
+                mode: GameMode = 'round-robin'
+            elif mode_text == "King of the Court":
+                mode: GameMode = 'king-of-court'
+            else:
+                mode: GameMode = 'competitive-variety'
             
             type_text = self.type_combo.currentText()
             session_type: SessionType = 'doubles' if type_text == "Doubles" else 'singles'

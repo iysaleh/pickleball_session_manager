@@ -221,6 +221,11 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
             if player_id in session.player_stats:
                 session.player_stats[player_id].games_waited += 1
     
+    # Update variety tracking for competitive-variety mode
+    if session.config.mode == 'competitive-variety':
+        from .competitive_variety import update_variety_tracking_after_match
+        update_variety_tracking_after_match(session, match.court_number, match.team1, match.team2)
+    
     return True
 
 

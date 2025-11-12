@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import List, Set, Dict, Optional, Literal
 from datetime import datetime
 
-GameMode = Literal['king-of-court', 'round-robin']
+GameMode = Literal['king-of-court', 'round-robin', 'competitive-variety']
 SessionType = Literal['doubles', 'singles']
 MatchStatus = Literal['waiting', 'in-progress', 'completed', 'forfeited']
 
@@ -130,6 +130,10 @@ class Session:
     match_queue: List[QueuedMatch] = field(default_factory=list)
     max_queue_size: int = 100
     advanced_config: AdvancedConfig = field(default_factory=AdvancedConfig)
+    # Competitive Variety Matchmaking tracking
+    player_last_court: Dict[str, int] = field(default_factory=dict)  # player_id -> court_number
+    court_players: Dict[int, List[str]] = field(default_factory=dict)  # court_number -> [player_ids]
+    courts_mixed_history: Set[tuple] = field(default_factory=set)  # Set of (court_a, court_b) tuples that have mixed
 
 
 @dataclass
