@@ -44,6 +44,18 @@ class ClickableLabel(QLabel):
             self.parent().edit_court_title()
 
 
+class EditableCourtFrame(QFrame):
+    """Custom frame that handles double-click for court editing"""
+    
+    def __init__(self, court_widget, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.court_widget = court_widget
+    
+    def mouseDoubleClickEvent(self, event):
+        """Handle double-click on court to edit"""
+        self.court_widget.edit_court_teams()
+
+
 class PlayerListWidget(QWidget):
     """Widget for managing player list"""
     
@@ -280,7 +292,7 @@ class CourtDisplayWidget(QWidget):
         layout.addLayout(header)
         
         # Court visual area
-        self.court_area = QFrame()
+        self.court_area = EditableCourtFrame(self)
         self.court_area.setStyleSheet("QFrame { background-color: #c4d76d; border: 2px solid #333; border-radius: 5px; }")
         self.court_area.setMinimumHeight(120)
         court_layout = QVBoxLayout(self.court_area)
@@ -537,6 +549,26 @@ class CourtDisplayWidget(QWidget):
                     self.title.setText(self.custom_title)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error editing court title:\n{str(e)}")
+    
+    def edit_court_teams(self):
+        """Edit the teams on this court (double-click handler)"""
+        try:
+            if not self.current_match:
+                QMessageBox.warning(self, "No Match", "No match currently on this court")
+                return
+            
+            # Get parent session window
+            parent_window = self.parent()
+            while parent_window and not isinstance(parent_window, SessionWindow):
+                parent_window = parent_window.parent()
+            
+            if not parent_window:
+                QMessageBox.critical(self, "Error", "Could not find parent window")
+                return
+            
+            parent_window.edit_court_match(self.court_number, self.current_match.id)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error editing court:\n{str(e)}")
 
 
 class SessionWindow(QMainWindow):
@@ -671,6 +703,11 @@ class SessionWindow(QMainWindow):
         
         # Control buttons
         button_layout = QHBoxLayout()
+        
+        make_court_btn = QPushButton("🏗️ Make Court")
+        make_court_btn.setStyleSheet("QPushButton { background-color: #555555; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
+        make_court_btn.clicked.connect(self.make_court)
+        button_layout.addWidget(make_court_btn)
         
         players_btn = QPushButton("👥 Add/Remove Players")
         players_btn.setStyleSheet("QPushButton { background-color: #9C27B0; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
@@ -821,22 +858,50 @@ class SessionWindow(QMainWindow):
                 export_lines.append("  (No players waiting)")
             export_lines.append("")
             
-            # Player statistics
-            export_lines.append("PLAYER STATISTICS:")
-            export_lines.append("-" * 70)
-            export_lines.append(f"{'Player':<25} {'W-L':<10} {'Games Played':<15} {'Win %':<10}")
+            # Player statistics sorted by ELO
+            export_lines.append("PLAYER STATISTICS (sorted by ELO):")
             export_lines.append("-" * 70)
             
+            # Collect player data with ELO ratings
+            player_data = []
             for player in self.session.config.players:
-                if player.id in self.session.active_players:
-                    stats = self.session.player_stats[player.id]
-                    record = f"{stats.wins}-{stats.losses}"
-                    win_pct = (stats.wins / stats.games_played * 100) if stats.games_played > 0 else 0
-                    win_pct_str = f"{win_pct:.1f}%" if stats.games_played > 0 else "N/A"
-                    
-                    export_lines.append(
-                        f"{player.name:<25} {record:<10} {stats.games_played:<15} {win_pct_str:<10}"
-                    )
+                if player.id not in self.session.active_players:
+                    continue
+                
+                stats = self.session.player_stats[player.id]
+                
+                # Calculate ELO rating for all modes
+                elo = 0
+                try:
+                    if self.session.config.mode == 'competitive-variety':
+                        from python.competitive_variety import calculate_elo_rating
+                        elo = calculate_elo_rating(stats)
+                    else:
+                        # For other modes, use a simple ELO-like calculation
+                        from python.kingofcourt import calculate_player_rating
+                        elo = calculate_player_rating(stats)
+                except:
+                    # Fallback if ELO calculation fails
+                    elo = 1500 if stats.games_played == 0 else (1500 + (stats.wins - stats.losses) * 50)
+                
+                record = f"{stats.wins}-{stats.losses}"
+                win_pct = (stats.wins / stats.games_played * 100) if stats.games_played > 0 else 0
+                
+                player_data.append((player.name, elo, record, stats.games_played, win_pct))
+            
+            # Sort by ELO descending
+            player_data.sort(key=lambda x: x[1], reverse=True)
+            
+            # Write header
+            export_lines.append(f"{'Player':<25} {'ELO':<10} {'W-L':<10} {'Games':<10} {'Win %':<10}")
+            export_lines.append("-" * 70)
+            
+            # Write player data
+            for player_name, elo, record, games_played, win_pct in player_data:
+                win_pct_str = f"{win_pct:.1f}%" if games_played > 0 else "N/A"
+                export_lines.append(
+                    f"{player_name:<25} {elo:<10.0f} {record:<10} {games_played:<10} {win_pct_str:<10}"
+                )
             
             export_lines.append("")
             
@@ -1347,6 +1412,287 @@ class SessionWindow(QMainWindow):
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error showing statistics:\n{str(e)}")
+    
+    def make_court(self):
+        """Open dialog to manually create a match on an empty court"""
+        try:
+            from python.queue_manager import get_empty_courts, get_waiting_players
+            from python.session import create_manual_match
+            
+            empty_courts = get_empty_courts(self.session)
+            waiting_ids = get_waiting_players(self.session)
+            
+            if not empty_courts:
+                QMessageBox.warning(self, "No Empty Courts", "All courts are currently occupied")
+                return
+            
+            if len(waiting_ids) < 4:
+                QMessageBox.warning(self, "Not Enough Players", "Need at least 4 players in the waitlist")
+                return
+            
+            # Create dialog
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Make Court")
+            dialog.setStyleSheet("QDialog { background-color: #2a2a2a; } QLabel { color: white; background-color: #2a2a2a; } QComboBox { background-color: #3a3a3a; color: white; } QListWidget { background-color: #3a3a3a; color: white; }")
+            dialog.setMinimumWidth(500)
+            
+            layout = QVBoxLayout()
+            
+            # Court selection
+            court_layout = QHBoxLayout()
+            court_layout.addWidget(QLabel("Select Court:"))
+            court_combo = QComboBox()
+            court_combo.addItems([f"Court {c}" for c in empty_courts])
+            court_combo.setData = lambda idx, role, val: None  # Make it selectable
+            court_layout.addWidget(court_combo)
+            layout.addLayout(court_layout)
+            
+            # Team 1 selection
+            team1_label = QLabel("Team 1 Players:")
+            team1_label.setStyleSheet("QLabel { color: #ff9999; font-weight: bold; }")
+            layout.addWidget(team1_label)
+            team1_list = QListWidget()
+            team1_list.setMaximumHeight(100)
+            team1_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+            for player_id in waiting_ids:
+                player_name = get_player_name(self.session, player_id)
+                item = QListWidgetItem(player_name)
+                item.setData(Qt.ItemDataRole.UserRole, player_id)
+                team1_list.addItem(item)
+            layout.addWidget(team1_list)
+            
+            # Team 2 selection
+            team2_label = QLabel("Team 2 Players:")
+            team2_label.setStyleSheet("QLabel { color: #99ccff; font-weight: bold; }")
+            layout.addWidget(team2_label)
+            team2_list = QListWidget()
+            team2_list.setMaximumHeight(100)
+            team2_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+            for player_id in waiting_ids:
+                player_name = get_player_name(self.session, player_id)
+                item = QListWidgetItem(player_name)
+                item.setData(Qt.ItemDataRole.UserRole, player_id)
+                team2_list.addItem(item)
+            layout.addWidget(team2_list)
+            
+            # Buttons
+            button_layout = QHBoxLayout()
+            
+            create_btn = QPushButton("Create Court")
+            create_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 8px; border-radius: 3px; }")
+            button_layout.addWidget(create_btn)
+            
+            cancel_btn = QPushButton("Cancel")
+            cancel_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 8px; border-radius: 3px; }")
+            button_layout.addWidget(cancel_btn)
+            
+            layout.addLayout(button_layout)
+            dialog.setLayout(layout)
+            
+            def create_court():
+                # Get selections
+                court_text = court_combo.currentText()
+                court_num = int(court_text.split()[-1])
+                
+                team1_items = team1_list.selectedItems()
+                team2_items = team2_list.selectedItems()
+                
+                if not team1_items or not team2_items:
+                    QMessageBox.warning(dialog, "Error", "Please select at least one player for each team")
+                    return
+                
+                team1_ids = [item.data(Qt.ItemDataRole.UserRole) for item in team1_items]
+                team2_ids = [item.data(Qt.ItemDataRole.UserRole) for item in team2_items]
+                
+                # Check for overlapping players
+                if set(team1_ids) & set(team2_ids):
+                    QMessageBox.warning(dialog, "Error", "A player cannot be on both teams")
+                    return
+                
+                # Get session type to validate team size
+                if self.session.config.session_type == 'doubles' and (len(team1_ids) != 2 or len(team2_ids) != 2):
+                    QMessageBox.warning(dialog, "Error", "Each team must have exactly 2 players for doubles")
+                    return
+                elif self.session.config.session_type == 'singles' and (len(team1_ids) != 1 or len(team2_ids) != 1):
+                    QMessageBox.warning(dialog, "Error", "Each team must have exactly 1 player for singles")
+                    return
+                
+                # Create match
+                if create_manual_match(self.session, court_num, team1_ids, team2_ids):
+                    self.refresh_display()
+                    dialog.accept()
+                else:
+                    QMessageBox.critical(dialog, "Error", "Failed to create court")
+            
+            create_btn.clicked.connect(create_court)
+            cancel_btn.clicked.connect(dialog.reject)
+            
+            dialog.exec()
+        
+        except Exception as e:
+            error_msg = f"Error making court:\n{str(e)}"
+            print(f"MAKE COURT ERROR: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Error", error_msg)
+    
+    def edit_court_match(self, court_number: int, match_id: str):
+        """Edit a court's match (swap players or change orientation)"""
+        try:
+            from python.queue_manager import get_waiting_players
+            from python.session import update_match_teams
+            
+            # Find the match
+            match = None
+            for m in self.session.matches:
+                if m.id == match_id:
+                    match = m
+                    break
+            
+            if not match or match.status not in ['waiting', 'in-progress']:
+                QMessageBox.warning(self, "Invalid Match", "Cannot edit this match")
+                return
+            
+            waiting_ids = get_waiting_players(self.session)
+            all_available_ids = list(waiting_ids) + match.team1 + match.team2
+            all_available_ids = list(set(all_available_ids))  # Remove duplicates
+            
+            # Create edit dialog
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"Edit Court {court_number}")
+            dialog.setStyleSheet("QDialog { background-color: #2a2a2a; } QLabel { color: white; background-color: #2a2a2a; } QComboBox { background-color: #3a3a3a; color: white; } QListWidget { background-color: #3a3a3a; color: white; }")
+            dialog.setMinimumWidth(500)
+            
+            layout = QVBoxLayout()
+            
+            # Current teams display
+            current_label = QLabel("Current Teams:")
+            current_label.setStyleSheet("QLabel { color: white; font-weight: bold; }")
+            layout.addWidget(current_label)
+            
+            current_text = f"Team 1: {', '.join([get_player_name(self.session, pid) for pid in match.team1])}\n"
+            current_text += f"Team 2: {', '.join([get_player_name(self.session, pid) for pid in match.team2])}"
+            current_info = QLabel(current_text)
+            current_info.setStyleSheet("QLabel { color: #aaa; background-color: #1a1a1a; padding: 5px; border-radius: 3px; }")
+            layout.addWidget(current_info)
+            
+            layout.addSpacing(10)
+            
+            # Team 1 selection
+            team1_label = QLabel("New Team 1 Players:")
+            team1_label.setStyleSheet("QLabel { color: #ff9999; font-weight: bold; }")
+            layout.addWidget(team1_label)
+            team1_list = QListWidget()
+            team1_list.setMaximumHeight(100)
+            team1_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+            for player_id in all_available_ids:
+                player_name = get_player_name(self.session, player_id)
+                item = QListWidgetItem(player_name)
+                item.setData(Qt.ItemDataRole.UserRole, player_id)
+                team1_list.addItem(item)
+                # Pre-select current team 1 members
+                if player_id in match.team1:
+                    item.setSelected(True)
+            layout.addWidget(team1_list)
+            
+            # Team 2 selection
+            team2_label = QLabel("New Team 2 Players:")
+            team2_label.setStyleSheet("QLabel { color: #99ccff; font-weight: bold; }")
+            layout.addWidget(team2_label)
+            team2_list = QListWidget()
+            team2_list.setMaximumHeight(100)
+            team2_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+            for player_id in all_available_ids:
+                player_name = get_player_name(self.session, player_id)
+                item = QListWidgetItem(player_name)
+                item.setData(Qt.ItemDataRole.UserRole, player_id)
+                team2_list.addItem(item)
+                # Pre-select current team 2 members
+                if player_id in match.team2:
+                    item.setSelected(True)
+            layout.addWidget(team2_list)
+            
+            # Buttons
+            button_layout = QHBoxLayout()
+            
+            save_btn = QPushButton("Save Changes")
+            save_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 8px; border-radius: 3px; }")
+            button_layout.addWidget(save_btn)
+            
+            swap_btn = QPushButton("Swap Teams")
+            swap_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 8px; border-radius: 3px; }")
+            button_layout.addWidget(swap_btn)
+            
+            cancel_btn = QPushButton("Cancel")
+            cancel_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 8px; border-radius: 3px; }")
+            button_layout.addWidget(cancel_btn)
+            
+            layout.addLayout(button_layout)
+            dialog.setLayout(layout)
+            
+            def save_changes():
+                team1_items = team1_list.selectedItems()
+                team2_items = team2_list.selectedItems()
+                
+                if not team1_items or not team2_items:
+                    QMessageBox.warning(dialog, "Error", "Please select at least one player for each team")
+                    return
+                
+                team1_ids = [item.data(Qt.ItemDataRole.UserRole) for item in team1_items]
+                team2_ids = [item.data(Qt.ItemDataRole.UserRole) for item in team2_items]
+                
+                # Check for overlapping players
+                if set(team1_ids) & set(team2_ids):
+                    QMessageBox.warning(dialog, "Error", "A player cannot be on both teams")
+                    return
+                
+                # Validate team sizes
+                if self.session.config.session_type == 'doubles' and (len(team1_ids) != 2 or len(team2_ids) != 2):
+                    QMessageBox.warning(dialog, "Error", "Each team must have exactly 2 players for doubles")
+                    return
+                elif self.session.config.session_type == 'singles' and (len(team1_ids) != 1 or len(team2_ids) != 1):
+                    QMessageBox.warning(dialog, "Error", "Each team must have exactly 1 player for singles")
+                    return
+                
+                # Update match
+                if update_match_teams(self.session, match_id, team1_ids, team2_ids):
+                    self.refresh_display()
+                    dialog.accept()
+                else:
+                    QMessageBox.critical(dialog, "Error", "Failed to update court")
+            
+            def swap_teams():
+                # Swap the current selections
+                team1_current = [item.data(Qt.ItemDataRole.UserRole) for item in team1_list.selectedItems()]
+                team2_current = [item.data(Qt.ItemDataRole.UserRole) for item in team2_list.selectedItems()]
+                
+                # Clear selections
+                team1_list.clearSelection()
+                team2_list.clearSelection()
+                
+                # Swap selections
+                for i in range(team1_list.count()):
+                    item = team1_list.item(i)
+                    if item.data(Qt.ItemDataRole.UserRole) in team2_current:
+                        item.setSelected(True)
+                
+                for i in range(team2_list.count()):
+                    item = team2_list.item(i)
+                    if item.data(Qt.ItemDataRole.UserRole) in team1_current:
+                        item.setSelected(True)
+            
+            save_btn.clicked.connect(save_changes)
+            swap_btn.clicked.connect(swap_teams)
+            cancel_btn.clicked.connect(dialog.reject)
+            
+            dialog.exec()
+        
+        except Exception as e:
+            error_msg = f"Error editing court:\n{str(e)}"
+            print(f"EDIT COURT ERROR: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Error", error_msg)
     
     def end_session(self):
         """End the session"""

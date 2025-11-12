@@ -279,3 +279,75 @@ def evaluate_and_create_matches(session: Session) -> Session:
     # This is a placeholder - actual implementation will differ by game mode
     # For now, just return the session
     return session
+
+
+def create_manual_match(session: Session, court_number: int, team1_ids: List[str], team2_ids: List[str]) -> bool:
+    """
+    Manually create a match on a court, replacing any existing match.
+    Used for 'Make Court' and 'Edit Court' features.
+    
+    Returns True if successful, False otherwise.
+    """
+    # Validate players
+    all_player_ids = set(team1_ids + team2_ids)
+    for player_id in all_player_ids:
+        if player_id not in session.active_players:
+            return False
+    
+    # Check for duplicate players
+    if len(all_player_ids) != len(team1_ids) + len(team2_ids):
+        return False
+    
+    # Check court number validity
+    if court_number < 1 or court_number > session.config.courts:
+        return False
+    
+    # Remove any existing match on this court
+    for match in session.matches[:]:
+        if match.court_number == court_number and match.status in ['waiting', 'in-progress']:
+            match.status = 'forfeited'
+            match.end_time = datetime.now()
+    
+    # Create new match
+    match = Match(
+        id=generate_id(),
+        court_number=court_number,
+        team1=team1_ids,
+        team2=team2_ids,
+        status='waiting'
+    )
+    
+    session.matches.append(match)
+    return True
+
+
+def update_match_teams(session: Session, match_id: str, team1_ids: List[str], team2_ids: List[str]) -> bool:
+    """
+    Update the teams for an existing match (for Edit Court).
+    Returns True if successful, False otherwise.
+    """
+    # Validate players
+    all_player_ids = set(team1_ids + team2_ids)
+    for player_id in all_player_ids:
+        if player_id not in session.active_players:
+            return False
+    
+    # Check for duplicate players
+    if len(all_player_ids) != len(team1_ids) + len(team2_ids):
+        return False
+    
+    # Find match
+    match = None
+    for m in session.matches:
+        if m.id == match_id:
+            match = m
+            break
+    
+    if not match or match.status not in ['waiting', 'in-progress']:
+        return False
+    
+    # Update teams
+    match.team1 = team1_ids
+    match.team2 = team2_ids
+    
+    return True
