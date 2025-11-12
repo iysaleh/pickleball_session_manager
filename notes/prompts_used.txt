@@ -325,6 +325,12 @@ This is great. Some improvements if you please:
 ### Revision 46
 * Please add the current game mode to the Active Session page after the Session Controls label, EG "Session Controls - King of the Court" or "Session Controls - Round Robin"
 
+### Revision 47
+* We need to augment both round robin and king of the court modes to keep track of which courts finish... If, for example, the same 2 courts finish twice before the other courts finish once, then we should wait until the other court finishes and then make a court. Every court needs to have an individual mix threshold counter. The waitlist should count as a court (the formula #waitlisted/4 should be used to determine how many courts the waitlist counts as, for example, if we have 8 players on the waitlist, that's 2 courts of diversity.) We need to slowly expand and decrease a variety counter. Keep track of which courts mixed with each courts last -- never mix with the same courts twice in a row, have them wait for another court to open, then mix all 3 courts (making the most balanced games possible).
+
+### Revision 47.1
+* Remember to treat the waitlist like a court, put a hard cap on the same courts mixing 2 times in a row.
+
 For the session stalled condition in @pickleball-session-11-05-2025-10-11.txt that you fixed, you added the comment: "CRITICAL: If ALL courts are empty (session stalled), be ULTRA lenient Just take the first available players to get things moving again", but that's not right, we still want to be as fair as possible with regards to the number of times people have waited that are currently waiting -- and then consider making the most balanced match possible from the most-waited players if they have even waits +/- 1!!!
 
 
@@ -332,6 +338,30 @@ For the session stalled condition in @pickleball-session-11-05-2025-10-11.txt th
 ### Revision TODO
 * King of the Court doesn't really make sense for 4 players, but I tried it anyways. After 3 games, there were no more games to play and all 4 players just sat there waiting. Is something wrong with the algorithm? Shouldn't it never end, regardless of the configuration?
 * Please add a test for 20 players and make sure the algorithm continues to work for 400 games, make the winners random...
+
+
+
+
+
+
+
+
+* I want to make a new game mode called "Competetive Matchmaking Variety", we will build the algorithm for this piece by piece. Please build the shell for this new game mode, but since we don't have anything yet for it, it should just never make any courts when a new match is started.
+* At the start of competetive matchmaking variety, we just take up to the first numberOfEmptyCourts*4 available players from the waitlist and make those courts.
+* Please rename everything for Competetive Matchmaking Variety to Competetive Variety Matchmaking
+* The first feature I want to build for competetive variety matchmaking mode is a simple court variety algorithm... Consider each court as an entity, and the wait list as an entity. Courts may never make a game with the same four players that just played on the court (We assume the minimum players using competetive variety matchmaking is 10). After each match finishes, courts must mix with another court or the waitlist -- and we keep track of which courts just mixed with what court. For example, if court 1 finishes, all players must wait until another court (EG court 2) finishes. Then when another court finishes (or there are players in the wait list), 2 players are swapped from each court. If there is only 1 player on the waitlist, that court does not get made (there must be a minimum of 2 players in the waitlist for court mixing with the waitlist to happen). Consider the waitlist as multiple 4 unit groups that get tracked for this variety algorithm separately. EG, if there are 16 players and 2 courts, the waitlist will have 8 players (considered as 2 groups that mix separately for this variety algorithm). In 3+ court situations where there are enough players to fill them, we have a rule that courts may never mix with the same court (and waitlist) back to back. EG if courts 1 & 2 finish, and mix swapping players to fill themselves for the next game. If they finish again, they may not mix again, and players must return to the waitlist after the game finishes, and the court will be unoccupied until another court finishes. Once courts mix with a different court, we reset the court back to back tracking for all courts that had previously been blocked from being made. I'm sure there are some simple scenarios I forgot in writing this, but the overall idea to ensure match variety is there. Please build this feature, thinking comprehensively about what needs to be better for different scenarios.
+
+
+
+* We want to build a variety component to competetive variety matchmaking. The first feature I want to build for competetive variety matchmaking mode is a simple variety algorithm... Keep track of each court that a player has last played on. The same 4 players may never make a game together on any court after having just played together. (We assume the minimum players using competetive variety matchmaking is 10). After each match finishes, players must mix with players that played on another court or that haven't played at all -- We must keep track of the courts that players just mixed together with. For example, if court 1 finishes, all players must wait until another court (EG court 2) finishes. Then when another court finishes (or there are players in the wait list), 2 players are swapped from each court. If there is only 1 player on the waitlist, that court does not get made (there must be a minimum of 2 players in the waitlist for mixing with the waitlist to happen). Prefer to mix with players that haven't played on any court yet before mixing with players that have previously played on a court. In 3+ full court situations (12+ players total), we have a rule that courts may never mix with players from the same court back to back. EG if courts 1 & 2 finish, and mix swapping players to fill themselves for the next game and then if they finish again, they may not mix again and the court will be unoccupied until another court finishes (EG court #3, #4, etc). I'm sure there are some simple scenarios I forgot in writing this, but the overall idea to ensure match variety is there. Please build this feature, thinking comprehensively about what needs to be better for different scenarios.
+
+
+
+* In situations where we have 3+ active courts, after players from 2 courts mix once, we don't want them to mix again until atleast one other court has finished their session and are waiting.
+--- Don't write any documentation
+
+
+
 
 
 ### Revision 3
@@ -349,6 +379,8 @@ http://localhost:5173?test=true
    Run King of Court Tests:
      npx vitest run src/kingofcourt.test.ts
 	 npx vitest run src/test-14-players.test.ts
+	 
+	 npx vitest run src/tests/waitlist-court-bug.test.ts
 	 npm test -- seven-player-wait-bug
    Run Round Robin Tests:
      npx vitest run src/roundrobin.test.ts
