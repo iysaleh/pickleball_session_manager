@@ -465,7 +465,12 @@ class CourtDisplayWidget(QWidget):
         team2_score = self.team2_score.value()
         
         if team1_score == team2_score:
-            QMessageBox.warning(self, "Error", "Scores must be different (winner must have higher score)")
+            msgbox = QMessageBox(self)
+            msgbox.setWindowTitle("Error")
+            msgbox.setText("Scores must be different (winner must have higher score)")
+            msgbox.setIcon(QMessageBox.Icon.Warning)
+            msgbox.setStyleSheet("QMessageBox { background-color: #e0e0e0; } QMessageBox QLabel { color: black; background-color: #e0e0e0; } QPushButton { background-color: #d0d0d0; color: black; padding: 5px; border-radius: 3px; }")
+            msgbox.exec()
             return
         
         # Get player names for the match
@@ -1321,7 +1326,12 @@ class SessionWindow(QMainWindow):
                 t2_score = team2_spin.value()
                 
                 if t1_score == t2_score:
-                    QMessageBox.warning(dialog, "Error", "Scores must be different")
+                    msgbox = QMessageBox(dialog)
+                    msgbox.setWindowTitle("Error")
+                    msgbox.setText("Scores must be different")
+                    msgbox.setIcon(QMessageBox.Icon.Warning)
+                    msgbox.setStyleSheet("QMessageBox { background-color: #e0e0e0; } QMessageBox QLabel { color: black; background-color: #e0e0e0; } QPushButton { background-color: #d0d0d0; color: black; padding: 5px; border-radius: 3px; }")
+                    msgbox.exec()
                     return
                 
                 match.score = {'team1_score': t1_score, 'team2_score': t2_score}
