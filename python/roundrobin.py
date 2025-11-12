@@ -13,7 +13,9 @@ def generate_round_robin_queue(
     session_type: SessionType,
     banned_pairs: List[Tuple[str, str]],
     max_matches: int = 100,
-    locked_teams: Optional[List[List[str]]] = None
+    locked_teams: Optional[List[List[str]]] = None,
+    player_stats: Optional[Dict[str, PlayerStats]] = None,
+    active_matches: Optional[List] = None
 ) -> List[QueuedMatch]:
     """
     Generate a queue of round-robin matches optimized for partner and opponent diversity.
@@ -24,6 +26,16 @@ def generate_round_robin_queue(
     - Respect banned pairs
     - Spread play time fairly
     - Never repeat the exact same 4-player combination if possible
+    - Never queue matches currently being played
+    
+    Args:
+        players: List of Player objects
+        session_type: 'singles' or 'doubles'
+        banned_pairs: List of banned player pairs
+        max_matches: Maximum matches to generate
+        locked_teams: Pre-formed teams (if applicable)
+        player_stats: Dict of player_id -> PlayerStats for session history
+        active_matches: List of currently active Match objects to exclude from queue
     """
     
     if locked_teams and len(locked_teams) > 0:
@@ -45,10 +57,39 @@ def generate_round_robin_queue(
     games_played: Dict[str, int] = {}
     used_matchups: Set[str] = set()
     
+    # Pre-populate used_matchups with currently active matches
+    if active_matches:
+        for match in active_matches:
+            if match.status in ['waiting', 'in-progress']:
+                t1_sorted = ','.join(sorted(match.team1))
+                t2_sorted = ','.join(sorted(match.team2))
+                matchup_key = '|'.join(sorted([t1_sorted, t2_sorted]))
+                used_matchups.add(matchup_key)
+    
     for pid in player_ids:
         partnership_count[pid] = {}
         opponent_count[pid] = {}
-        games_played[pid] = 0
+        
+        # Initialize from player_stats if provided
+        if player_stats and pid in player_stats:
+            stats = player_stats[pid]
+            games_played[pid] = stats.games_played
+            
+            # Pre-populate partnerships from session history
+            for partner_id in stats.partners_played:
+                if partner_id in partnership_count[pid]:
+                    partnership_count[pid][partner_id] += 1
+                else:
+                    partnership_count[pid][partner_id] = 1
+            
+            # Pre-populate opponents from session history
+            for opponent_id in stats.opponents_played:
+                if opponent_id in opponent_count[pid]:
+                    opponent_count[pid][opponent_id] += 1
+                else:
+                    opponent_count[pid][opponent_id] = 1
+        else:
+            games_played[pid] = 0
     
     def get_matchup_key(team1: List[str], team2: List[str]) -> str:
         """Create a canonical key for a matchup"""

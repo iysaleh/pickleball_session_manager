@@ -723,7 +723,9 @@ class SessionWindow(QMainWindow):
             from python.session import get_completed_matches
             completed = get_completed_matches(self.session)
             self.history_list.clear()
-            for match in reversed(completed):  # Show most recent first
+            # Sort by end_time descending (most recent first), then add to list
+            sorted_completed = sorted(completed, key=lambda m: m.end_time or '', reverse=True)
+            for match in sorted_completed:
                 team1_names = [get_player_name(self.session, pid) for pid in match.team1]
                 team2_names = [get_player_name(self.session, pid) for pid in match.team2]
                 team1_str = ", ".join(team1_names)
@@ -732,7 +734,6 @@ class SessionWindow(QMainWindow):
                 if match.score:
                     t1_score = match.score.get('team1_score', 0)
                     t2_score = match.score.get('team2_score', 0)
-                    winner = "Team1" if t1_score > t2_score else "Team2"
                     item_text = f"{team1_str} {t1_score}\nvs\n{team2_str} {t2_score}"
                 else:
                     item_text = f"{team1_str}\nvs\n{team2_str}"
@@ -813,6 +814,29 @@ class SessionWindow(QMainWindow):
                     )
             
             export_lines.append("")
+            
+            # Match History (most recent first)
+            completed_matches = [m for m in self.session.matches if m.status == 'completed']
+            if completed_matches:
+                export_lines.append("MATCH HISTORY:")
+                export_lines.append("-" * 70)
+                
+                for match in reversed(completed_matches):
+                    team1_names = [get_player_name(self.session, pid) for pid in match.team1]
+                    team2_names = [get_player_name(self.session, pid) for pid in match.team2]
+                    
+                    if match.score:
+                        team1_score = match.score.get('team1_score', 0)
+                        team2_score = match.score.get('team2_score', 0)
+                        
+                        # Format: Higher score on top
+                        if team1_score >= team2_score:
+                            export_lines.append(f"{', '.join(team1_names)}: {team1_score} beat {', '.join(team2_names)}: {team2_score}")
+                        else:
+                            export_lines.append(f"{', '.join(team2_names)}: {team2_score} beat {', '.join(team1_names)}: {team1_score}")
+                
+                export_lines.append("")
+            
             export_lines.append("=" * 70)
             
             # Write to file
@@ -1015,11 +1039,31 @@ class SessionWindow(QMainWindow):
                     # Regenerate match queue once at the end
                     if players_to_add or players_to_remove:
                         from python.roundrobin import generate_round_robin_queue
+                        from python.queue_manager import populate_empty_courts, get_waiting_players
+                        
                         self.session.match_queue = generate_round_robin_queue(
                             [p for p in self.session.config.players if p.id in self.session.active_players],
                             self.session.config.session_type,
-                            self.session.config.banned_pairs
+                            self.session.config.banned_pairs,
+                            player_stats=self.session.player_stats,
+                            active_matches=self.session.matches
                         )
+                        
+                        # Prioritize matches with waiting players at the front of the queue
+                        waiting_ids = set(get_waiting_players(self.session))
+                        if waiting_ids:
+                            waiting_matches = []
+                            other_matches = []
+                            for queued_match in self.session.match_queue:
+                                match_players = set(queued_match.team1 + queued_match.team2)
+                                if match_players & waiting_ids:
+                                    waiting_matches.append(queued_match)
+                                else:
+                                    other_matches.append(queued_match)
+                            self.session.match_queue = waiting_matches + other_matches
+                        
+                        # Populate any empty courts with the newly regenerated queue
+                        populate_empty_courts(self.session)
                         self.refresh_display()
                     
                     dialog.accept()
