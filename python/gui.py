@@ -29,6 +29,21 @@ from python.session import (
 )
 
 
+class ClickableLabel(QLabel):
+    """Custom label that emits a signal on double-click"""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.double_clicked = False
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+    
+    def mouseDoubleClickEvent(self, event):
+        """Handle double-click"""
+        self.double_clicked = True
+        if hasattr(self.parent(), 'edit_court_title'):
+            self.parent().edit_court_title()
+
+
 class PlayerListWidget(QWidget):
     """Widget for managing player list"""
     
@@ -222,6 +237,8 @@ class CourtDisplayWidget(QWidget):
         self.court_number = court_number
         self.session = session
         self.current_match: Optional[Match] = None
+        self.default_title = f"Court {self.court_number}"
+        self.custom_title = None
         self.init_ui()
     
     def init_ui(self):
@@ -230,7 +247,7 @@ class CourtDisplayWidget(QWidget):
         
         # Court header
         header = QHBoxLayout()
-        self.title = QLabel(f"Court {self.court_number}")
+        self.title = ClickableLabel(self.default_title)
         self.title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         self.title.setStyleSheet("QLabel { color: black; }")
         header.addWidget(self.title)
@@ -442,6 +459,59 @@ class CourtDisplayWidget(QWidget):
                 pass
             else:
                 QMessageBox.warning(self, "Error", "Failed to forfeit match")
+    
+    def edit_court_title(self):
+        """Edit the court title"""
+        try:
+            # Get current title (either custom or default)
+            current_text = self.custom_title if self.custom_title else self.default_title
+            
+            # Create input dialog with dark theme
+            dialog = QInputDialog(self)
+            dialog.setWindowTitle("Edit Court Name")
+            dialog.setLabelText("Enter new court name (or leave blank to reset):")
+            dialog.setTextValue(current_text)
+            dialog.setStyleSheet("""
+                QInputDialog {
+                    background-color: #2a2a2a;
+                }
+                QLabel {
+                    color: white;
+                    background-color: #2a2a2a;
+                }
+                QLineEdit {
+                    background-color: #3a3a3a;
+                    color: white;
+                    border: 1px solid #555;
+                    border-radius: 3px;
+                    padding: 5px;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    font-weight: bold;
+                    padding: 5px 15px;
+                    border-radius: 3px;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+            """)
+            
+            ok = dialog.exec()
+            
+            if ok == QInputDialog.DialogCode.Accepted:
+                new_title = dialog.textValue()
+                if new_title.strip() == "":
+                    # Reset to default
+                    self.custom_title = None
+                    self.title.setText(self.default_title)
+                else:
+                    # Set custom title
+                    self.custom_title = new_title.strip()
+                    self.title.setText(self.custom_title)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error editing court title:\n{str(e)}")
 
 
 class SessionWindow(QMainWindow):
