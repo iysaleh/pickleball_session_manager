@@ -30,6 +30,11 @@ class PlayerStats:
     opponents_played: Set[str] = field(default_factory=set)
     total_points_for: int = 0
     total_points_against: int = 0
+    # For competitive variety: track game numbers when players were last played with/against
+    partner_last_game: Dict[str, int] = field(default_factory=dict)  # partner_id -> last_game_number
+    opponent_last_game: Dict[str, int] = field(default_factory=dict)  # opponent_id -> last_game_number
+    # For inter-court mixing: track which courts this player has played on (in order)
+    court_history: List[int] = field(default_factory=list)  # List of court numbers in chronological order
 
 
 @dataclass

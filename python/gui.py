@@ -1204,18 +1204,32 @@ class SessionWindow(QMainWindow):
             dialog = QDialog(self)
             dialog.setWindowTitle("Player Statistics")
             dialog.setStyleSheet("QDialog { background-color: #2a2a2a; } QLabel { color: white; background-color: #2a2a2a; }")
-            dialog.setMinimumWidth(900)
+            dialog.setMinimumWidth(1000)
             dialog.setMinimumHeight(600)
             
             layout = QVBoxLayout()
             
+            # Determine columns based on game mode
+            is_competitive_variety = self.session.config.mode == 'competitive-variety'
+            
+            if is_competitive_variety:
+                # Include ELO rating for competitive variety
+                column_labels = [
+                    "Player", "ELO", "W-L", "Games", "Waited", "Win %", 
+                    "Partners", "Opponents", "Avg Pt Diff", "Pts For", "Pts Against"
+                ]
+                num_columns = 11
+            else:
+                column_labels = [
+                    "Player", "W-L", "Games", "Waited", "Win %", 
+                    "Partners", "Opponents", "Avg Pt Diff", "Pts For", "Pts Against"
+                ]
+                num_columns = 10
+            
             # Create table
             table = QTableWidget()
-            table.setColumnCount(10)
-            table.setHorizontalHeaderLabels([
-                "Player", "W-L", "Games", "Waited", "Win %", 
-                "Partners", "Opponents", "Avg Pt Diff", "Pts For", "Pts Against"
-            ])
+            table.setColumnCount(num_columns)
+            table.setHorizontalHeaderLabels(column_labels)
             table.setStyleSheet("""
                 QTableWidget { 
                     background-color: #3a3a3a; 
@@ -1243,6 +1257,13 @@ class SessionWindow(QMainWindow):
                 
                 stats = self.session.player_stats[player.id]
                 
+                # Calculate ELO rating if in competitive variety mode
+                if is_competitive_variety:
+                    from python.competitive_variety import calculate_elo_rating
+                    elo = calculate_elo_rating(stats)
+                else:
+                    elo = 0
+                
                 # Calculate average point differential
                 if stats.games_played > 0:
                     avg_diff = (stats.total_points_for - stats.total_points_against) / stats.games_played
@@ -1254,6 +1275,7 @@ class SessionWindow(QMainWindow):
                 
                 player_data.append((
                     player.name,
+                    elo,
                     stats.wins,
                     stats.losses,
                     stats.games_played,
@@ -1266,25 +1288,45 @@ class SessionWindow(QMainWindow):
                     stats.total_points_against
                 ))
             
-            # Sort by wins (descending), then by losses (ascending), then by avg_diff (descending)
-            player_data.sort(key=lambda x: (-x[1], x[2], -x[8]))
+            # Sort based on game mode
+            if is_competitive_variety:
+                # Sort by ELO (descending) for competitive variety
+                player_data.sort(key=lambda x: -x[1])
+            else:
+                # Sort by wins (descending), then by losses (ascending), then by avg_diff (descending)
+                player_data.sort(key=lambda x: (-x[2], x[3], -x[9]))
             
             # Populate table
             for row, data in enumerate(player_data):
                 table.insertRow(row)
                 
-                items = [
-                    data[0],  # name
-                    f"{data[1]}-{data[2]}",  # W-L
-                    str(data[3]),  # games
-                    str(data[4]),  # waited
-                    f"{data[5]:.1f}%",  # win %
-                    str(data[6]),  # partners
-                    str(data[7]),  # opponents
-                    f"{data[8]:.1f}",  # avg pt diff
-                    str(data[9]),  # pts for
-                    str(data[10])  # pts against
-                ]
+                if is_competitive_variety:
+                    items = [
+                        data[0],  # name
+                        f"{data[1]:.0f}",  # ELO
+                        f"{data[2]}-{data[3]}",  # W-L
+                        str(data[4]),  # games
+                        str(data[5]),  # waited
+                        f"{data[6]:.1f}%",  # win %
+                        str(data[7]),  # partners
+                        str(data[8]),  # opponents
+                        f"{data[9]:.1f}",  # avg pt diff
+                        str(data[10]),  # pts for
+                        str(data[11])  # pts against
+                    ]
+                else:
+                    items = [
+                        data[0],  # name
+                        f"{data[2]}-{data[3]}",  # W-L
+                        str(data[4]),  # games
+                        str(data[5]),  # waited
+                        f"{data[6]:.1f}%",  # win %
+                        str(data[7]),  # partners
+                        str(data[8]),  # opponents
+                        f"{data[9]:.1f}",  # avg pt diff
+                        str(data[10]),  # pts for
+                        str(data[11])  # pts against
+                    ]
                 
                 for col, text in enumerate(items):
                     item = QTableWidgetItem(text)
