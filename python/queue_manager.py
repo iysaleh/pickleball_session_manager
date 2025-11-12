@@ -63,9 +63,42 @@ def score_queued_match(queued_match: 'QueuedMatch', session: Session) -> float:
     return total_wait
 
 
+def generate_dynamic_matches(session: Session) -> List['QueuedMatch']:
+    """
+    Generate new matches from waiting players and available players.
+    This allows us to create matches on-the-fly when courts become empty.
+    """
+    from python.roundrobin import generate_combinations
+    from .types import QueuedMatch
+    
+    # Get players who are waiting (not in active matches)
+    waiting_ids = get_waiting_players(session)
+    
+    if len(waiting_ids) < 4:
+        # Need at least 4 players to form a match
+        return []
+    
+    # Generate all possible 4-player combinations from waiting players
+    combos = list(generate_combinations(waiting_ids, 4))
+    
+    # Convert to match pairs (team configurations)
+    dynamic_matches = []
+    for combo in combos:
+        # Generate team pairings
+        partitions = [
+            ([combo[0], combo[1]], [combo[2], combo[3]]),
+            ([combo[0], combo[2]], [combo[1], combo[3]]),
+            ([combo[0], combo[3]], [combo[1], combo[2]]),
+        ]
+        for team1, team2 in partitions:
+            dynamic_matches.append(QueuedMatch(team1=team1, team2=team2))
+    
+    return dynamic_matches
+
+
 def populate_empty_courts(session: Session) -> Session:
     """
-    Fill empty courts with matches from the queue.
+    Fill empty courts with matches from the queue or dynamically generated matches.
     
     Used in Round Robin mode to distribute queued matches to available courts.
     Only assigns matches where no players are already in active games.
@@ -75,24 +108,31 @@ def populate_empty_courts(session: Session) -> Session:
         # Only auto-populate for round-robin for now
         return session
     
-    if not session.match_queue:
-        return session
-    
     # Find empty courts
     empty_courts = get_empty_courts(session)
+    
+    if not empty_courts:
+        return session
     
     # Assign matches to empty courts, prioritizing by wait time
     matches_to_remove = []
     for court_num in empty_courts:
-        if not session.match_queue:
-            break
-        
-        # Find all valid queued matches (no player conflicts)
+        # Try to find a match from the queue first
         valid_matches = []
-        for i, queued_match in enumerate(session.match_queue):
-            if can_queue_match_be_assigned(queued_match, session):
-                score = score_queued_match(queued_match, session)
-                valid_matches.append((score, i, queued_match))
+        
+        if session.match_queue:
+            for i, queued_match in enumerate(session.match_queue):
+                if can_queue_match_be_assigned(queued_match, session):
+                    score = score_queued_match(queued_match, session)
+                    valid_matches.append((score, i, queued_match, True))  # True = from queue
+        
+        # If no queue matches available, generate dynamic matches from waiting players
+        if not valid_matches:
+            dynamic = generate_dynamic_matches(session)
+            for queued_match in dynamic:
+                if can_queue_match_be_assigned(queued_match, session):
+                    score = score_queued_match(queued_match, session)
+                    valid_matches.append((score, -1, queued_match, False))  # False = dynamic
         
         if not valid_matches:
             # No valid matches available for this court
@@ -100,7 +140,7 @@ def populate_empty_courts(session: Session) -> Session:
         
         # Sort by wait score (highest first = players waited longest)
         valid_matches.sort(reverse=True, key=lambda x: x[0])
-        _, best_idx, best_match = valid_matches[0]
+        score, match_idx, best_match, from_queue = valid_matches[0]
         
         # Create match on this court
         match = Match(
@@ -112,7 +152,10 @@ def populate_empty_courts(session: Session) -> Session:
         )
         
         session.matches.append(match)
-        matches_to_remove.append(best_idx)
+        
+        # Only track queue removals (not dynamic matches)
+        if from_queue and match_idx >= 0:
+            matches_to_remove.append(match_idx)
     
     # Remove assigned matches from queue (in reverse order to maintain indices)
     for i in sorted(matches_to_remove, reverse=True):

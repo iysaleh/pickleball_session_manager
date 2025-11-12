@@ -561,6 +561,11 @@ class SessionWindow(QMainWindow):
         # Control buttons
         button_layout = QHBoxLayout()
         
+        export_btn = QPushButton("📥 Export Session")
+        export_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
+        export_btn.clicked.connect(self.export_session)
+        button_layout.addWidget(export_btn)
+        
         end_btn = QPushButton("End Session")
         end_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
         end_btn.clicked.connect(self.end_session)
@@ -626,6 +631,92 @@ class SessionWindow(QMainWindow):
             print(f"REFRESH ERROR: {error_msg}")
             import traceback
             traceback.print_exc()
+    
+    def export_session(self):
+        """Export session results to a file"""
+        try:
+            from python.queue_manager import get_waiting_players, get_match_for_court
+            from datetime import datetime
+            
+            # Get current state
+            waiting_ids = get_waiting_players(self.session)
+            
+            # Build export data
+            export_lines = []
+            export_lines.append(f"Pickleball Session Export")
+            export_lines.append(f"{'='*70}")
+            export_lines.append(f"Date/Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            export_lines.append(f"Mode: {self.session.config.mode.title()}")
+            export_lines.append(f"Type: {self.session.config.session_type.title()}")
+            export_lines.append(f"Courts: {self.session.config.courts}")
+            export_lines.append("")
+            
+            # Active matches on courts
+            export_lines.append("CURRENTLY ON COURTS:")
+            export_lines.append("-" * 70)
+            for court_num in range(1, self.session.config.courts + 1):
+                match = get_match_for_court(self.session, court_num)
+                if match:
+                    team1_names = [get_player_name(self.session, pid) for pid in match.team1]
+                    team2_names = [get_player_name(self.session, pid) for pid in match.team2]
+                    export_lines.append(f"Court {court_num}: {', '.join(team1_names)} vs {', '.join(team2_names)}")
+                else:
+                    export_lines.append(f"Court {court_num}: Empty")
+            export_lines.append("")
+            
+            # Waitlist
+            export_lines.append("WAITLIST:")
+            export_lines.append("-" * 70)
+            if waiting_ids:
+                for player_id in waiting_ids:
+                    player_name = get_player_name(self.session, player_id)
+                    export_lines.append(f"  - {player_name}")
+            else:
+                export_lines.append("  (No players waiting)")
+            export_lines.append("")
+            
+            # Player statistics
+            export_lines.append("PLAYER STATISTICS:")
+            export_lines.append("-" * 70)
+            export_lines.append(f"{'Player':<25} {'W-L':<10} {'Games Played':<15} {'Win %':<10}")
+            export_lines.append("-" * 70)
+            
+            for player in self.session.config.players:
+                if player.id in self.session.active_players:
+                    stats = self.session.player_stats[player.id]
+                    record = f"{stats.wins}-{stats.losses}"
+                    win_pct = (stats.wins / stats.games_played * 100) if stats.games_played > 0 else 0
+                    win_pct_str = f"{win_pct:.1f}%" if stats.games_played > 0 else "N/A"
+                    
+                    export_lines.append(
+                        f"{player.name:<25} {record:<10} {stats.games_played:<15} {win_pct_str:<10}"
+                    )
+            
+            export_lines.append("")
+            export_lines.append("=" * 70)
+            
+            # Write to file
+            export_text = "\n".join(export_lines)
+            
+            # Save to file in current directory
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"pickleball_session_{timestamp}.txt"
+            filepath = os.path.join(os.getcwd(), filename)
+            
+            with open(filepath, 'w') as f:
+                f.write(export_text)
+            
+            QMessageBox.information(
+                self, "Export Successful",
+                f"Session exported to:\n{filename}"
+            )
+            
+        except Exception as e:
+            error_msg = f"Error exporting session:\n{str(e)}"
+            print(f"EXPORT ERROR: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Export Error", error_msg)
     
     def end_session(self):
         """End the session"""

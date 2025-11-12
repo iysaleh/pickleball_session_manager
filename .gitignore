@@ -11,3 +11,4 @@ playwright-report
 test-results
 pickleball-session-*txt
 **/__pycache__
+pickleball_session*.txt
