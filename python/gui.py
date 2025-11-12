@@ -521,23 +521,41 @@ class SessionWindow(QMainWindow):
         divider.setFrameShadow(QFrame.Shadow.Sunken)
         content_layout.addWidget(divider)
         
+        # Right sidebar section (waiting list + queue)
+        right_section = QVBoxLayout()
+        
         # Waiting list section
-        waiting_section = QVBoxLayout()
         waiting_label = QLabel("⏳ Waitlist")
         waiting_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         waiting_label.setStyleSheet("QLabel { color: white; background-color: black; padding: 8px; border-radius: 3px; }")
-        waiting_section.addWidget(waiting_label)
+        right_section.addWidget(waiting_label)
         
         self.waiting_list = QListWidget()
-        self.waiting_list.setMinimumWidth(200)
-        waiting_section.addWidget(self.waiting_list, 1)
+        self.waiting_list.setMinimumWidth(250)
+        self.waiting_list.setMaximumHeight(150)
+        right_section.addWidget(self.waiting_list)
         
         self.waiting_count = QLabel("0 players waiting")
         self.waiting_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.waiting_count.setStyleSheet("QLabel { color: #666; font-weight: bold; }")
-        waiting_section.addWidget(self.waiting_count)
+        right_section.addWidget(self.waiting_count)
         
-        content_layout.addLayout(waiting_section, 1)
+        # Queue section
+        queue_label = QLabel("📋 Match Queue")
+        queue_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        queue_label.setStyleSheet("QLabel { color: white; background-color: black; padding: 8px; border-radius: 3px; }")
+        right_section.addWidget(queue_label)
+        
+        self.queue_list = QListWidget()
+        self.queue_list.setMinimumWidth(250)
+        right_section.addWidget(self.queue_list, 1)
+        
+        self.queue_count = QLabel("0 matches queued")
+        self.queue_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.queue_count.setStyleSheet("QLabel { color: #666; font-weight: bold; }")
+        right_section.addWidget(self.queue_count)
+        
+        content_layout.addLayout(right_section, 1)
         main_layout.addLayout(content_layout, 1)
         
         # Control buttons
@@ -570,7 +588,7 @@ class SessionWindow(QMainWindow):
         try:
             from python.queue_manager import (
                 populate_empty_courts, get_match_for_court, get_session_summary,
-                get_waiting_players
+                get_waiting_players, get_queued_matches_for_display
             )
             populate_empty_courts(self.session)
             
@@ -590,6 +608,15 @@ class SessionWindow(QMainWindow):
                 self.waiting_list.addItem(player_name)
             
             self.waiting_count.setText(f"{len(waiting_ids)} player{'s' if len(waiting_ids) != 1 else ''} waiting")
+            
+            # Update queued matches list
+            queued_matches = get_queued_matches_for_display(self.session)
+            self.queue_list.clear()
+            for team1_str, team2_str in queued_matches:
+                item_text = f"{team1_str}\nvs\n{team2_str}"
+                self.queue_list.addItem(item_text)
+            
+            self.queue_count.setText(f"{len(queued_matches)} match{'es' if len(queued_matches) != 1 else ''} queued")
             
             # Update summary info
             summary = get_session_summary(self.session)

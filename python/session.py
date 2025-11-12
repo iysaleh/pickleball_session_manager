@@ -177,6 +177,9 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
     # Determine winner and update stats
     team1_won = team1_score > team2_score
     
+    # Get all players in this match
+    players_in_match = set(match.team1 + match.team2)
+    
     for player_id in match.team1:
         stats = session.player_stats[player_id]
         stats.games_played += 1
@@ -208,6 +211,12 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
         for partner_id in match.team2:
             if partner_id != player_id:
                 stats.partners_played.add(partner_id)
+    
+    # Increment games_waited for all other active players
+    for player_id in session.active_players:
+        if player_id not in players_in_match:
+            if player_id in session.player_stats:
+                session.player_stats[player_id].games_waited += 1
     
     return True
 

@@ -32,11 +32,44 @@ def get_match_for_court(session: Session, court_number: int) -> Optional[Match]:
     return None
 
 
+def get_players_in_active_matches(session: Session) -> set:
+    """Get set of all player IDs currently in active matches"""
+    players_in_matches = set()
+    
+    for match in session.matches:
+        if match.status in ['waiting', 'in-progress']:
+            players_in_matches.update(match.team1)
+            players_in_matches.update(match.team2)
+    
+    return players_in_matches
+
+
+def can_queue_match_be_assigned(queued_match: 'QueuedMatch', session: Session) -> bool:
+    """Check if a queued match can be assigned without player conflicts"""
+    players_in_matches = get_players_in_active_matches(session)
+    match_players = set(queued_match.team1 + queued_match.team2)
+    return not (match_players & players_in_matches)
+
+
+def score_queued_match(queued_match: 'QueuedMatch', session: Session) -> float:
+    """
+    Score a queued match based on how long the players have waited.
+    Higher score = players have waited longer = should play sooner.
+    """
+    total_wait = 0
+    for player_id in queued_match.team1 + queued_match.team2:
+        if player_id in session.player_stats:
+            total_wait += session.player_stats[player_id].games_waited
+    return total_wait
+
+
 def populate_empty_courts(session: Session) -> Session:
     """
     Fill empty courts with matches from the queue.
     
     Used in Round Robin mode to distribute queued matches to available courts.
+    Only assigns matches where no players are already in active games.
+    Prioritizes matches with players who have waited longest.
     """
     if session.config.mode != 'round-robin':
         # Only auto-populate for round-robin for now
@@ -48,23 +81,42 @@ def populate_empty_courts(session: Session) -> Session:
     # Find empty courts
     empty_courts = get_empty_courts(session)
     
-    # Assign matches to empty courts
+    # Assign matches to empty courts, prioritizing by wait time
+    matches_to_remove = []
     for court_num in empty_courts:
         if not session.match_queue:
             break
         
-        queued_match = session.match_queue.pop(0)
+        # Find all valid queued matches (no player conflicts)
+        valid_matches = []
+        for i, queued_match in enumerate(session.match_queue):
+            if can_queue_match_be_assigned(queued_match, session):
+                score = score_queued_match(queued_match, session)
+                valid_matches.append((score, i, queued_match))
+        
+        if not valid_matches:
+            # No valid matches available for this court
+            break
+        
+        # Sort by wait score (highest first = players waited longest)
+        valid_matches.sort(reverse=True, key=lambda x: x[0])
+        _, best_idx, best_match = valid_matches[0]
         
         # Create match on this court
         match = Match(
             id=generate_id(),
             court_number=court_num,
-            team1=queued_match.team1,
-            team2=queued_match.team2,
+            team1=best_match.team1,
+            team2=best_match.team2,
             status='waiting'
         )
         
         session.matches.append(match)
+        matches_to_remove.append(best_idx)
+    
+    # Remove assigned matches from queue (in reverse order to maintain indices)
+    for i in sorted(matches_to_remove, reverse=True):
+        session.match_queue.pop(i)
     
     return session
 
@@ -113,5 +165,20 @@ def advance_session(session: Session) -> Session:
     return populate_empty_courts(session)
 
 
-# Import the missing function
+def get_queued_matches_for_display(session: Session) -> List[tuple]:
+    """Get queued matches formatted for display as (team1_str, team2_str) tuples"""
+    from .session import get_player_name
+    
+    result = []
+    for queued_match in session.match_queue:
+        team1_names = [get_player_name(session, pid) for pid in queued_match.team1]
+        team2_names = [get_player_name(session, pid) for pid in queued_match.team2]
+        team1_str = ", ".join(team1_names)
+        team2_str = ", ".join(team2_names)
+        result.append((team1_str, team2_str))
+    
+    return result
+
+
+# Import the missing functions
 from .session import get_active_matches, get_completed_matches
