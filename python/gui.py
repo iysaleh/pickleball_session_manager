@@ -555,11 +555,32 @@ class SessionWindow(QMainWindow):
         self.queue_count.setStyleSheet("QLabel { color: #666; font-weight: bold; }")
         right_section.addWidget(self.queue_count)
         
+        # History section
+        history_label = QLabel("📜 Match History")
+        history_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        history_label.setStyleSheet("QLabel { color: white; background-color: black; padding: 8px; border-radius: 3px; }")
+        right_section.addWidget(history_label)
+        
+        self.history_list = QListWidget()
+        self.history_list.setMinimumWidth(250)
+        self.history_list.itemDoubleClicked.connect(self.edit_match_history)
+        right_section.addWidget(self.history_list, 1)
+        
+        self.history_count = QLabel("0 matches completed")
+        self.history_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.history_count.setStyleSheet("QLabel { color: #666; font-weight: bold; }")
+        right_section.addWidget(self.history_count)
+        
         content_layout.addLayout(right_section, 1)
         main_layout.addLayout(content_layout, 1)
         
         # Control buttons
         button_layout = QHBoxLayout()
+        
+        stats_btn = QPushButton("📊 Show Statistics")
+        stats_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
+        stats_btn.clicked.connect(self.show_statistics)
+        button_layout.addWidget(stats_btn)
         
         export_btn = QPushButton("📥 Export Session")
         export_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
@@ -622,6 +643,30 @@ class SessionWindow(QMainWindow):
                 self.queue_list.addItem(item_text)
             
             self.queue_count.setText(f"{len(queued_matches)} match{'es' if len(queued_matches) != 1 else ''} queued")
+            
+            # Update match history list
+            from python.session import get_completed_matches
+            completed = get_completed_matches(self.session)
+            self.history_list.clear()
+            for match in reversed(completed):  # Show most recent first
+                team1_names = [get_player_name(self.session, pid) for pid in match.team1]
+                team2_names = [get_player_name(self.session, pid) for pid in match.team2]
+                team1_str = ", ".join(team1_names)
+                team2_str = ", ".join(team2_names)
+                
+                if match.score:
+                    t1_score = match.score.get('team1_score', 0)
+                    t2_score = match.score.get('team2_score', 0)
+                    winner = "Team1" if t1_score > t2_score else "Team2"
+                    item_text = f"{team1_str} {t1_score}\nvs\n{team2_str} {t2_score}"
+                else:
+                    item_text = f"{team1_str}\nvs\n{team2_str}"
+                
+                item = QListWidgetItem(item_text)
+                item.setData(Qt.ItemDataRole.UserRole, match.id)
+                self.history_list.addItem(item)
+            
+            self.history_count.setText(f"{len(completed)} match{'es' if len(completed) != 1 else ''} completed")
             
             # Update summary info
             summary = get_session_summary(self.session)
@@ -717,6 +762,204 @@ class SessionWindow(QMainWindow):
             import traceback
             traceback.print_exc()
             QMessageBox.critical(self, "Export Error", error_msg)
+    
+    def edit_match_history(self, item):
+        """Edit a match from history"""
+        try:
+            match_id = item.data(Qt.ItemDataRole.UserRole)
+            
+            # Find the match
+            match = None
+            for m in self.session.matches:
+                if m.id == match_id:
+                    match = m
+                    break
+            
+            if not match:
+                QMessageBox.warning(self, "Error", "Match not found")
+                return
+            
+            # Create edit dialog
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Edit Match Score")
+            dialog.setStyleSheet("QDialog { background-color: #e0e0e0; } QLabel { color: black; background-color: #e0e0e0; }")
+            
+            layout = QVBoxLayout()
+            
+            # Team info
+            team1_names = [get_player_name(self.session, pid) for pid in match.team1]
+            team2_names = [get_player_name(self.session, pid) for pid in match.team2]
+            team1_str = ", ".join(team1_names)
+            team2_str = ", ".join(team2_names)
+            
+            title_label = QLabel(f"Edit Score:\n{team1_str} vs {team2_str}")
+            title_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+            title_label.setStyleSheet("QLabel { color: black; background-color: #e0e0e0; padding: 10px; }")
+            layout.addWidget(title_label)
+            
+            # Score inputs
+            score_layout = QHBoxLayout()
+            score_layout.addWidget(QLabel("Team 1 Score:"))
+            team1_spin = QSpinBox()
+            team1_spin.setMinimum(0)
+            team1_spin.setMaximum(20)
+            if match.score:
+                team1_spin.setValue(match.score.get('team1_score', 0))
+            score_layout.addWidget(team1_spin)
+            
+            score_layout.addWidget(QLabel("Team 2 Score:"))
+            team2_spin = QSpinBox()
+            team2_spin.setMinimum(0)
+            team2_spin.setMaximum(20)
+            if match.score:
+                team2_spin.setValue(match.score.get('team2_score', 0))
+            score_layout.addWidget(team2_spin)
+            
+            layout.addLayout(score_layout)
+            
+            # Buttons
+            button_layout = QHBoxLayout()
+            
+            save_btn = QPushButton("Save")
+            save_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 5px; }")
+            button_layout.addWidget(save_btn)
+            
+            cancel_btn = QPushButton("Cancel")
+            cancel_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 5px; }")
+            button_layout.addWidget(cancel_btn)
+            
+            layout.addLayout(button_layout)
+            
+            dialog.setLayout(layout)
+            
+            def save_changes():
+                t1_score = team1_spin.value()
+                t2_score = team2_spin.value()
+                
+                if t1_score == t2_score:
+                    QMessageBox.warning(dialog, "Error", "Scores must be different")
+                    return
+                
+                match.score = {'team1_score': t1_score, 'team2_score': t2_score}
+                dialog.accept()
+                self.refresh_display()
+            
+            save_btn.clicked.connect(save_changes)
+            cancel_btn.clicked.connect(dialog.reject)
+            
+            dialog.exec()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error editing match:\n{str(e)}")
+    
+    def show_statistics(self):
+        """Show detailed statistics for all players"""
+        try:
+            # Create statistics dialog
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Player Statistics")
+            dialog.setStyleSheet("QDialog { background-color: #2a2a2a; } QLabel { color: white; background-color: #2a2a2a; }")
+            dialog.setMinimumWidth(900)
+            dialog.setMinimumHeight(600)
+            
+            layout = QVBoxLayout()
+            
+            # Create table
+            table = QTableWidget()
+            table.setColumnCount(10)
+            table.setHorizontalHeaderLabels([
+                "Player", "W-L", "Games", "Waited", "Win %", 
+                "Partners", "Opponents", "Avg Pt Diff", "Pts For", "Pts Against"
+            ])
+            table.setStyleSheet("""
+                QTableWidget { 
+                    background-color: #3a3a3a; 
+                    color: white;
+                    gridline-color: #555;
+                }
+                QTableWidget::item { 
+                    padding: 5px;
+                    color: white;
+                }
+                QHeaderView::section { 
+                    background-color: #1a1a1a; 
+                    color: white; 
+                    padding: 5px;
+                    border: none;
+                    font-weight: bold;
+                }
+            """)
+            
+            # Collect player data for sorting
+            player_data = []
+            for player in self.session.config.players:
+                if player.id not in self.session.active_players:
+                    continue
+                
+                stats = self.session.player_stats[player.id]
+                
+                # Calculate average point differential
+                if stats.games_played > 0:
+                    avg_diff = (stats.total_points_for - stats.total_points_against) / stats.games_played
+                else:
+                    avg_diff = 0
+                
+                # Win percentage
+                win_pct = (stats.wins / stats.games_played * 100) if stats.games_played > 0 else 0
+                
+                player_data.append((
+                    player.name,
+                    stats.wins,
+                    stats.losses,
+                    stats.games_played,
+                    stats.games_waited,
+                    win_pct,
+                    len(stats.partners_played),
+                    len(stats.opponents_played),
+                    avg_diff,
+                    stats.total_points_for,
+                    stats.total_points_against
+                ))
+            
+            # Sort by wins (descending), then by losses (ascending), then by avg_diff (descending)
+            player_data.sort(key=lambda x: (-x[1], x[2], -x[8]))
+            
+            # Populate table
+            for row, data in enumerate(player_data):
+                table.insertRow(row)
+                
+                items = [
+                    data[0],  # name
+                    f"{data[1]}-{data[2]}",  # W-L
+                    str(data[3]),  # games
+                    str(data[4]),  # waited
+                    f"{data[5]:.1f}%",  # win %
+                    str(data[6]),  # partners
+                    str(data[7]),  # opponents
+                    f"{data[8]:.1f}",  # avg pt diff
+                    str(data[9]),  # pts for
+                    str(data[10])  # pts against
+                ]
+                
+                for col, text in enumerate(items):
+                    item = QTableWidgetItem(text)
+                    item.setForeground(QColor("white"))
+                    table.setItem(row, col, item)
+            
+            table.resizeColumnsToContents()
+            layout.addWidget(table)
+            
+            # Close button
+            close_btn = QPushButton("Close")
+            close_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 8px; border-radius: 3px; }")
+            close_btn.clicked.connect(dialog.accept)
+            layout.addWidget(close_btn)
+            
+            dialog.setLayout(layout)
+            dialog.exec()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error showing statistics:\n{str(e)}")
     
     def end_session(self):
         """End the session"""
