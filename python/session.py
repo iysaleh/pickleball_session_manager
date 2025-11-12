@@ -52,11 +52,16 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     # Use provided advanced config or defaults
     advanced_config = config.advanced_config or get_default_advanced_config()
     
+    # For competitive-variety mode, start all players in waiting list
+    waiting_players = []
+    if final_config.mode == 'competitive-variety':
+        waiting_players = [p.id for p in players_to_use]
+    
     return Session(
         id=generate_id(),
         config=final_config,
         matches=[],
-        waiting_players=[],
+        waiting_players=waiting_players,
         player_stats=player_stats,
         active_players=active_players,
         match_queue=match_queue,

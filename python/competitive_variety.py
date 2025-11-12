@@ -21,6 +21,9 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
     if session.config.mode != 'competitive-variety':
         return
     
+    from .utils import generate_id
+    from .types import Match
+    
     # Find empty courts
     occupied_courts = set()
     for match in session.matches:
@@ -32,9 +35,50 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
     if not empty_courts:
         return
     
-    # At start of session, just fill courts from waitlist (don't make any matches for now)
-    # Once the full algorithm is built, we'll fill from the queue
-    pass
+    # At session start, fill courts with up to numberOfEmptyCourts*4 players
+    num_players_needed = len(empty_courts) * 4
+    
+    # Get waiting players
+    waiting_players = session.waiting_players[:num_players_needed]
+    
+    if len(waiting_players) < 4:
+        # Not enough players to fill even one court
+        return
+    
+    # Group waiting players into 4s and assign to courts
+    for i, court_num in enumerate(empty_courts):
+        start_idx = i * 4
+        end_idx = start_idx + 4
+        
+        if end_idx > len(waiting_players):
+            # Not enough players left for this court
+            break
+        
+        players_for_court = waiting_players[start_idx:end_idx]
+        
+        # Create a match with simple pairing (first 2 vs last 2)
+        team1 = players_for_court[0:2]
+        team2 = players_for_court[2:4]
+        
+        match = Match(
+            id=generate_id(),
+            court_number=court_num,
+            team1=team1,
+            team2=team2,
+            status='waiting'
+        )
+        
+        session.matches.append(match)
+        
+        # Remove these players from waiting list and update stats
+        for player_id in players_for_court:
+            if player_id in session.waiting_players:
+                session.waiting_players.remove(player_id)
+            # Initialize or update player stats
+            if player_id not in session.player_stats:
+                from .types import PlayerStats
+                session.player_stats[player_id] = PlayerStats(player_id=player_id)
+            session.player_stats[player_id].games_played += 1
 
 
 def build_match_for_court_competitive_variety(
