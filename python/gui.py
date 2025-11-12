@@ -625,7 +625,7 @@ class SessionWindow(QMainWindow):
         # Title with info
         self.title = QLabel(f"{self.session.config.mode} - {self.session.config.session_type.title()}")
         self.title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        self.title.setStyleSheet("QLabel { color: white; background-color: black; padding: 10px; border-radius: 3px; }")
+        self.title.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 10px; border-radius: 3px; }")
         main_layout.addWidget(self.title)
         
         # Main content area (courts + waiting list)
@@ -635,7 +635,7 @@ class SessionWindow(QMainWindow):
         courts_section = QVBoxLayout()
         courts_label = QLabel("Active Courts")
         courts_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        courts_label.setStyleSheet("QLabel { color: white; background-color: black; padding: 8px; border-radius: 3px; }")
+        courts_label.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 8px; border-radius: 3px; }")
         courts_section.addWidget(courts_label)
         
         # Courts scroll area
@@ -670,7 +670,7 @@ class SessionWindow(QMainWindow):
         # Waiting list section
         waiting_label = QLabel("⏳ Waitlist")
         waiting_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        waiting_label.setStyleSheet("QLabel { color: white; background-color: black; padding: 8px; border-radius: 3px; }")
+        waiting_label.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 8px; border-radius: 3px; }")
         right_section.addWidget(waiting_label)
         
         self.waiting_list = QListWidget()
@@ -680,13 +680,13 @@ class SessionWindow(QMainWindow):
         
         self.waiting_count = QLabel("0 players waiting")
         self.waiting_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.waiting_count.setStyleSheet("QLabel { color: #666; font-weight: bold; }")
+        self.waiting_count.setStyleSheet("QLabel { color: white; font-weight: bold; background-color: #2a2a2a; }")
         right_section.addWidget(self.waiting_count)
         
         # Queue section
         queue_label = QLabel("📋 Match Queue")
         queue_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        queue_label.setStyleSheet("QLabel { color: white; background-color: black; padding: 8px; border-radius: 3px; }")
+        queue_label.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 8px; border-radius: 3px; }")
         right_section.addWidget(queue_label)
         
         self.queue_list = QListWidget()
@@ -695,13 +695,13 @@ class SessionWindow(QMainWindow):
         
         self.queue_count = QLabel("0 matches queued")
         self.queue_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.queue_count.setStyleSheet("QLabel { color: #666; font-weight: bold; }")
+        self.queue_count.setStyleSheet("QLabel { color: white; font-weight: bold; background-color: #2a2a2a; }")
         right_section.addWidget(self.queue_count)
         
         # History section
         history_label = QLabel("📜 Match History")
         history_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        history_label.setStyleSheet("QLabel { color: white; background-color: black; padding: 8px; border-radius: 3px; }")
+        history_label.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 8px; border-radius: 3px; }")
         right_section.addWidget(history_label)
         
         self.history_list = QListWidget()
@@ -711,7 +711,7 @@ class SessionWindow(QMainWindow):
         
         self.history_count = QLabel("0 matches completed")
         self.history_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.history_count.setStyleSheet("QLabel { color: #666; font-weight: bold; }")
+        self.history_count.setStyleSheet("QLabel { color: white; font-weight: bold; background-color: #2a2a2a; }")
         right_section.addWidget(self.history_count)
         
         content_layout.addLayout(right_section, 1)
@@ -750,6 +750,20 @@ class SessionWindow(QMainWindow):
         main_layout.addLayout(button_layout)
         
         central_widget.setLayout(main_layout)
+        
+        # Apply dark theme to SessionWindow
+        dark_stylesheet = """
+            QMainWindow { background-color: #2a2a2a; }
+            QWidget { background-color: #2a2a2a; color: white; }
+            QLabel { color: white; background-color: #2a2a2a; }
+            QListWidget { background-color: #3a3a3a; color: white; border: 1px solid #555; }
+            QListWidget::item:selected { background-color: #2196F3; }
+            QScrollArea { background-color: #2a2a2a; }
+            QFrame { background-color: #2a2a2a; color: white; }
+            QPushButton { color: white; }
+        """
+        self.setStyleSheet(dark_stylesheet)
+        
         self.setWindowTitle("Pickleball Session Manager")
         self.resize(1400, 800)
     
