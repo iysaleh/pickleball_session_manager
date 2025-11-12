@@ -87,7 +87,7 @@ class PlayerListWidget(QWidget):
         # Player count
         count_layout = QHBoxLayout()
         self.player_count_label = QLabel("Total Players: 0")
-        self.player_count_label.setStyleSheet("font-weight: bold; font-size: 12px;")
+        self.player_count_label.setStyleSheet("font-weight: bold; font-size: 12px; color: white; background-color: #2a2a2a;")
         count_layout.addWidget(self.player_count_label)
         count_layout.addStretch()
         layout.addLayout(count_layout)
@@ -215,6 +215,50 @@ class SetupDialog(QDialog):
         layout.addLayout(button_layout)
         
         self.setLayout(layout)
+        
+        # Apply dark theme to SetupDialog
+        dark_stylesheet = """
+            QDialog { background-color: #2a2a2a; }
+            QWidget { background-color: #2a2a2a; color: white; }
+            QLabel { color: white; background-color: #2a2a2a; }
+            QLineEdit { 
+                background-color: #3a3a3a; 
+                color: white; 
+                border: 1px solid #555;
+                border-radius: 3px;
+                padding: 5px;
+            }
+            QLineEdit::placeholder { color: #aaa; }
+            QComboBox { 
+                background-color: #3a3a3a; 
+                color: white;
+                border: 1px solid #555;
+                border-radius: 3px;
+                padding: 5px;
+            }
+            QComboBox QAbstractItemView { background-color: #3a3a3a; color: white; }
+            QSpinBox { 
+                background-color: #3a3a3a; 
+                color: white;
+                border: 1px solid #555;
+                border-radius: 3px;
+                padding: 5px;
+            }
+            QListWidget { background-color: #3a3a3a; color: white; border: 1px solid #555; }
+            QListWidget::item:selected { background-color: #2196F3; }
+            QPushButton { 
+                color: white; 
+                background-color: #0d47a1;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #1565c0; }
+            QPushButton:pressed { background-color: #0d47a1; }
+        """
+        self.setStyleSheet(dark_stylesheet)
+        
         self.setWindowTitle("Session Setup")
         self.resize(600, 500)
     
