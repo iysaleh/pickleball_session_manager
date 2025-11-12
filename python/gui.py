@@ -647,6 +647,11 @@ class SessionWindow(QMainWindow):
         # Control buttons
         button_layout = QHBoxLayout()
         
+        players_btn = QPushButton("👥 Add/Remove Players")
+        players_btn.setStyleSheet("QPushButton { background-color: #9C27B0; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
+        players_btn.clicked.connect(self.manage_players)
+        button_layout.addWidget(players_btn)
+        
         stats_btn = QPushButton("📊 Show Statistics")
         stats_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
         stats_btn.clicked.connect(self.show_statistics)
@@ -832,6 +837,207 @@ class SessionWindow(QMainWindow):
             import traceback
             traceback.print_exc()
             QMessageBox.critical(self, "Export Error", error_msg)
+    
+    def manage_players(self):
+        """Open dialog to add or remove players"""
+        try:
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Manage Players")
+            dialog.setStyleSheet("QDialog { background-color: #2a2a2a; } QLabel { color: white; }")
+            dialog.setMinimumWidth(600)
+            dialog.setMinimumHeight(400)
+            
+            layout = QVBoxLayout()
+            
+            # Track pending changes
+            players_to_add = []
+            players_to_remove = []
+            
+            # Add new player section
+            add_section = QGroupBox("Add New Player")
+            add_section.setStyleSheet("QGroupBox { color: white; background-color: #2a2a2a; border: 1px solid #555; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px 0 3px; }")
+            add_layout = QHBoxLayout()
+            
+            name_input = QLineEdit()
+            name_input.setPlaceholderText("Enter player name")
+            name_input.setStyleSheet("QLineEdit { background-color: #3a3a3a; color: white; border: 1px solid #555; border-radius: 3px; padding: 5px; }")
+            add_layout.addWidget(name_input)
+            
+            add_btn = QPushButton("Add Player")
+            add_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 5px 15px; border-radius: 3px; }")
+            add_layout.addWidget(add_btn)
+            
+            add_section.setLayout(add_layout)
+            layout.addWidget(add_section)
+            
+            # Current players section
+            remove_section = QGroupBox("Remove Player")
+            remove_section.setStyleSheet("QGroupBox { color: white; background-color: #2a2a2a; border: 1px solid #555; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px 0 3px; }")
+            remove_layout = QVBoxLayout()
+            
+            player_list = QListWidget()
+            player_list.setStyleSheet("""
+                QListWidget { 
+                    background-color: #3a3a3a; 
+                    color: white;
+                    border: 1px solid #555;
+                    border-radius: 3px;
+                }
+                QListWidget::item:selected {
+                    background-color: #2196F3;
+                }
+            """)
+            
+            # Populate player list
+            def refresh_player_list():
+                player_list.clear()
+                # Show current players minus those marked for removal
+                current_player_ids = self.session.active_players - set(players_to_remove)
+                for player in self.session.config.players:
+                    if player.id in current_player_ids:
+                        in_game = "🟢 ON COURT" if any(player.id in m.team1 + m.team2 for m in self.session.matches if m.status in ['waiting', 'in-progress']) else ""
+                        status = "❌ REMOVED" if player.id in players_to_remove else in_game
+                        item_text = f"{player.name} {status}"
+                        item = QListWidgetItem(item_text)
+                        item.setData(Qt.ItemDataRole.UserRole, player.id)
+                        player_list.addItem(item)
+                
+                # Show newly added players
+                for player_name in players_to_add:
+                    item_text = f"{player_name} ✨ NEW"
+                    item = QListWidgetItem(item_text)
+                    item.setData(Qt.ItemDataRole.UserRole, f"new_{player_name}")
+                    player_list.addItem(item)
+            
+            refresh_player_list()
+            remove_layout.addWidget(player_list)
+            
+            remove_btn = QPushButton("Remove Selected Player")
+            remove_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 5px 15px; border-radius: 3px; }")
+            remove_layout.addWidget(remove_btn)
+            
+            remove_section.setLayout(remove_layout)
+            layout.addWidget(remove_section)
+            
+            # Buttons
+            button_layout = QHBoxLayout()
+            
+            save_btn = QPushButton("Save and Close")
+            save_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
+            button_layout.addStretch()
+            button_layout.addWidget(save_btn)
+            
+            layout.addLayout(button_layout)
+            dialog.setLayout(layout)
+            
+            # Connect buttons
+            def add_player():
+                player_name = name_input.text().strip()
+                if not player_name:
+                    QMessageBox.warning(dialog, "Error", "Please enter a player name")
+                    return
+                
+                # Check if player already exists (in session or in add queue)
+                if any(p.name.lower() == player_name.lower() for p in self.session.config.players):
+                    QMessageBox.warning(dialog, "Error", "Player already exists")
+                    return
+                
+                if any(name.lower() == player_name.lower() for name in players_to_add):
+                    QMessageBox.warning(dialog, "Error", "Player already queued for addition")
+                    return
+                
+                players_to_add.append(player_name)
+                name_input.clear()
+                refresh_player_list()
+            
+            def remove_player():
+                current_item = player_list.currentItem()
+                if not current_item:
+                    QMessageBox.warning(dialog, "Error", "Please select a player to remove")
+                    return
+                
+                player_id = current_item.data(Qt.ItemDataRole.UserRole)
+                
+                # Handle newly added players
+                if player_id.startswith("new_"):
+                    player_name = player_id[4:]
+                    if player_name in players_to_add:
+                        players_to_add.remove(player_name)
+                else:
+                    # Handle existing players
+                    if player_id not in players_to_remove:
+                        players_to_remove.append(player_id)
+                    else:
+                        players_to_remove.remove(player_id)
+                
+                refresh_player_list()
+            
+            def save_changes():
+                try:
+                    # Remove players
+                    for player_id in players_to_remove:
+                        player = next((p for p in self.session.config.players if p.id == player_id), None)
+                        if not player:
+                            continue
+                        
+                        # Forfeit any active matches
+                        for match in self.session.matches:
+                            if match.status in ['waiting', 'in-progress']:
+                                if player_id in match.team1 or player_id in match.team2:
+                                    forfeit_match(self.session, match.id)
+                        
+                        # Remove from active players and config
+                        self.session.active_players.discard(player_id)
+                        self.session.config.players = [p for p in self.session.config.players if p.id != player_id]
+                    
+                    # Add players
+                    for player_name in players_to_add:
+                        new_player = Player(id=f"player_{datetime.now().timestamp()}", name=player_name)
+                        self.session.config.players.append(new_player)
+                        self.session.active_players.add(new_player.id)
+                        
+                        # Initialize stats - set games_waited to max + 1
+                        max_wait = max([self.session.player_stats[p.id].games_waited for p in self.session.config.players if p.id != new_player.id], default=0)
+                        
+                        from python.types import PlayerStats
+                        self.session.player_stats[new_player.id] = PlayerStats(
+                            player_id=new_player.id,
+                            wins=0,
+                            losses=0,
+                            games_played=0,
+                            games_waited=max_wait + 1,
+                            partners_played=set(),
+                            opponents_played=set(),
+                            total_points_for=0,
+                            total_points_against=0
+                        )
+                    
+                    # Regenerate match queue once at the end
+                    if players_to_add or players_to_remove:
+                        from python.roundrobin import generate_round_robin_queue
+                        self.session.match_queue = generate_round_robin_queue(
+                            [p for p in self.session.config.players if p.id in self.session.active_players],
+                            self.session.config.session_type,
+                            self.session.config.banned_pairs
+                        )
+                        self.refresh_display()
+                    
+                    dialog.accept()
+                except Exception as e:
+                    QMessageBox.critical(dialog, "Error", f"Error saving changes:\n{str(e)}")
+            
+            add_btn.clicked.connect(add_player)
+            remove_btn.clicked.connect(remove_player)
+            save_btn.clicked.connect(save_changes)
+            
+            dialog.exec()
+            
+        except Exception as e:
+            error_msg = f"Error managing players:\n{str(e)}"
+            print(f"PLAYER MANAGEMENT ERROR: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Error", error_msg)
     
     def edit_match_history(self, item):
         """Edit a match from history"""
