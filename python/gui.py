@@ -1780,6 +1780,24 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         
         central_widget.setLayout(layout)
+        
+        # Apply dark theme
+        dark_stylesheet = """
+            QMainWindow { background-color: #1e1e1e; }
+            QWidget { background-color: #1e1e1e; }
+            QLabel { color: white; background-color: #1e1e1e; }
+            QPushButton { 
+                color: white; 
+                background-color: #0d47a1;
+                border: none;
+                border-radius: 4px;
+                padding: 8px;
+            }
+            QPushButton:hover { background-color: #1565c0; }
+            QPushButton:pressed { background-color: #0d47a1; }
+        """
+        self.setStyleSheet(dark_stylesheet)
+        
         self.setWindowTitle("Pickleball Session Manager")
         self.resize(600, 400)
     
