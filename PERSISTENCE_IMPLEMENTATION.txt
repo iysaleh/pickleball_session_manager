@@ -1,0 +1,117 @@
+SESSION PERSISTENCE IMPLEMENTATION SUMMARY
+==========================================
+
+FEATURES IMPLEMENTED:
+
+1. PLAYER HISTORY TRACKING
+   - Automatically saves all player names from sessions
+   - Removes duplicates while preserving order
+   - Stored in ~/.pickleball/player_history.json
+   - Updated whenever a session ends
+
+2. NEW SESSION WITH PREVIOUS PLAYERS
+   - New button on main screen: "New Session with Previous Players"
+   - Pre-loads all player names from previous sessions
+   - Users can add/remove/modify players before starting
+   - Does NOT carry over player stats/rankings
+   - Starts with fresh ELO and match history
+
+3. SESSION AUTO-SAVE
+   - Session state automatically saved when closing window
+   - Session state automatically saved when ending session
+   - Saved in ~/.pickleball/last_session.json
+   - Includes:
+     * All players and their stats
+     * All completed matches and scores
+     * All in-progress matches
+     * Match queue
+     * Waiting list
+     * Court assignments
+
+4. RESUME LAST SESSION
+   - New button on main screen: "Resume Last Session"
+   - Only appears if a saved session exists
+   - Loads exact session state from file
+   - Resume exactly where you left off
+   - All player stats, scores, matches preserved
+
+5. UPDATED MAIN SCREEN
+   - Old buttons removed: "Load Session" (placeholder)
+   - New buttons:
+     * "New Session" - Start fresh session
+     * "Resume Last Session" - Appears if saved session exists
+     * "New Session with Previous Players" - Appears if player history exists
+
+TECHNICAL DETAILS:
+
+New File: python/session_persistence.py
+- ensure_session_dir(): Creates ~/.pickleball directory
+- save_player_history(): Save list of player names
+- load_player_history(): Load list of player names
+- serialize_session(): Convert session to JSON
+- deserialize_session(): Convert JSON to session
+- save_session(): Save current session state
+- load_last_session(): Load saved session state
+- has_saved_session(): Check if saved session exists
+- clear_saved_session(): Delete saved session file
+
+Modified Files:
+- python/gui.py:
+  * Updated MainWindow.init_ui() to show dynamic buttons
+  * Added MainWindow.resume_last_session()
+  * Added MainWindow.new_session_with_previous_players()
+  * Updated SetupDialog.__init__() to accept previous_players
+  * Updated SetupDialog.init_ui() to auto-load previous players
+  * Updated SessionWindow.closeEvent() to save session
+
+Storage Locations:
+- Player History: ~/.pickleball/player_history.json
+- Last Session: ~/.pickleball/last_session.json
+- On Windows: C:\Users\<username>\.pickleball\
+- On macOS: /Users/<username>/.pickleball/
+- On Linux: /home/<username>/.pickleball/
+
+TEST COVERAGE:
+- test_persistence.py: 5 tests covering all persistence features
+  * test_player_history_persistence
+  * test_session_persistence
+  * test_session_with_completed_matches
+  * test_session_with_waiting_players
+  * test_clear_saved_session
+- All existing tests still pass
+
+USAGE WORKFLOW:
+
+1. First Time Launch:
+   - Only "New Session" button visible
+   - Create session with players
+   - Player names saved to history
+
+2. After First Session:
+   - "New Session" button always visible
+   - "Resume Last Session" button appears (if session was saved)
+   - "New Session with Previous Players" button appears
+
+3. Resume Workflow:
+   - Click "Resume Last Session"
+   - App loads exact previous state
+   - Can continue playing
+
+4. New Session with Previous Players:
+   - Click "New Session with Previous Players"
+   - All previous player names pre-loaded
+   - Can add/remove players as needed
+   - Stats start fresh (no carryover)
+
+EDGE CASES HANDLED:
+✓ First launch (no history/saved session)
+✓ Duplicate players in history (deduplicated)
+✓ Session with no matches yet
+✓ Session with completed matches
+✓ Session with waiting players
+✓ Match queue preservation
+✓ Player stats preservation
+✓ Complex match scenarios
+✓ Proper JSON serialization/deserialization
+
+All features tested and working correctly!

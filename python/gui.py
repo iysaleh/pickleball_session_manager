@@ -145,9 +145,10 @@ class PlayerListWidget(QWidget):
 class SetupDialog(QDialog):
     """Dialog for session setup"""
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, previous_players=None):
         super().__init__(parent)
         self.session: Optional[Session] = None
+        self.previous_players = previous_players or []
         self.init_ui()
     
     def init_ui(self):
@@ -186,6 +187,16 @@ class SetupDialog(QDialog):
         layout.addWidget(QLabel("Players:"))
         self.player_widget = PlayerListWidget()
         layout.addWidget(self.player_widget)
+        
+        # Add previous players if available
+        if self.previous_players:
+            for player_name in self.previous_players:
+                player = Player(id=f"player_{len(self.player_widget.players)}_{datetime.now().timestamp()}", name=player_name)
+                self.player_widget.players.append(player)
+                item = QListWidgetItem(player_name)
+                item.setData(Qt.ItemDataRole.UserRole, player.id)
+                self.player_widget.player_list.addItem(item)
+            self.player_widget.update_player_count()
         
         # Test data button
         test_btn = QPushButton("Add 18 Test Players")
@@ -595,6 +606,11 @@ class SessionWindow(QMainWindow):
     def closeEvent(self, event):
         """Handle window close"""
         self.update_timer.stop()
+        
+        # Save session state before closing
+        from python.session_persistence import save_session
+        save_session(self.session)
+        
         if self.parent_window:
             self.parent_window.show()
         event.accept()
@@ -1727,20 +1743,37 @@ class MainWindow(QMainWindow):
         layout.addWidget(title)
         
         # Buttons
-        button_layout = QHBoxLayout()
+        button_layout = QVBoxLayout()
         
         new_session_btn = QPushButton("New Session")
+        new_session_btn.setMinimumHeight(50)
+        new_session_btn.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         new_session_btn.clicked.connect(self.new_session)
         button_layout.addWidget(new_session_btn)
         
-        load_session_btn = QPushButton("Load Session")
-        load_session_btn.clicked.connect(self.load_session)
-        button_layout.addWidget(load_session_btn)
+        # Check if we have a saved session
+        from python.session_persistence import has_saved_session, load_player_history
+        
+        if has_saved_session():
+            resume_btn = QPushButton("Resume Last Session")
+            resume_btn.setMinimumHeight(50)
+            resume_btn.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+            resume_btn.clicked.connect(self.resume_last_session)
+            button_layout.addWidget(resume_btn)
+        
+        # Check if we have player history
+        player_history = load_player_history()
+        if player_history:
+            previous_players_btn = QPushButton("New Session with Previous Players")
+            previous_players_btn.setMinimumHeight(50)
+            previous_players_btn.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+            previous_players_btn.clicked.connect(self.new_session_with_previous_players)
+            button_layout.addWidget(previous_players_btn)
         
         layout.addLayout(button_layout)
         
         # Info
-        info_label = QLabel("Select 'New Session' to start a new pickleball session")
+        info_label = QLabel("Select an option to begin")
         info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(info_label)
         
@@ -1778,6 +1811,65 @@ class MainWindow(QMainWindow):
     def load_session(self):
         """Load a session from file"""
         QMessageBox.information(self, "Info", "Session loading not yet implemented")
+    
+    def resume_last_session(self):
+        """Resume the last saved session"""
+        try:
+            from python.session_persistence import load_last_session
+            
+            session = load_last_session()
+            if not session:
+                QMessageBox.warning(self, "Error", "Could not load last session")
+                return
+            
+            self.session = session
+            try:
+                self.session_window = SessionWindow(self.session, parent_window=self)
+                self.session_window.show()
+                self.hide()
+            except Exception as e:
+                error_msg = f"Error creating session window:\n{str(e)}"
+                print(f"SESSION WINDOW ERROR: {error_msg}")
+                import traceback
+                traceback.print_exc()
+                QMessageBox.critical(self, "Session Window Error", error_msg)
+        except Exception as e:
+            error_msg = f"Error resuming session:\n{str(e)}"
+            print(f"RESUME SESSION ERROR: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Error", error_msg)
+    
+    def new_session_with_previous_players(self):
+        """Create a new session with players from previous sessions"""
+        try:
+            from python.session_persistence import load_player_history
+            
+            player_history = load_player_history()
+            
+            if not player_history:
+                QMessageBox.warning(self, "Error", "No player history available")
+                return
+            
+            setup = SetupDialog(self, previous_players=player_history)
+            if setup.exec() == QDialog.DialogCode.Accepted:
+                self.session = setup.session
+                try:
+                    self.session_window = SessionWindow(self.session, parent_window=self)
+                    self.session_window.show()
+                    self.hide()
+                except Exception as e:
+                    error_msg = f"Error creating session window:\n{str(e)}"
+                    print(f"SESSION WINDOW ERROR: {error_msg}")
+                    import traceback
+                    traceback.print_exc()
+                    QMessageBox.critical(self, "Session Window Error", error_msg)
+        except Exception as e:
+            error_msg = f"Error in new_session_with_previous_players:\n{str(e)}"
+            print(f"NEW SESSION ERROR: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Error", error_msg)
 
 
 def main():
