@@ -1643,7 +1643,7 @@ class SessionWindow(QMainWindow):
             # Create dialog
             dialog = QDialog(self)
             dialog.setWindowTitle("Make Court")
-            dialog.setStyleSheet("QDialog { background-color: #2a2a2a; } QLabel { color: white; background-color: #2a2a2a; } QComboBox { background-color: #3a3a3a; color: white; } QListWidget { background-color: #3a3a3a; color: white; }")
+            dialog.setStyleSheet("QDialog { background-color: #2a2a2a; } QLabel { color: white; background-color: #2a2a2a; } QComboBox { background-color: #3a3a3a; color: white; border: 1px solid #555; border-radius: 3px; padding: 5px; }")
             dialog.setMinimumWidth(500)
             
             layout = QVBoxLayout()
@@ -1653,37 +1653,141 @@ class SessionWindow(QMainWindow):
             court_layout.addWidget(QLabel("Select Court:"))
             court_combo = QComboBox()
             court_combo.addItems([f"Court {c}" for c in empty_courts])
+            court_combo.setStyleSheet("QComboBox { background-color: #3a3a3a; color: white; border: 1px solid #555; border-radius: 3px; padding: 5px; } QComboBox QAbstractItemView { background-color: #3a3a3a; color: white; }")
             court_combo.setData = lambda idx, role, val: None  # Make it selectable
             court_layout.addWidget(court_combo)
             layout.addLayout(court_layout)
             
-            # Team 1 selection
-            team1_label = QLabel("Team 1 Players:")
+            # Determine if singles or doubles
+            is_doubles = self.session.config.session_type == 'doubles'
+            num_per_team = 2 if is_doubles else 1
+            
+            # Create player combo function
+            def create_player_combo(exclude_ids=None):
+                """Create a combo box for player selection"""
+                combo = QComboBox()
+                combo.setStyleSheet("""
+                    QComboBox { 
+                        background-color: #3a3a3a; 
+                        color: white; 
+                        border: 1px solid #555;
+                        border-radius: 3px;
+                        padding: 5px;
+                    }
+                    QComboBox QAbstractItemView { 
+                        background-color: #3a3a3a; 
+                        color: white;
+                    }
+                """)
+                
+                combo.addItem("(Select a player)", None)
+                
+                exclude_set = exclude_ids or set()
+                sorted_waiting = sorted(waiting_ids, key=lambda pid: get_player_name(self.session, pid))
+                
+                for player_id in sorted_waiting:
+                    if player_id not in exclude_set:
+                        player_name = get_player_name(self.session, player_id)
+                        combo.addItem(player_name, player_id)
+                
+                return combo
+            
+            team_combos = {
+                'team1': [],
+                'team2': []
+            }
+            
+            position_dict = {}
+            
+            def on_combo_changed():
+                """Handle combo box change with auto-swap logic"""
+                # Find which combo triggered the change
+                changed_combo = None
+                changed_team = None
+                changed_idx = None
+                
+                for team_name in ['team1', 'team2']:
+                    for idx, combo in enumerate(team_combos[team_name]):
+                        # Check if any combo changed by comparing to position_dict
+                        current = combo.currentData()
+                        previous = position_dict.get((team_name, idx))
+                        if current != previous and current is not None:
+                            changed_combo = combo
+                            changed_team = team_name
+                            changed_idx = idx
+                            break
+                    if changed_combo:
+                        break
+                
+                if not changed_combo:
+                    return
+                
+                selected_player_id = changed_combo.currentData()
+                previous_player = position_dict.get((changed_team, changed_idx))
+                
+                # Check for duplicate
+                for team_name in ['team1', 'team2']:
+                    for idx, other_combo in enumerate(team_combos[team_name]):
+                        if other_combo is changed_combo:
+                            continue
+                        
+                        if other_combo.currentData() == selected_player_id:
+                            # Found duplicate, swap them
+                            if previous_player:
+                                for i in range(other_combo.count()):
+                                    if other_combo.itemData(i) == previous_player:
+                                        other_combo.blockSignals(True)
+                                        other_combo.setCurrentIndex(i)
+                                        other_combo.blockSignals(False)
+                                        position_dict[(team_name, idx)] = previous_player
+                                        break
+                            break
+                
+                # Update position dict
+                position_dict[(changed_team, changed_idx)] = selected_player_id
+            
+            # Team 1 section
+            team1_label = QLabel("Team 1:")
             team1_label.setStyleSheet("QLabel { color: #ff9999; font-weight: bold; }")
             layout.addWidget(team1_label)
-            team1_list = QListWidget()
-            team1_list.setMaximumHeight(100)
-            team1_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-            for player_id in waiting_ids:
-                player_name = get_player_name(self.session, player_id)
-                item = QListWidgetItem(player_name)
-                item.setData(Qt.ItemDataRole.UserRole, player_id)
-                team1_list.addItem(item)
-            layout.addWidget(team1_list)
             
-            # Team 2 selection
-            team2_label = QLabel("Team 2 Players:")
+            team1_layout = QVBoxLayout()
+            for i in range(num_per_team):
+                position_label = QLabel(f"  Position {i + 1}:")
+                position_label.setStyleSheet("QLabel { color: #ddd; }")
+                team1_layout.addWidget(position_label)
+                
+                combo = create_player_combo()
+                team_combos['team1'].append(combo)
+                position_dict[('team1', i)] = None  # Initialize with None
+                combo.currentIndexChanged.connect(on_combo_changed)
+                
+                team1_layout.addWidget(combo)
+                team1_layout.addSpacing(5)
+            
+            layout.addLayout(team1_layout)
+            layout.addSpacing(10)
+            
+            # Team 2 section
+            team2_label = QLabel("Team 2:")
             team2_label.setStyleSheet("QLabel { color: #99ccff; font-weight: bold; }")
             layout.addWidget(team2_label)
-            team2_list = QListWidget()
-            team2_list.setMaximumHeight(100)
-            team2_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-            for player_id in waiting_ids:
-                player_name = get_player_name(self.session, player_id)
-                item = QListWidgetItem(player_name)
-                item.setData(Qt.ItemDataRole.UserRole, player_id)
-                team2_list.addItem(item)
-            layout.addWidget(team2_list)
+            
+            team2_layout = QVBoxLayout()
+            for i in range(num_per_team):
+                position_label = QLabel(f"  Position {i + 1}:")
+                position_label.setStyleSheet("QLabel { color: #ddd; }")
+                team2_layout.addWidget(position_label)
+                
+                combo = create_player_combo()
+                team_combos['team2'].append(combo)
+                position_dict[('team2', i)] = None  # Initialize with None
+                combo.currentIndexChanged.connect(on_combo_changed)
+                
+                team2_layout.addWidget(combo)
+                team2_layout.addSpacing(5)
+            
+            layout.addLayout(team2_layout)
             
             # Buttons
             button_layout = QHBoxLayout()
@@ -1704,27 +1808,16 @@ class SessionWindow(QMainWindow):
                 court_text = court_combo.currentText()
                 court_num = int(court_text.split()[-1])
                 
-                team1_items = team1_list.selectedItems()
-                team2_items = team2_list.selectedItems()
+                team1_ids = [combo.currentData() for combo in team_combos['team1'] if combo.currentData()]
+                team2_ids = [combo.currentData() for combo in team_combos['team2'] if combo.currentData()]
                 
-                if not team1_items or not team2_items:
-                    QMessageBox.warning(dialog, "Error", "Please select at least one player for each team")
+                if len(team1_ids) != num_per_team or len(team2_ids) != num_per_team:
+                    QMessageBox.warning(dialog, "Error", f"Each team must have exactly {num_per_team} player(s)")
                     return
-                
-                team1_ids = [item.data(Qt.ItemDataRole.UserRole) for item in team1_items]
-                team2_ids = [item.data(Qt.ItemDataRole.UserRole) for item in team2_items]
                 
                 # Check for overlapping players
                 if set(team1_ids) & set(team2_ids):
                     QMessageBox.warning(dialog, "Error", "A player cannot be on both teams")
-                    return
-                
-                # Get session type to validate team size
-                if self.session.config.session_type == 'doubles' and (len(team1_ids) != 2 or len(team2_ids) != 2):
-                    QMessageBox.warning(dialog, "Error", "Each team must have exactly 2 players for doubles")
-                    return
-                elif self.session.config.session_type == 'singles' and (len(team1_ids) != 1 or len(team2_ids) != 1):
-                    QMessageBox.warning(dialog, "Error", "Each team must have exactly 1 player for singles")
                     return
                 
                 # Create match
@@ -1766,11 +1859,12 @@ class SessionWindow(QMainWindow):
             waiting_ids = get_waiting_players(self.session)
             all_available_ids = list(waiting_ids) + match.team1 + match.team2
             all_available_ids = list(set(all_available_ids))  # Remove duplicates
+            all_available_ids.sort(key=lambda pid: get_player_name(self.session, pid))
             
             # Create edit dialog
             dialog = QDialog(self)
             dialog.setWindowTitle(f"Edit Court {court_number}")
-            dialog.setStyleSheet("QDialog { background-color: #2a2a2a; } QLabel { color: white; background-color: #2a2a2a; } QComboBox { background-color: #3a3a3a; color: white; } QListWidget { background-color: #3a3a3a; color: white; }")
+            dialog.setStyleSheet("QDialog { background-color: #2a2a2a; } QLabel { color: white; background-color: #2a2a2a; } QComboBox { background-color: #3a3a3a; color: white; border: 1px solid #555; border-radius: 3px; padding: 5px; }")
             dialog.setMinimumWidth(500)
             
             layout = QVBoxLayout()
@@ -1788,39 +1882,162 @@ class SessionWindow(QMainWindow):
             
             layout.addSpacing(10)
             
-            # Team 1 selection
-            team1_label = QLabel("New Team 1 Players:")
+            # Determine if singles or doubles
+            is_doubles = self.session.config.session_type == 'doubles'
+            num_per_team = 2 if is_doubles else 1
+            
+            # Create dropdowns for each player position
+            team_combos = {
+                'team1': [],
+                'team2': []
+            }
+            
+            # Store player ID to combo box mapping for swap detection
+            player_to_combos = {}
+            
+            def create_player_combo(current_player_id=None, exclude_player_ids=None):
+                """Create a combo box for player selection"""
+                combo = QComboBox()
+                combo.setStyleSheet("""
+                    QComboBox { 
+                        background-color: #3a3a3a; 
+                        color: white; 
+                        border: 1px solid #555;
+                        border-radius: 3px;
+                        padding: 5px;
+                    }
+                    QComboBox QAbstractItemView { 
+                        background-color: #3a3a3a; 
+                        color: white;
+                    }
+                """)
+                
+                combo.addItem("(None)", None)
+                
+                exclude_ids = exclude_player_ids or set()
+                for player_id in all_available_ids:
+                    if player_id not in exclude_ids:
+                        player_name = get_player_name(self.session, player_id)
+                        combo.addItem(player_name, player_id)
+                        # Track this combo for this player
+                        if player_id not in player_to_combos:
+                            player_to_combos[player_id] = []
+                        player_to_combos[player_id].append(combo)
+                
+                # Set current value
+                if current_player_id:
+                    for i in range(combo.count()):
+                        if combo.itemData(i) == current_player_id:
+                            combo.setCurrentIndex(i)
+                            break
+                
+                return combo
+            
+            def on_combo_changed(combo, position_dict):
+                """Handle combo box change with auto-swap logic"""
+                selected_player_id = combo.currentData()
+                if not selected_player_id:
+                    return
+                
+                # Find which position was changed
+                changed_team = None
+                changed_idx = None
+                for team_name, combos in team_combos.items():
+                    for idx, c in enumerate(combos):
+                        if c is combo:
+                            changed_team = team_name
+                            changed_idx = idx
+                            break
+                    if changed_team:
+                        break
+                
+                if not changed_team:
+                    return
+                
+                # Get the previously selected player in this position
+                previous_player = position_dict.get((changed_team, changed_idx))
+                
+                # Find if this player is already selected in another position
+                duplicate_found = False
+                for team_name, combos in team_combos.items():
+                    for idx, other_combo in enumerate(combos):
+                        if other_combo is combo:
+                            continue
+                        
+                        other_player_id = other_combo.currentData()
+                        if other_player_id == selected_player_id:
+                            # Found duplicate: swap them
+                            # The other combo should get what was in this position
+                            if previous_player:
+                                for i in range(other_combo.count()):
+                                    if other_combo.itemData(i) == previous_player:
+                                        other_combo.blockSignals(True)
+                                        other_combo.setCurrentIndex(i)
+                                        other_combo.blockSignals(False)
+                                        # Update position dict for the swapped combo
+                                        position_dict[(team_name, idx)] = previous_player
+                                        duplicate_found = True
+                                        break
+                            if duplicate_found:
+                                break
+                    if duplicate_found:
+                        break
+                
+                # Update position dict for the changed position
+                position_dict[(changed_team, changed_idx)] = selected_player_id
+            
+            # Track current positions for swap logic
+            position_dict = {}
+            
+            # Team 1 section
+            team1_label = QLabel("Team 1:")
             team1_label.setStyleSheet("QLabel { color: #ff9999; font-weight: bold; }")
             layout.addWidget(team1_label)
-            team1_list = QListWidget()
-            team1_list.setMaximumHeight(100)
-            team1_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-            for player_id in all_available_ids:
-                player_name = get_player_name(self.session, player_id)
-                item = QListWidgetItem(player_name)
-                item.setData(Qt.ItemDataRole.UserRole, player_id)
-                team1_list.addItem(item)
-                # Pre-select current team 1 members
-                if player_id in match.team1:
-                    item.setSelected(True)
-            layout.addWidget(team1_list)
             
-            # Team 2 selection
-            team2_label = QLabel("New Team 2 Players:")
+            team1_layout = QVBoxLayout()
+            for i in range(num_per_team):
+                player_id = match.team1[i] if i < len(match.team1) else None
+                position_label = QLabel(f"  Position {i + 1}:")
+                position_label.setStyleSheet("QLabel { color: #ddd; }")
+                team1_layout.addWidget(position_label)
+                
+                combo = create_player_combo(player_id)
+                team_combos['team1'].append(combo)
+                position_dict[('team1', i)] = player_id
+                
+                # Connect change signal with position tracking
+                combo.currentIndexChanged.connect(lambda _, c=combo: on_combo_changed(c, position_dict))
+                
+                team1_layout.addWidget(combo)
+                team1_layout.addSpacing(5)
+            
+            layout.addLayout(team1_layout)
+            layout.addSpacing(10)
+            
+            # Team 2 section
+            team2_label = QLabel("Team 2:")
             team2_label.setStyleSheet("QLabel { color: #99ccff; font-weight: bold; }")
             layout.addWidget(team2_label)
-            team2_list = QListWidget()
-            team2_list.setMaximumHeight(100)
-            team2_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-            for player_id in all_available_ids:
-                player_name = get_player_name(self.session, player_id)
-                item = QListWidgetItem(player_name)
-                item.setData(Qt.ItemDataRole.UserRole, player_id)
-                team2_list.addItem(item)
-                # Pre-select current team 2 members
-                if player_id in match.team2:
-                    item.setSelected(True)
-            layout.addWidget(team2_list)
+            
+            team2_layout = QVBoxLayout()
+            for i in range(num_per_team):
+                player_id = match.team2[i] if i < len(match.team2) else None
+                position_label = QLabel(f"  Position {i + 1}:")
+                position_label.setStyleSheet("QLabel { color: #ddd; }")
+                team2_layout.addWidget(position_label)
+                
+                combo = create_player_combo(player_id)
+                team_combos['team2'].append(combo)
+                position_dict[('team2', i)] = player_id
+                
+                # Connect change signal with position tracking
+                combo.currentIndexChanged.connect(lambda _, c=combo: on_combo_changed(c, position_dict))
+                
+                team2_layout.addWidget(combo)
+                team2_layout.addSpacing(5)
+            
+            layout.addLayout(team2_layout)
+            layout.addSpacing(10)
             
             # Buttons
             button_layout = QHBoxLayout()
@@ -1841,27 +2058,16 @@ class SessionWindow(QMainWindow):
             dialog.setLayout(layout)
             
             def save_changes():
-                team1_items = team1_list.selectedItems()
-                team2_items = team2_list.selectedItems()
+                team1_ids = [combo.currentData() for combo in team_combos['team1'] if combo.currentData()]
+                team2_ids = [combo.currentData() for combo in team_combos['team2'] if combo.currentData()]
                 
-                if not team1_items or not team2_items:
-                    QMessageBox.warning(dialog, "Error", "Please select at least one player for each team")
+                if len(team1_ids) != num_per_team or len(team2_ids) != num_per_team:
+                    QMessageBox.warning(dialog, "Error", f"Each team must have exactly {num_per_team} player(s)")
                     return
-                
-                team1_ids = [item.data(Qt.ItemDataRole.UserRole) for item in team1_items]
-                team2_ids = [item.data(Qt.ItemDataRole.UserRole) for item in team2_items]
                 
                 # Check for overlapping players
                 if set(team1_ids) & set(team2_ids):
                     QMessageBox.warning(dialog, "Error", "A player cannot be on both teams")
-                    return
-                
-                # Validate team sizes
-                if self.session.config.session_type == 'doubles' and (len(team1_ids) != 2 or len(team2_ids) != 2):
-                    QMessageBox.warning(dialog, "Error", "Each team must have exactly 2 players for doubles")
-                    return
-                elif self.session.config.session_type == 'singles' and (len(team1_ids) != 1 or len(team2_ids) != 1):
-                    QMessageBox.warning(dialog, "Error", "Each team must have exactly 1 player for singles")
                     return
                 
                 # Update match
@@ -1873,23 +2079,34 @@ class SessionWindow(QMainWindow):
             
             def swap_teams():
                 # Swap the current selections
-                team1_current = [item.data(Qt.ItemDataRole.UserRole) for item in team1_list.selectedItems()]
-                team2_current = [item.data(Qt.ItemDataRole.UserRole) for item in team2_list.selectedItems()]
+                team1_current = [combo.currentData() for combo in team_combos['team1']]
+                team2_current = [combo.currentData() for combo in team_combos['team2']]
                 
-                # Clear selections
-                team1_list.clearSelection()
-                team2_list.clearSelection()
+                # Swap by updating combo boxes
+                for i, combo in enumerate(team_combos['team1']):
+                    if i < len(team2_current):
+                        player_id = team2_current[i]
+                        combo.blockSignals(True)
+                        for j in range(combo.count()):
+                            if combo.itemData(j) == player_id:
+                                combo.setCurrentIndex(j)
+                                break
+                        combo.blockSignals(False)
                 
-                # Swap selections
-                for i in range(team1_list.count()):
-                    item = team1_list.item(i)
-                    if item.data(Qt.ItemDataRole.UserRole) in team2_current:
-                        item.setSelected(True)
+                for i, combo in enumerate(team_combos['team2']):
+                    if i < len(team1_current):
+                        player_id = team1_current[i]
+                        combo.blockSignals(True)
+                        for j in range(combo.count()):
+                            if combo.itemData(j) == player_id:
+                                combo.setCurrentIndex(j)
+                                break
+                        combo.blockSignals(False)
                 
-                for i in range(team2_list.count()):
-                    item = team2_list.item(i)
-                    if item.data(Qt.ItemDataRole.UserRole) in team1_current:
-                        item.setSelected(True)
+                # Update position dict
+                for i in range(num_per_team):
+                    position_dict[('team1', i)] = team_combos['team1'][i].currentData()
+                    position_dict[('team2', i)] = team_combos['team2'][i].currentData()
             
             save_btn.clicked.connect(save_changes)
             swap_btn.clicked.connect(swap_teams)

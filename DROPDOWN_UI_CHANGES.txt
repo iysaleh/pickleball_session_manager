@@ -1,0 +1,73 @@
+Edit Court Dialog - Dropdown UI Improvements
+=============================================
+
+CHANGES MADE:
+
+1. **Edit Court Match Dialog (edit_court_match method)**
+   
+   BEFORE: Used multi-selection list widgets (QListWidget with MultiSelection)
+   - Team 1 Players: Multi-select list
+   - Team 2 Players: Multi-select list
+   - Users clicked items to select/deselect
+   
+   AFTER: Uses dropdown menus (QComboBox) with auto-swap
+   - Team 1 Position 1: Dropdown
+   - Team 1 Position 2: Dropdown (for doubles)
+   - Team 2 Position 1: Dropdown
+   - Team 2 Position 2: Dropdown (for doubles)
+   
+   KEY FEATURES:
+   - Each player position has its own dropdown
+   - Auto-swap: When selecting a player from another team, they automatically swap positions
+   - Sorted player list for easier selection
+   - Works for both singles and doubles modes
+   - Swap Teams button to swap all positions at once
+
+2. **Make Court Dialog (make_court method)**
+   
+   BEFORE: Used multi-selection list widgets
+   - Team 1 Players: Multi-select list
+   - Team 2 Players: Multi-select list
+   
+   AFTER: Uses dropdown menus with auto-swap
+   - Same structure as Edit Court for consistency
+   - Position-based dropdowns
+   - Auto-swap on duplicate selection
+   - Adapts to singles/doubles mode
+
+IMPLEMENTATION DETAILS:
+
+Auto-Swap Logic:
+- When a player is selected in a position, the system checks if they're already selected elsewhere
+- If a duplicate is found, the combo boxes swap values
+- Previous position value is stored in position_dict
+- Prevents users from selecting the same player in multiple positions
+- Uses blockSignals(True/False) to prevent infinite loops during swaps
+
+Position Dictionary:
+- Tracks current selections: {('team1', 0): player_id, ('team1', 1): player_id, ...}
+- Updated whenever combo box selection changes
+- Used for swap detection and auto-swap implementation
+
+Benefits Over Multi-Select Lists:
+1. Clearer UI: Each position explicitly labeled (Position 1, Position 2)
+2. Automatic validation: Can't accidentally select same player twice
+3. Better UX: Auto-swap feels more natural than manual deselection
+4. Works for both singles and doubles
+5. Easier to understand player positioning
+
+TEST COVERAGE:
+
+Created 3 comprehensive test files:
+1. test_court_dropdowns.py - Basic UI functionality
+2. test_ui_dropdowns.py - Detailed UI improvements verification
+3. test_auto_swap_behavior.py - Auto-swap logic documentation and testing
+
+All tests pass successfully and existing tests (test_court_management.py) still pass.
+
+FILE MODIFIED:
+- python/gui.py (1000+ lines of UI improvement)
+
+Lines changed:
+- make_court() method: ~170 lines (from list widgets to dropdowns)
+- edit_court_match() method: ~270 lines (from list widgets to dropdowns + auto-swap)

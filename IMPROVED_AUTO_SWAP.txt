@@ -1,0 +1,90 @@
+IMPROVED AUTO-SWAP FUNCTIONALITY
+================================
+
+ENHANCEMENT MADE:
+
+The auto-swap logic has been significantly improved to provide a seamless user experience when selecting players from the opposite team.
+
+BEFORE (Original Implementation):
+- When selecting a player already on the other team, the system would just clear the duplicate
+- User had to manually fix the resulting empty position
+- Not user-friendly
+
+AFTER (Improved Implementation):
+- When selecting a player from the opposite team, automatic bidirectional swap occurs
+- The player being replaced automatically takes the position of the selected player
+- All positions remain filled
+- No manual fixing required
+
+
+EXAMPLE SCENARIO:
+
+Initial State:
+  Team 1: [Player1, Player2]
+  Team 2: [Player3, Player4]
+
+User Action: Select Player3 for Team 1 Position 1
+
+Improved Behavior:
+  1. Detect: Player3 is being selected for Team 1 Position 1
+  2. Find: Player3 is currently in Team 2 Position 1
+  3. Swap: 
+     - Player1 (what was in Team 1 Position 1) moves to Team 2 Position 1
+     - Player3 (what was selected) takes Team 1 Position 1
+  4. Result:
+     Team 1: [Player3, Player2]
+     Team 2: [Player1, Player4]
+
+The result is a clean swap where all positions are filled!
+
+
+IMPLEMENTATION DETAILS:
+
+1. Position Dictionary Tracking
+   - position_dict stores: {('team1', 0): player_id, ('team1', 1): player_id, ...}
+   - Initialized at dialog creation
+   - Updated after every change
+   - Used to know what was previously in each position
+
+2. Change Detection
+   - When combo box changes, find which position was modified
+   - Compare current value with previous value in position_dict
+   - Identify the specific team and index that changed
+
+3. Duplicate Detection & Swap
+   - Get the newly selected player ID
+   - Get the previously selected player ID for that position
+   - Search all other positions for the newly selected player
+   - If found on another team:
+     a. Block signals to prevent infinite recursion
+     b. Update the other team's combo to show the previous player
+     c. Update position_dict for both positions
+     d. Unblock signals
+
+4. Works With Both Dialogs
+   - Edit Court Match dialog: edit_court_match method
+   - Make Court dialog: make_court method
+
+
+TESTING:
+
+All scenarios covered:
+- Initial selection
+- Swapping across teams
+- Multi-step swaps
+- Edge cases with empty positions
+- Both singles and doubles modes
+
+Test files:
+- test_improved_auto_swap.py - Comprehensive auto-swap scenarios
+- test_dialog_integration.py - Full dialog integration
+- test_court_management.py - Existing tests still pass
+
+
+KEY IMPROVEMENTS:
+✓ Seamless UX - No manual fixing needed
+✓ Smart swaps - Preserves match structure
+✓ Cross-team support - Handles all swap scenarios
+✓ No duplicates - Prevents invalid selections
+✓ Works both ways - Singles and doubles compatible
+✓ Backward compatible - Doesn't break existing functionality
