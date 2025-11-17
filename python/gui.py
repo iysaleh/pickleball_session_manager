@@ -535,6 +535,9 @@ class CourtDisplayWidget(QWidget):
             if complete_match(self.session, self.current_match.id, team1_score, team2_score):
                 self.team1_score.setValue(0)
                 self.team2_score.setValue(0)
+                # Save session after completing a match
+                from python.session_persistence import save_session
+                save_session(self.session)
             else:
                 QMessageBox.warning(self, "Error", "Failed to complete match")
     
@@ -553,7 +556,9 @@ class CourtDisplayWidget(QWidget):
         
         if reply == QMessageBox.StandardButton.Yes:
             if forfeit_match(self.session, self.current_match.id):
-                pass
+                # Save session after forfeiting a match
+                from python.session_persistence import save_session
+                save_session(self.session)
             else:
                 QMessageBox.warning(self, "Error", "Failed to forfeit match")
     
