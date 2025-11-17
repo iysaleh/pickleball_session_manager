@@ -5,6 +5,7 @@ Utility functions for session management
 import uuid
 import random
 from typing import List, Dict, Set, Tuple, Optional
+from datetime import datetime
 from .types import Player, PlayerStats, AdvancedConfig, KingOfCourtConfig, RoundRobinConfig, Match
 
 
@@ -106,3 +107,35 @@ def format_duration(seconds: int) -> str:
     minutes = seconds // 60
     secs = seconds % 60
     return f"{minutes:02d}:{secs:02d}"
+
+
+def start_player_wait_timer(stats: PlayerStats) -> None:
+    """Start the wait timer for a player entering the waitlist"""
+    if stats.wait_start_time is None:
+        stats.wait_start_time = datetime.now()
+
+
+def stop_player_wait_timer(stats: PlayerStats) -> int:
+    """
+    Stop the wait timer for a player (entering a match).
+    Adds the wait time to total_wait_time and resets wait_start_time.
+    Returns the duration waited in seconds.
+    """
+    if stats.wait_start_time is None:
+        return 0
+    
+    wait_duration = int((datetime.now() - stats.wait_start_time).total_seconds())
+    stats.total_wait_time += wait_duration
+    stats.wait_start_time = None
+    return wait_duration
+
+
+def get_current_wait_time(stats: PlayerStats) -> int:
+    """
+    Get the current wait time for a player (without stopping the timer).
+    Returns 0 if player is not waiting.
+    """
+    if stats.wait_start_time is None:
+        return 0
+    
+    return int((datetime.now() - stats.wait_start_time).total_seconds())

@@ -35,6 +35,10 @@ class PlayerStats:
     opponent_last_game: Dict[str, int] = field(default_factory=dict)  # opponent_id -> last_game_number
     # For inter-court mixing: track which courts this player has played on (in order)
     court_history: List[int] = field(default_factory=list)  # List of court numbers in chronological order
+    # Wait time tracking: when player entered waitlist (for current wait session)
+    wait_start_time: Optional[datetime] = None
+    # Total accumulated wait time in seconds
+    total_wait_time: int = 0
 
 
 @dataclass

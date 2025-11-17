@@ -754,11 +754,23 @@ class SessionWindow(QMainWindow):
         # Right sidebar section (waiting list + queue)
         right_section = QVBoxLayout()
         
-        # Waiting list section
+        # Waiting list section header with toggle button
+        waiting_header = QHBoxLayout()
         waiting_label = QLabel("⏳ Waitlist")
         waiting_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         waiting_label.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 8px; border-radius: 3px; }")
-        right_section.addWidget(waiting_label)
+        waiting_header.addWidget(waiting_label)
+        
+        # Toggle button for wait times
+        self.toggle_wait_times_btn = QPushButton("Show Time Waited")
+        self.toggle_wait_times_btn.setMaximumWidth(120)
+        self.toggle_wait_times_btn.setStyleSheet("QPushButton { background-color: #4a4a4a; color: white; font-weight: bold; padding: 5px; border-radius: 3px; font-size: 10px; } QPushButton:hover { background-color: #5a5a5a; }")
+        self.toggle_wait_times_btn.clicked.connect(self.toggle_wait_times_display)
+        self.show_wait_times = False
+        waiting_header.addWidget(self.toggle_wait_times_btn)
+        waiting_header.addStretch()
+        
+        right_section.addLayout(waiting_header)
         
         self.waiting_list = QListWidget()
         self.waiting_list.setMinimumWidth(250)
@@ -863,6 +875,16 @@ class SessionWindow(QMainWindow):
         
         self.title.setText(info)
     
+    def toggle_wait_times_display(self):
+        """Toggle the display of wait times in the waitlist"""
+        self.show_wait_times = not self.show_wait_times
+        if self.show_wait_times:
+            self.toggle_wait_times_btn.setText("Hide Time Waited")
+        else:
+            self.toggle_wait_times_btn.setText("Show Time Waited")
+        # Trigger a refresh to update the display
+        self.refresh_display()
+    
     def refresh_display(self):
         """Refresh court displays"""
         try:
@@ -870,22 +892,52 @@ class SessionWindow(QMainWindow):
                 populate_empty_courts, get_match_for_court, get_session_summary,
                 get_waiting_players, get_queued_matches_for_display
             )
+            from python.utils import start_player_wait_timer, stop_player_wait_timer
+            
             populate_empty_courts(self.session)
             
-            # Update court displays
+            # Update court displays and stop wait timers for players in matches
+            players_in_matches = set()
             for court_num in range(1, self.session.config.courts + 1):
                 widget = self.court_widgets.get(court_num)
                 if widget is None:
                     continue
                 match = get_match_for_court(self.session, court_num)
                 widget.set_match(match)
+                if match:
+                    players_in_matches.update(match.team1 + match.team2)
+                    # Stop wait timers for players now in a match
+                    for player_id in (match.team1 + match.team2):
+                        if player_id in self.session.player_stats:
+                            stop_player_wait_timer(self.session.player_stats[player_id])
             
-            # Update waiting players list
+            # Update waiting players list and start wait timers
             waiting_ids = get_waiting_players(self.session)
             self.waiting_list.clear()
             for player_id in waiting_ids:
                 player_name = get_player_name(self.session, player_id)
-                self.waiting_list.addItem(player_name)
+                # Start wait timer for players on waitlist
+                if player_id in self.session.player_stats:
+                    start_player_wait_timer(self.session.player_stats[player_id])
+                    # Get current wait time and format it only if toggle is on
+                    if self.show_wait_times:
+                        from python.utils import get_current_wait_time, format_duration
+                        stats = self.session.player_stats[player_id]
+                        
+                        # Current wait time (since last match)
+                        current_wait = get_current_wait_time(stats)
+                        current_wait_str = format_duration(current_wait)
+                        
+                        # Total accumulated wait time
+                        total_wait = stats.total_wait_time + current_wait
+                        total_wait_str = format_duration(total_wait)
+                        
+                        item_text = f"{player_name}  [{current_wait_str} / {total_wait_str}]"
+                    else:
+                        item_text = player_name
+                else:
+                    item_text = player_name
+                self.waiting_list.addItem(item_text)
             
             self.waiting_count.setText(f"{len(waiting_ids)} player{'s' if len(waiting_ids) != 1 else ''} waiting")
             
@@ -1004,20 +1056,26 @@ class SessionWindow(QMainWindow):
                 record = f"{stats.wins}-{stats.losses}"
                 win_pct = (stats.wins / stats.games_played * 100) if stats.games_played > 0 else 0
                 
-                player_data.append((player.name, elo, record, stats.games_played, win_pct))
+                # Include wait time (accumulated + current if waiting)
+                from python.utils import get_current_wait_time, format_duration
+                current_wait = get_current_wait_time(stats)
+                total_wait_seconds = stats.total_wait_time + current_wait
+                
+                player_data.append((player.name, elo, record, stats.games_played, win_pct, total_wait_seconds))
             
             # Sort by ELO descending
             player_data.sort(key=lambda x: x[1], reverse=True)
             
             # Write header
-            export_lines.append(f"{'Player':<25} {'ELO':<10} {'W-L':<10} {'Games':<10} {'Win %':<10}")
-            export_lines.append("-" * 70)
+            export_lines.append(f"{'Player':<25} {'ELO':<10} {'W-L':<10} {'Games':<10} {'Win %':<10} {'Wait Time':<12}")
+            export_lines.append("-" * 82)
             
             # Write player data
-            for player_name, elo, record, games_played, win_pct in player_data:
+            for player_name, elo, record, games_played, win_pct, total_wait_seconds in player_data:
                 win_pct_str = f"{win_pct:.1f}%" if games_played > 0 else "N/A"
+                wait_time_str = format_duration(total_wait_seconds)
                 export_lines.append(
-                    f"{player_name:<25} {elo:<10.0f} {record:<10} {games_played:<10} {win_pct_str:<10}"
+                    f"{player_name:<25} {elo:<10.0f} {record:<10} {games_played:<10} {win_pct_str:<10} {wait_time_str:<12}"
                 )
             
             export_lines.append("")
@@ -1422,16 +1480,16 @@ class SessionWindow(QMainWindow):
             if is_competitive_variety:
                 # Include ELO rating for competitive variety
                 column_labels = [
-                    "Player", "ELO", "W-L", "Games", "Waited", "Win %", 
+                    "Player", "ELO", "W-L", "Games", "Waited", "Wait Time", "Win %", 
+                    "Partners", "Opponents", "Avg Pt Diff", "Pts For", "Pts Against"
+                ]
+                num_columns = 12
+            else:
+                column_labels = [
+                    "Player", "W-L", "Games", "Waited", "Wait Time", "Win %", 
                     "Partners", "Opponents", "Avg Pt Diff", "Pts For", "Pts Against"
                 ]
                 num_columns = 11
-            else:
-                column_labels = [
-                    "Player", "W-L", "Games", "Waited", "Win %", 
-                    "Partners", "Opponents", "Avg Pt Diff", "Pts For", "Pts Against"
-                ]
-                num_columns = 10
             
             # Create table
             table = QTableWidget()
@@ -1480,6 +1538,11 @@ class SessionWindow(QMainWindow):
                 # Win percentage
                 win_pct = (stats.wins / stats.games_played * 100) if stats.games_played > 0 else 0
                 
+                # Get current wait time (in case player is currently waiting)
+                from python.utils import get_current_wait_time
+                current_wait = get_current_wait_time(stats)
+                total_wait_seconds = stats.total_wait_time + current_wait
+                
                 player_data.append((
                     player.name,
                     elo,
@@ -1487,6 +1550,7 @@ class SessionWindow(QMainWindow):
                     stats.losses,
                     stats.games_played,
                     stats.games_waited,
+                    total_wait_seconds,
                     win_pct,
                     len(stats.partners_played),
                     len(stats.opponents_played),
@@ -1501,11 +1565,13 @@ class SessionWindow(QMainWindow):
                 player_data.sort(key=lambda x: -x[1])
             else:
                 # Sort by wins (descending), then by losses (ascending), then by avg_diff (descending)
-                player_data.sort(key=lambda x: (-x[2], x[3], -x[9]))
+                player_data.sort(key=lambda x: (-x[2], x[3], -x[10]))
             
             # Populate table
             for row, data in enumerate(player_data):
                 table.insertRow(row)
+                
+                from python.utils import format_duration
                 
                 if is_competitive_variety:
                     items = [
@@ -1513,26 +1579,28 @@ class SessionWindow(QMainWindow):
                         f"{data[1]:.0f}",  # ELO
                         f"{data[2]}-{data[3]}",  # W-L
                         str(data[4]),  # games
-                        str(data[5]),  # waited
-                        f"{data[6]:.1f}%",  # win %
-                        str(data[7]),  # partners
-                        str(data[8]),  # opponents
-                        f"{data[9]:.1f}",  # avg pt diff
-                        str(data[10]),  # pts for
-                        str(data[11])  # pts against
+                        str(data[5]),  # waited (count)
+                        format_duration(data[6]),  # wait time (seconds)
+                        f"{data[7]:.1f}%",  # win %
+                        str(data[8]),  # partners
+                        str(data[9]),  # opponents
+                        f"{data[10]:.1f}",  # avg pt diff
+                        str(data[11]),  # pts for
+                        str(data[12])  # pts against
                     ]
                 else:
                     items = [
                         data[0],  # name
                         f"{data[2]}-{data[3]}",  # W-L
                         str(data[4]),  # games
-                        str(data[5]),  # waited
-                        f"{data[6]:.1f}%",  # win %
-                        str(data[7]),  # partners
-                        str(data[8]),  # opponents
-                        f"{data[9]:.1f}",  # avg pt diff
-                        str(data[10]),  # pts for
-                        str(data[11])  # pts against
+                        str(data[5]),  # waited (count)
+                        format_duration(data[6]),  # wait time (seconds)
+                        f"{data[7]:.1f}%",  # win %
+                        str(data[8]),  # partners
+                        str(data[9]),  # opponents
+                        f"{data[10]:.1f}",  # avg pt diff
+                        str(data[11]),  # pts for
+                        str(data[12])  # pts against
                     ]
                 
                 for col, text in enumerate(items):

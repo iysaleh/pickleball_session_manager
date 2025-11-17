@@ -91,7 +91,9 @@ def serialize_session(session) -> Dict:
             "total_points_against": stats.total_points_against,
             "partner_last_game": stats.partner_last_game,
             "opponent_last_game": stats.opponent_last_game,
-            "court_history": stats.court_history
+            "court_history": stats.court_history,
+            "total_wait_time": stats.total_wait_time,
+            "wait_start_time": stats.wait_start_time.isoformat() if stats.wait_start_time else None
         }
     
     # Serialize queue
@@ -142,6 +144,12 @@ def deserialize_session(data: Dict):
     # Reconstruct player stats
     player_stats = {}
     for player_id, stats_data in data["player_stats"].items():
+        # Reconstruct wait_start_time if it exists
+        wait_start_time = None
+        if stats_data.get("wait_start_time"):
+            from datetime import datetime as dt
+            wait_start_time = dt.fromisoformat(stats_data["wait_start_time"])
+        
         player_stats[player_id] = PlayerStats(
             player_id=stats_data["player_id"],
             games_played=stats_data["games_played"],
@@ -154,7 +162,9 @@ def deserialize_session(data: Dict):
             total_points_against=stats_data["total_points_against"],
             partner_last_game=stats_data.get("partner_last_game", {}),
             opponent_last_game=stats_data.get("opponent_last_game", {}),
-            court_history=stats_data.get("court_history", [])
+            court_history=stats_data.get("court_history", []),
+            total_wait_time=stats_data.get("total_wait_time", 0),
+            wait_start_time=wait_start_time
         )
     
     # Reconstruct matches
