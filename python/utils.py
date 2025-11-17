@@ -5,7 +5,7 @@ Utility functions for session management
 import uuid
 import random
 from typing import List, Dict, Set, Tuple, Optional
-from .types import Player, PlayerStats, AdvancedConfig, KingOfCourtConfig, RoundRobinConfig
+from .types import Player, PlayerStats, AdvancedConfig, KingOfCourtConfig, RoundRobinConfig, Match
 
 
 def generate_id() -> str:
@@ -87,3 +87,22 @@ def get_all_busy_courts(matches: List) -> int:
             court_numbers.add(match.court_number)
     
     return len(court_numbers)
+
+
+def calculate_match_duration(match: Match) -> Optional[int]:
+    """
+    Calculate match duration in seconds.
+    Returns None if match doesn't have both start and end times.
+    """
+    if not match.start_time or not match.end_time:
+        return None
+    
+    duration = (match.end_time - match.start_time).total_seconds()
+    return int(duration)
+
+
+def format_duration(seconds: int) -> str:
+    """Format seconds as MM:SS"""
+    minutes = seconds // 60
+    secs = seconds % 60
+    return f"{minutes:02d}:{secs:02d}"

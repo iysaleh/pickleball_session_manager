@@ -314,7 +314,8 @@ def create_manual_match(session: Session, court_number: int, team1_ids: List[str
         court_number=court_number,
         team1=team1_ids,
         team2=team2_ids,
-        status='waiting'
+        status='waiting',
+        start_time=datetime.now()
     )
     
     session.matches.append(match)

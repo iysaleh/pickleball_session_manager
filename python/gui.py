@@ -331,6 +331,8 @@ class CourtDisplayWidget(QWidget):
         self.current_match: Optional[Match] = None
         self.default_title = f"Court {self.court_number}"
         self.custom_title = None
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_timer)
         self.init_ui()
     
     def init_ui(self):
@@ -410,6 +412,18 @@ class CourtDisplayWidget(QWidget):
         self.team2_score.setMinimumWidth(50)
         score_layout.addWidget(self.team2_score)
         score_layout.addStretch()
+        
+        # Timer display
+        timer_label = QLabel("Game Duration:")
+        timer_label.setStyleSheet("QLabel { color: black; font-weight: bold; font-size: 12px; }")
+        score_layout.addWidget(timer_label)
+        
+        self.timer_display = QLabel("00:00")
+        self.timer_display.setStyleSheet("QLabel { background-color: white; color: black; border: 1px solid #999; border-radius: 3px; padding: 5px; font-size: 12px; font-weight: bold; min-width: 50px; text-align: center; }")
+        self.timer_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.timer_display.setMinimumWidth(50)
+        score_layout.addWidget(self.timer_display)
+        
         layout.addLayout(score_layout)
         
         # Buttons
@@ -432,6 +446,8 @@ class CourtDisplayWidget(QWidget):
     
     def set_match(self, match: Optional[Match]):
         """Update display with a match"""
+        # Stop timer for old match
+        self.timer.stop()
         self.current_match = match
         
         if not match:
@@ -439,6 +455,7 @@ class CourtDisplayWidget(QWidget):
             self.team2_label.setText("Waiting for\nplayers...")
             self.team1_score.setValue(0)
             self.team2_score.setValue(0)
+            self.timer_display.setText("00:00")
             self.court_area.setStyleSheet("QFrame { background-color: #e0e0e0; border: 2px dashed #999; border-radius: 5px; }")
             return
         
@@ -454,6 +471,22 @@ class CourtDisplayWidget(QWidget):
         if match.score:
             self.team1_score.setValue(match.score.get('team1_score', 0))
             self.team2_score.setValue(match.score.get('team2_score', 0))
+        
+        # Start timer for active matches
+        self.update_timer()
+        self.timer.start(1000)  # Update every second
+    
+    def update_timer(self):
+        """Update the timer display"""
+        if not self.current_match or not self.current_match.start_time:
+            self.timer_display.setText("00:00")
+            return
+        
+        from datetime import datetime
+        elapsed_seconds = int((datetime.now() - self.current_match.start_time).total_seconds())
+        minutes = elapsed_seconds // 60
+        seconds = elapsed_seconds % 60
+        self.timer_display.setText(f"{minutes:02d}:{seconds:02d}")
     
     def complete_match_clicked(self):
         """Handle complete match button"""
@@ -995,6 +1028,11 @@ class SessionWindow(QMainWindow):
                 export_lines.append("MATCH HISTORY:")
                 export_lines.append("-" * 70)
                 
+                from python.utils import calculate_match_duration, format_duration
+                
+                total_duration = 0
+                match_count = 0
+                
                 for match in reversed(completed_matches):
                     team1_names = [get_player_name(self.session, pid) for pid in match.team1]
                     team2_names = [get_player_name(self.session, pid) for pid in match.team2]
@@ -1003,11 +1041,26 @@ class SessionWindow(QMainWindow):
                         team1_score = match.score.get('team1_score', 0)
                         team2_score = match.score.get('team2_score', 0)
                         
+                        # Calculate match duration
+                        duration = calculate_match_duration(match)
+                        duration_str = format_duration(duration) if duration else "N/A"
+                        
+                        if duration:
+                            total_duration += duration
+                            match_count += 1
+                        
                         # Format: Higher score on top
                         if team1_score >= team2_score:
-                            export_lines.append(f"{', '.join(team1_names)}: {team1_score} beat {', '.join(team2_names)}: {team2_score}")
+                            export_lines.append(f"{', '.join(team1_names)}: {team1_score} beat {', '.join(team2_names)}: {team2_score} [{duration_str}]")
                         else:
-                            export_lines.append(f"{', '.join(team2_names)}: {team2_score} beat {', '.join(team1_names)}: {team1_score}")
+                            export_lines.append(f"{', '.join(team2_names)}: {team2_score} beat {', '.join(team1_names)}: {team1_score} [{duration_str}]")
+                
+                # Add average duration
+                if match_count > 0:
+                    avg_duration = total_duration // match_count
+                    avg_duration_str = format_duration(avg_duration)
+                    export_lines.append("")
+                    export_lines.append(f"Average Match Duration: {avg_duration_str}")
                 
                 export_lines.append("")
             

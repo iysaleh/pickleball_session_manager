@@ -46,6 +46,7 @@ class Match:
     team2: List[str]  # Player IDs
     status: MatchStatus
     score: Optional[Dict] = None  # {'team1_score': int, 'team2_score': int}
+    start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
 
 

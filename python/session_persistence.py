@@ -71,6 +71,7 @@ def serialize_session(session) -> Dict:
             "team2": match.team2,
             "status": match.status,
             "score": match.score,
+            "start_time": match.start_time.isoformat() if match.start_time else None,
             "end_time": match.end_time.isoformat() if match.end_time else None
         }
         matches_data.append(match_data)
@@ -159,8 +160,13 @@ def deserialize_session(data: Dict):
     # Reconstruct matches
     matches = []
     for match_data in data["matches"]:
+        start_time = None
+        if match_data.get("start_time"):
+            from datetime import datetime as dt
+            start_time = dt.fromisoformat(match_data["start_time"])
+        
         end_time = None
-        if match_data["end_time"]:
+        if match_data.get("end_time"):
             from datetime import datetime as dt
             end_time = dt.fromisoformat(match_data["end_time"])
         
@@ -170,7 +176,8 @@ def deserialize_session(data: Dict):
             team1=match_data["team1"],
             team2=match_data["team2"],
             status=match_data["status"],
-            score=match_data["score"],
+            score=match_data.get("score"),
+            start_time=start_time,
             end_time=end_time
         )
         matches.append(match)

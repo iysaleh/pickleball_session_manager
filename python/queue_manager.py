@@ -3,6 +3,7 @@ Match queue management - handles distributing queued matches to courts
 """
 
 from typing import List, Optional, Dict
+from datetime import datetime
 from .types import Session, Match, QueuedMatch, MatchStatus
 from .utils import generate_id
 
@@ -285,7 +286,8 @@ def populate_empty_courts(session: Session) -> Session:
             court_number=court_num,
             team1=best_match.team1,
             team2=best_match.team2,
-            status='waiting'
+            status='waiting',
+            start_time=datetime.now()
         )
         
         session.matches.append(match)

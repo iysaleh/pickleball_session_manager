@@ -4,6 +4,7 @@ Ensures maximum player variety by tracking court history and enforcing mixing ru
 """
 
 from typing import List, Dict, Tuple, Set, Optional
+from datetime import datetime
 from .types import Session, Match, PlayerStats
 from .queue_manager import get_match_for_court, get_waiting_players
 from .competitive_variety import (
@@ -346,7 +347,8 @@ def populate_with_inter_court_mixing(session: Session) -> None:
                     court_number=court_num,
                     team1=team1,
                     team2=team2,
-                    status='waiting'
+                    status='waiting',
+                    start_time=datetime.now()
                 )
                 session.matches.append(match)
                 

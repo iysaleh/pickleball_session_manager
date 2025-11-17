@@ -4,6 +4,7 @@ King of the Court matchmaking engine - ELO-based ranking system
 """
 
 from typing import List, Dict, Optional, Tuple
+from datetime import datetime
 from .types import Player, Session, PlayerStats, Match
 from .utils import generate_id
 
@@ -113,7 +114,8 @@ def create_koc_match(
         court_number=court_number,
         team1=team1,
         team2=team2,
-        status='waiting'
+        status='waiting',
+        start_time=datetime.now()
     )
 
 
