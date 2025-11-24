@@ -122,11 +122,58 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
     role = 'partner' or 'opponent'
     
     Hard constraints:
+    - Banned pairs cannot be partners
+    - Locked teams MUST be partners (and cannot be opponents)
     - If partners: must wait PARTNER_REPETITION_GAMES_REQUIRED games (2 games minimum gap)
     - If opponents: must wait OPPONENT_REPETITION_GAMES_REQUIRED games (1 game minimum gap)
     - Must respect 50% matchmaking bracket for non-provisional players
     - Only applies when 12+ players (otherwise fewer constraints)
     """
+    # 0. Check Locked Teams & Banned Pairs
+    # Check Banned Pairs (only applies to partners)
+    if role == 'partner' and session.config.banned_pairs:
+        for banned in session.config.banned_pairs:
+            if player1 in banned and player2 in banned:
+                return False
+
+    # Check Locked Teams
+    if session.config.locked_teams:
+        p1_locked_partner = None
+        for team in session.config.locked_teams:
+            if player1 in team:
+                # Find the partner(s)
+                for member in team:
+                    if member != player1:
+                        p1_locked_partner = member
+                        break
+                break
+        
+        p2_locked_partner = None
+        for team in session.config.locked_teams:
+            if player2 in team:
+                for member in team:
+                    if member != player2:
+                        p2_locked_partner = member
+                        break
+                break
+        
+        if role == 'partner':
+            # If p1 is locked to someone else, cannot partner with p2
+            if p1_locked_partner and p1_locked_partner != player2:
+                return False
+            # If p2 is locked to someone else, cannot partner with p1
+            if p2_locked_partner and p2_locked_partner != player1:
+                return False
+            # If they are locked to each other, they CAN (and must) play together
+            # This overrides partner repetition constraints
+            if p1_locked_partner == player2:
+                return True
+        
+        elif role == 'opponent':
+            # If they are locked to each other, they CANNOT be opponents
+            if p1_locked_partner == player2:
+                return False
+
     # Check bracket compatibility (50% rule) - only for 12+ players
     if len(session.active_players) >= 12:
         if not is_provisional(session, player1) or not is_provisional(session, player2):
@@ -332,39 +379,118 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                 best_team1 = None
                 best_team2 = None
                 
-                # First try selecting by ELO rating (best balanced players)
-                player_ratings = [(p, calculate_elo_rating(session.player_stats.get(p, 
-                                  type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))) 
-                                  for p in available_players]
-                player_ratings.sort(key=lambda x: x[1], reverse=True)
+                # Prioritize Locked Teams
+                locked_pairs = []
+                if session.config.locked_teams:
+                    for team in session.config.locked_teams:
+                         if len(team) == 2 and all(p in available_players for p in team):
+                             locked_pairs.append(team)
                 
-                # Try combinations starting with top-rated players
-                for combo in combinations([p[0] for p in player_ratings[:8]], 4):
-                    if _can_form_valid_teams(session, list(combo)):
-                        # Found a valid combination - use first config that works
-                        configs = [
-                            ([combo[0], combo[1]], [combo[2], combo[3]]),
-                            ([combo[0], combo[2]], [combo[1], combo[3]]),
-                            ([combo[0], combo[3]], [combo[1], combo[2]]),
-                        ]
-                        for team1, team2 in configs:
-                            if (can_play_with_player(session, team1[0], team1[1], 'partner') and
-                                can_play_with_player(session, team2[0], team2[1], 'partner')):
-                                # Check all opponent pairs
-                                valid = True
-                                for p1 in team1:
-                                    for p2 in team2:
-                                        if not can_play_with_player(session, p1, p2, 'opponent'):
-                                            valid = False
+                if locked_pairs:
+                    # Try to match locked pair vs locked pair first
+                    if len(locked_pairs) >= 2:
+                         for i in range(len(locked_pairs)):
+                             for j in range(i + 1, len(locked_pairs)):
+                                 pair1 = locked_pairs[i]
+                                 pair2 = locked_pairs[j]
+                                 
+                                 # Check validity of pair1 vs pair2
+                                 valid_match = True
+                                 for p1 in pair1:
+                                     for p2 in pair2:
+                                         if not can_play_with_player(session, p1, p2, 'opponent'):
+                                             valid_match = False
+                                             break
+                                     if not valid_match:
+                                         break
+                                 
+                                 if valid_match:
+                                     best_team1 = list(pair1)
+                                     best_team2 = list(pair2)
+                                     break
+                             if best_team1:
+                                 break
+                    
+                    # If not found or only 1 locked pair, match vs best available
+                    if not best_team1:
+                        pair1 = locked_pairs[0]
+                        remaining = [p for p in available_players if p not in pair1]
+                        
+                        # Sort remaining by rating
+                        player_ratings = [(p, calculate_elo_rating(session.player_stats.get(p, 
+                                          type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))) 
+                                          for p in remaining]
+                        player_ratings.sort(key=lambda x: x[1], reverse=True)
+
+                        # Try to find a partner pair for opponents
+                        # Check top candidates to find a valid pair
+                        candidates = [p[0] for p in player_ratings[:8]]
+                        found_opponent = False
+                        
+                        # Try to find a pair among candidates
+                        for combo in combinations(candidates, 2):
+                             pair2 = list(combo)
+                             if can_play_with_player(session, pair2[0], pair2[1], 'partner'):
+                                 # Check opponent validity
+                                 valid_match = True
+                                 for p1 in pair1:
+                                     for p2 in pair2:
+                                         if not can_play_with_player(session, p1, p2, 'opponent'):
+                                             valid_match = False
+                                             break
+                                     if not valid_match:
+                                         break
+                                 
+                                 if valid_match:
+                                     best_team1 = list(pair1)
+                                     best_team2 = list(pair2)
+                                     found_opponent = True
+                                     break
+                        
+                        if not found_opponent and len(remaining) >= 2:
+                             # If we couldn't find a match in top candidates, try simpler fallback?
+                             # Or just let it fall through to main logic which might break the lock 
+                             # (but main logic doesn't support locks effectively unless we force it).
+                             # Wait, if we don't pick the locked team here, the main logic 
+                             # `_can_form_valid_teams` calls `can_play_with_player` which enforces locks.
+                             # So if we fail here, the main logic MIGHT pick the locked team if it finds valid opponents.
+                             # But main logic iterates combinations of top players. If locked players are low rated, they might be skipped.
+                             pass
+
+                if not best_team1:
+                    # First try selecting by ELO rating (best balanced players)
+                    player_ratings = [(p, calculate_elo_rating(session.player_stats.get(p, 
+                                      type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))) 
+                                      for p in available_players]
+                    player_ratings.sort(key=lambda x: x[1], reverse=True)
+                    
+                    # Try combinations starting with top-rated players
+                    for combo in combinations([p[0] for p in player_ratings[:8]], 4):
+                        if _can_form_valid_teams(session, list(combo)):
+                            # Found a valid combination - use first config that works
+                            configs = [
+                                ([combo[0], combo[1]], [combo[2], combo[3]]),
+                                ([combo[0], combo[2]], [combo[1], combo[3]]),
+                                ([combo[0], combo[3]], [combo[1], combo[2]]),
+                            ]
+                            for team1, team2 in configs:
+                                if (can_play_with_player(session, team1[0], team1[1], 'partner') and
+                                    can_play_with_player(session, team2[0], team2[1], 'partner')):
+                                    # Check all opponent pairs
+                                    valid = True
+                                    for p1 in team1:
+                                        for p2 in team2:
+                                            if not can_play_with_player(session, p1, p2, 'opponent'):
+                                                valid = False
+                                                break
+                                        if not valid:
                                             break
-                                    if not valid:
+                                    if valid:
+                                        best_team1 = list(team1)
+                                        best_team2 = list(team2)
                                         break
-                                if valid:
-                                    best_team1 = list(team1)
-                                    best_team2 = list(team2)
-                                    break
-                        if best_team1:
-                            break
+                            if best_team1:
+                                break
                 
                 if best_team1 and best_team2:
                     match = Match(

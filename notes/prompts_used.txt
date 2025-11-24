@@ -427,8 +427,12 @@ This is great. Some improvements if you please:
 
 
 
-<Didn't work - todo>
-* Some players only want to play together with one other person through the entire session, they do not want random teammates. Update the New Session dialog to support locking players together. Also Add a Manage Player Locks button on the Active session page to lock players together. Note that players locked together can still be manually swapped in the edit court dialog -- locks are only considered at matchmaking. Update the round-robin and competetive variety matchmaking algorithms to consider player locks. Also, we need to add support for player partnership bans -- players that do not ever want to play together. The controls for locks and bans should be similarly located as they are related. When scheduling matches with locked players, they should always be on the same team. Try to not ruin any of the algorithms by adding support for these locks. The fuzzing tests for when the locks don't exist should still pass!!!!
+# Teams Feature
+* Some players only want to play together with one other person through the entire session, they do not want random teammates. Update the New Session dialog to support locking players together (IE Player Partnerships). Also Add a Manage Player Locks button on the Active session page to lock players together. Note that players locked together can still be manually swapped in the edit court dialog -- locks are only considered at matchmaking. Update the round-robin and competetive variety matchmaking algorithms to consider player locks. Also, we need to add support for player partnership bans -- players that do not ever want to play together. The controls for locks and bans should be similarly located as they are related. When scheduling matches with locked players, they should always be on the same team. Try to not ruin any of the algorithms by adding support for these locks. The fuzzing tests for when the locks don't exist should still pass!!!!
+## Revisions:
+* Instead of the Button being called "Manage Locks Bans", have the label say "Manage Partnerships & Bans".
+* When adding a partnership, the dropdowns allow you to click "Player 1" and "Player 1", have the dropdown logic be smarter so you can't select a player to partner with themselves.
+* If you add a partnership, you should not be able to select either of the two players in the partnership to create another lock.
 
 
 

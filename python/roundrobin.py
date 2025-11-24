@@ -38,9 +38,6 @@ def generate_round_robin_queue(
         active_matches: List of currently active Match objects to exclude from queue
     """
     
-    if locked_teams and len(locked_teams) > 0:
-        return _generate_locked_teams_round_robin_queue(locked_teams, max_matches)
-    
     players_per_team = 1 if session_type == 'singles' else 2
     players_per_match = players_per_team * 2
     
@@ -102,7 +99,24 @@ def generate_round_robin_queue(
         return ','.join(sorted(team1 + team2))
     
     def is_valid_team_configuration(team1: List[str], team2: List[str]) -> bool:
-        """Check if team configuration respects banned pairs"""
+        """Check if team configuration respects banned pairs and locked teams"""
+        # Check Locked Teams
+        if locked_teams and session_type == 'doubles':
+            for team in locked_teams:
+                # Check team1
+                members_in_team1 = [p for p in team if p in team1]
+                if members_in_team1:
+                    # If any member is present, ALL must be present
+                    if len(members_in_team1) != len(team):
+                        return False
+                
+                # Check team2
+                members_in_team2 = [p for p in team if p in team2]
+                if members_in_team2:
+                    # If any member is present, ALL must be present
+                    if len(members_in_team2) != len(team):
+                        return False
+        
         # Check team1 for banned pairs
         for i in range(len(team1)):
             for j in range(i + 1, len(team1)):
