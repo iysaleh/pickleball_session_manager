@@ -468,9 +468,12 @@ class CourtDisplayWidget(QWidget):
             self.timer_display.setText("00:00")
             self.court_area.setStyleSheet("QFrame { background-color: #e0e0e0; border: 2px dashed #999; border-radius: 5px; }")
             return
+        elapsed_seconds = (datetime.now() - match.start_time).total_seconds() if match.start_time else 0
         
-        self.court_area.setStyleSheet("QFrame { background-color: #c4d76d; border: 2px solid #333; border-radius: 5px; }")
-        
+        if 0 < elapsed_seconds <= 30:
+            self.court_area.setStyleSheet("QFrame { background-color: #c4d76d; border: 3px solid #4CAF50; border-radius: 5px; }") # Green highlight
+        else:
+            self.court_area.setStyleSheet("QFrame { background-color: #c4d76d; border: 2px solid #333; border-radius: 5px; }")
         # Get player names
         team1_names = [get_player_name(self.session, pid) for pid in match.team1]
         team2_names = [get_player_name(self.session, pid) for pid in match.team2]

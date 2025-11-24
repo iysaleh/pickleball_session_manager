@@ -411,6 +411,7 @@ This is great. Some improvements if you please:
 │   of courts. As of now, it's hardcoded to a 2 column x N rows of courts... We need to only do sliding at the row level. if court 1 finishes, court 2 slides to court 1, courts    │
 │   3..N stay unchanged. If court 3 finishes, court 4 slides to court 3, courts 1 2 and 5..N remain unchanged (assuming there are 5+ courts). If court 2 finishes, we do not slide  │
 │   at all. Update our sliding implementation to do row based sliding.
+* Update the Active Session GUI display @python/gui.py  so that games that have just started (as determined by having been active for 30 seconds or less) have a green highlight around them so the user can easily identify which new matches have just been scheduled.
 * TODO: Forfeit game doesn't work.
 
 * Transform
