@@ -33,6 +33,7 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
         courts=config.courts,
         banned_pairs=config.banned_pairs,
         locked_teams=config.locked_teams,
+        court_sliding_mode=config.court_sliding_mode,
         randomize_player_order=config.randomize_player_order,
         advanced_config=config.advanced_config
     )
@@ -160,12 +161,12 @@ def get_completed_matches(session: Session) -> List[Match]:
     return [m for m in session.matches if m.status in ['completed', 'forfeited']]
 
 
-def complete_match(session: Session, match_id: str, team1_score: int, team2_score: int) -> bool:
-    """Complete a match with scores"""
+def complete_match(session: Session, match_id: str, team1_score: int, team2_score: int) -> Tuple[bool, List[Dict]]:
+    """Complete a match with scores. Returns (success, list_of_slides)."""
     
     # Validate scores - winner must have higher score
     if team1_score == team2_score:
-        return False
+        return False, []
     
     # Find match
     match = None
@@ -175,7 +176,7 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
             break
     
     if not match:
-        return False
+        return False, []
     
     # Update match
     match.status = 'completed'
@@ -231,7 +232,59 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
         from .competitive_variety import update_variety_tracking_after_match
         update_variety_tracking_after_match(session, match.court_number, match.team1, match.team2)
     
-    return True
+    # Handle Court Sliding
+    slides = []
+    if session.config.court_sliding_mode != 'None':
+        finished_court = match.court_number
+        
+        # Calculate row parity (assuming 2 columns per row)
+        # 1-based index
+        # 1,2 -> Row 0
+        # 3,4 -> Row 1
+        # Odd courts (1,3,5) are LEFT
+        # Even courts (2,4,6) are RIGHT
+        
+        is_left_court = (finished_court % 2) != 0
+        
+        target_court = finished_court
+        source_court = None
+        
+        if session.config.court_sliding_mode == 'Right to Left':
+            # Right moves to Left.
+            # If finished is Left (Odd), check Right (Even) neighbor (finished + 1)
+            if is_left_court:
+                 neighbor = finished_court + 1
+                 if neighbor <= session.config.courts:
+                     source_court = neighbor
+            # If finished is Right (Even), no slide (nothing to its right in this row)
+            
+        elif session.config.court_sliding_mode == 'Left to Right':
+             # Left moves to Right.
+             # If finished is Right (Even), check Left (Odd) neighbor (finished - 1)
+             if not is_left_court:
+                 neighbor = finished_court - 1
+                 if neighbor >= 1:
+                     source_court = neighbor
+             # If finished is Left (Odd), no slide
+        
+        if source_court:
+            # Check for active match on source_court
+            source_match = None
+            for m in session.matches:
+                if m.court_number == source_court and m.status in ['waiting', 'in-progress']:
+                    source_match = m
+                    break
+            
+            if source_match:
+                # Move match to target_court
+                source_match.court_number = target_court
+                slides.append({
+                    'from': source_court,
+                    'to': target_court,
+                    'match_id': source_match.id
+                })
+    
+    return True, slides
 
 
 def forfeit_match(session: Session, match_id: str) -> bool:

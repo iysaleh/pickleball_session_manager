@@ -117,6 +117,7 @@ class SessionConfig:
     courts: int
     banned_pairs: List[tuple] = field(default_factory=list)  # List of (player_id, player_id) tuples
     locked_teams: Optional[List[List[str]]] = None  # List of teams (each team is list of player IDs)
+    court_sliding_mode: Literal['None', 'Right to Left', 'Left to Right'] = 'Right to Left'
     randomize_player_order: bool = False
     advanced_config: Optional[AdvancedConfig] = None
 

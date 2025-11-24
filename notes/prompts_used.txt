@@ -331,10 +331,6 @@ This is great. Some improvements if you please:
 ### Revision 47.1
 * Remember to treat the waitlist like a court, put a hard cap on the same courts mixing 2 times in a row.
 
-For the session stalled condition in @pickleball-session-11-05-2025-10-11.txt that you fixed, you added the comment: "CRITICAL: If ALL courts are empty (session stalled), be ULTRA lenient Just take the first available players to get things moving again", but that's not right, we still want to be as fair as possible with regards to the number of times people have waited that are currently waiting -- and then consider making the most balanced match possible from the most-waited players if they have even waits +/- 1!!!
-
-
-
 ### Revision TODO
 * King of the Court doesn't really make sense for 4 players, but I tried it anyways. After 3 games, there were no more games to play and all 4 players just sat there waiting. Is something wrong with the algorithm? Shouldn't it never end, regardless of the configuration?
 * Please add a test for 20 players and make sure the algorithm continues to work for 400 games, make the winners random...
@@ -346,9 +342,9 @@ For the session stalled condition in @pickleball-session-11-05-2025-10-11.txt th
 
 
 
-* I want to make a new game mode called "Competetive Matchmaking Variety", we will build the algorithm for this piece by piece. Please build the shell for this new game mode, but since we don't have anything yet for it, it should just never make any courts when a new match is started.
-* At the start of competetive matchmaking variety, we just take up to the first numberOfEmptyCourts*4 available players from the waitlist and make those courts.
-* Please rename everything for Competetive Matchmaking Variety to Competetive Variety Matchmaking
+* I want to make a new game mode called "Competetive Variety Matchmaking", we will build the algorithm for this piece by piece. Please build the shell for this new game mode, but since we don't have anything yet for it, it should just never make any courts when a new match is started.
+* At the start of Competetive Variety Matchmaking, we just take up to the first numberOfEmptyCourts*4 available players from the waitlist and make those courts.
+
 * The first feature I want to build for competetive variety matchmaking mode is a simple court variety algorithm... Consider each court as an entity, and the wait list as an entity. Courts may never make a game with the same four players that just played on the court (We assume the minimum players using competetive variety matchmaking is 10). After each match finishes, courts must mix with another court or the waitlist -- and we keep track of which courts just mixed with what court. For example, if court 1 finishes, all players must wait until another court (EG court 2) finishes. Then when another court finishes (or there are players in the wait list), 2 players are swapped from each court. If there is only 1 player on the waitlist, that court does not get made (there must be a minimum of 2 players in the waitlist for court mixing with the waitlist to happen). Consider the waitlist as multiple 4 unit groups that get tracked for this variety algorithm separately. EG, if there are 16 players and 2 courts, the waitlist will have 8 players (considered as 2 groups that mix separately for this variety algorithm). In 3+ court situations where there are enough players to fill them, we have a rule that courts may never mix with the same court (and waitlist) back to back. EG if courts 1 & 2 finish, and mix swapping players to fill themselves for the next game. If they finish again, they may not mix again, and players must return to the waitlist after the game finishes, and the court will be unoccupied until another court finishes. Once courts mix with a different court, we reset the court back to back tracking for all courts that had previously been blocked from being made. I'm sure there are some simple scenarios I forgot in writing this, but the overall idea to ensure match variety is there. Please build this feature, thinking comprehensively about what needs to be better for different scenarios.
 
 
@@ -361,11 +357,80 @@ For the session stalled condition in @pickleball-session-11-05-2025-10-11.txt th
 --- Don't write any documentation
 
 
+#### Python rework
+* Do not write any documenation. writing documentation.
+* This UI is atrocious, try to make it nice for the user. We want to draw the courts as rectangles on the active session page with the team members visibly shown on each side, the users in the waitlist need to be documented. When we complete a match, we don't need a success dialog, but we should have a confirm dialog.
+* The round robin algorithm is not working right, we have the same player on multiple courts, that can't happen. A player can only be in one place at once -- either on a single court, or on the waitlist.
 
 
+* The label text on the active session page is white text on a white background, make it white text on a black background so it's visible.
+* All 4 courts are drawn with 1 court per row, displayed as a single column. Make it so courts are drawn 2 courts per row.
+
+
+
+
+ > look at @KOC_RANKING_ALGORITHM.md , we want to develop an ELO like matchmaking system as described there for
+   competetive variety in the python code @python\competitive_variety.py  -- we want hard caps on how frequently
+   people play together -- if there are 12+ players, you should never play with the same person again until 2 games
+   have elapsed since you played together. Similarly, you should not play against the same person again unless 1
+   game has elapsed since you played together. Top ranked players should only play against the top 50% of players
+   (the up/down range for all games made need to be 50% limited) -- of course, provisional players can play up and
+   be the exception. Players are only provisional for 2 games.
+
+* We are only working on the python code right now, not the javascript version of the app. Do not write any markdown documentation or summary files. Do not use EOF syntax to write temporary test files, instead just write the test file and run the test separately. Persist the tests. 
+* Add a 'Make Court' button that lets you make a court with any of the players on the waitlist on any courts that are not currently occupied.(this should work in all Game Modes)
+* Add an "Edit Court" capability that lets you double click a court to change the player orientation, or swap them out with any player on the waitlist. (this should work in all Game Modes)
+* Make sure these new capabilities match our existing theme and do not have white text on white backgrounds anywhere. 
+* The Competetive Variety and Round Robin algorithms should continue to work normally even if a court is manually made.
+* The Export Session feature should export ELO and sort by it.
+
+
+
+* When we end a session, keep the history of all the players added so that when New Session is Pressed again, all the players from the previous session are added automatically.
+* Instead of "Load Session" for the main screen, have it be "New Session", "Resume Last Session", "New Session with Previous Players" (we are not persisting player rankings or stats for New Session with Previous Players, just the player names)
+* When the app is closed or a session is ended, automatically save the session state locally in a file.... "Resume Last Session" should load that file and resume exactly where it left off.
 
 ### Revision 3
-### Revision 3
+
+
+* Add an individual court timer for every court that starts ticking as soon as a court is made. Draw the court timer to the right of the Score Input boxes. Make sure that it follows the existing dark theme. Store the game duration in the match history. When we export the session results, we should have the duration for each match in the match history displayed. We should also calculate the average duration for all matches played.
+
+* Add individual timers for each player that keeps track of how long they have been on the waitlist. Update the Show Statistics window to include how long each player has waited. Keep the "Waited" counter logic in tact, we are only adding timers here, not changing matchmaking behavior.
+
+* If we have enough players to make a court waiting (4+), and an open court waiting for a match to be made, and all the other courts that have players have been playing for less than 5 minutes so far, make a court even if the existing matchmaking conditions aren't met. 
+
+* I really like the Competetive Variety Matchmaking algorithm as it is now, build a collection of fuzzing tests to make sure that the algorithm behavior stays consistent going forward. The tests should run through about 100 matches aNd account for a variety of different player counts. The results of each iteration and session state should be verified after each match.
+
+* On Windows 10, the main app background and general theme is light, but on Windows 11, everything is dark themed like I expect and want. Can we default to a dark theme for Windows 10 as well?
+
+* We want to add some spacial aspect to the way courts are positioned. When we create a new session, add the ability to control a new feature called "Court Sliding" with possible options "Right to Left", "Left to Right", and "None" -- default to "Right to Left". When a match is finished for a court for right to left, if there is a court to the right of the court with an active game, the game is moved to the left (and vice versa to left to right). Note that the matchmaking algorithms should not change at all for this feature, just what happens when a score is inputted indicating a game is completed. When finishing a game and sliding a match, add an animation with the court ghost sliding over the other court that it's replacing so it's clear to the user that a court slide action is happening.  
+
+* Currently all of our game-modes operate in a continuous flow kind of system, add a round based system that is configured when creating a new session (make sure to update the GUI so users can select Game-Flow: Rounds, Continuous. When a court finishes in a round based system, all users are moved to the waitlist and no match is scheduled. The next match is scheduled only when the "Next Round" button is pressed. There are 2 new buttons to add to the active session window for Round based game-flows, "Next Round" and "Final Round". Next round is disabled when there is an active court -- all courts must finish before a user can press either "Next Round" or "Final Round". When "Next Round" is pressed, the courts are filled according to what the selected algorithm deems is the best. Note that with round based modes, even if there are imbalances in Competetive Variety Matchmaking, we always fill as many courts as possible given how many players and courts there are at the start of a round. All game mode algorithms are as fair as possible with respect to time waited when scheduling the next round. When "Final Round" is pressed for Competetive Variety Matchmaking, the courts are filled by player rankings. The Top #1 and #4 ranked player play against the Top #2 and #3 ranked player on Court 1. The Top #5 and #8 ranked player play against the Top #6 and #7 ranked player, and so on. The bottom ranked players that don't have a court to play on don't play in the final round. 
+## Sliding Revisions
+* Do not delete test files. Currently we consider the courts from 1 to N, and if court 2 finishes, 2..N will slide up. We need to instead consider the courts a grid with rows  │
+│   of courts. As of now, it's hardcoded to a 2 column x N rows of courts... We need to only do sliding at the row level. if court 1 finishes, court 2 slides to court 1, courts    │
+│   3..N stay unchanged. If court 3 finishes, court 4 slides to court 3, courts 1 2 and 5..N remain unchanged (assuming there are 5+ courts). If court 2 finishes, we do not slide  │
+│   at all. Update our sliding implementation to do row based sliding.
+* TODO: Forfeit game doesn't work.
+
+* Transform
+
+# Instruction
+* We are only working on the python code right now, not the javascript version of the app. Do not write any implementation documentation or summary files in any format (text , markdown). Do not use EOF syntax to write temporary test files, instead just write the test file and run the test separately. Persist the tests. 
+* You don't need to cd to the "pickleball_python_rework" directory to run tests or any python code, that is the current working directory you are in. Commands like 'cd "C:\Users\Ibraheem Saleh\Documents\ProjectDevelopment\pickleball_rework_python" && python test_court_dropdowns.py  2>&1' only need the 2nd part: "python test_court_dropdowns.py 2>&1"
+* Whenever you change something related to the Competetive Variety Matchmaking algorithm, you always run the fuzzing tests for it:"make run_fuzz_tests").
+* Tests built should have a make target added for them. Always run tests from their make targets, do not tail the output of tests that are run, just parse the entire output (or grep for what you care about!)
+* Do not prompt me to run the tests, always run the tests without prompting me. Run the tests without the tail command.
+* Never run any git tools.
+
+
+
+
+<Didn't work - todo>
+* Some players only want to play together with one other person through the entire session, they do not want random teammates. Update the New Session dialog to support locking players together. Also Add a Manage Player Locks button on the Active session page to lock players together. Note that players locked together can still be manually swapped in the edit court dialog -- locks are only considered at matchmaking. Update the round-robin and competetive variety matchmaking algorithms to consider player locks. Also, we need to add support for player partnership bans -- players that do not ever want to play together. The controls for locks and bans should be similarly located as they are related. When scheduling matches with locked players, they should always be on the same team. Try to not ruin any of the algorithms by adding support for these locks. The fuzzing tests for when the locks don't exist should still pass!!!!
+
+
+
 
 
 # Useful Commands:
@@ -381,7 +446,6 @@ http://localhost:5173?test=true
 	 npx vitest run src/test-14-players.test.ts
 	 
 	 npx vitest run src/tests/waitlist-court-bug.test.ts
-	 npm test -- seven-player-wait-bug
    Run Round Robin Tests:
      npx vitest run src/roundrobin.test.ts
    Run All Unit Tests:
@@ -409,14 +473,8 @@ http://localhost:5173?test=true
      # View results
      npx playwright show-report
 	 
-	 
-	 
-	 
-	 
-	 # Manual Tests
-	 Players[1-6,Ibraheem] --> 11-5, 4-11, 11-2, 5-11, Add Jeremy, 
-	 
-	 /model gpt-5
-	 /model claude-sonnet-4.5
-	 /model claude-sonnet-4
-	 /model claude-haiku-4.5 (.33% speed -- must be good!)
+Storage:
+     - Windows: C:\Users\<username>\.pickleball\
+     - macOS: /Users/<username>/.pickleball/
+     - Linux: /home/<username>/.pickleball/
+

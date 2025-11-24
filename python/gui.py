@@ -14,8 +14,8 @@ from PyQt6.QtWidgets import (
     QMessageBox, QInputDialog, QSpinBox, QGroupBox, QCheckBox, QFrame, QScrollArea,
     QGridLayout, QSpacerItem, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QTimer, QRect, QSize
-from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen
+from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup
+from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen, QPixmap
 
 from python.types import (
     Player, Session, SessionConfig, GameMode, SessionType, Match,
@@ -182,6 +182,15 @@ class SetupDialog(QDialog):
         courts_layout.addWidget(self.courts_spin)
         courts_layout.addStretch()
         layout.addLayout(courts_layout)
+
+        # Court Sliding
+        sliding_layout = QHBoxLayout()
+        sliding_layout.addWidget(QLabel("Court Sliding:"))
+        self.sliding_combo = QComboBox()
+        self.sliding_combo.addItems(["Right to Left", "Left to Right", "None"])
+        sliding_layout.addWidget(self.sliding_combo)
+        sliding_layout.addStretch()
+        layout.addLayout(sliding_layout)
         
         # Players
         layout.addWidget(QLabel("Players:"))
@@ -307,6 +316,7 @@ class SetupDialog(QDialog):
                 players=players,
                 courts=self.courts_spin.value(),
                 banned_pairs=[],
+                court_sliding_mode=self.sliding_combo.currentText(),
                 randomize_player_order=False
             )
             
@@ -565,9 +575,17 @@ class CourtDisplayWidget(QWidget):
         dialog.setMinimumWidth(400)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            if complete_match(self.session, self.current_match.id, team1_score, team2_score):
+            success, slides = complete_match(self.session, self.current_match.id, team1_score, team2_score)
+            if success:
                 self.team1_score.setValue(0)
                 self.team2_score.setValue(0)
+                
+                # Handle slides
+                if slides:
+                    parent = self.window()
+                    if hasattr(parent, 'animate_court_sliding'):
+                        parent.animate_court_sliding(slides)
+                
                 # Save session after completing a match
                 from python.session_persistence import save_session
                 save_session(self.session)
@@ -885,6 +903,80 @@ class SessionWindow(QMainWindow):
         # Trigger a refresh to update the display
         self.refresh_display()
     
+    def animate_court_sliding(self, slides: List[Dict]):
+        """Animate court changes"""
+        self.update_timer.stop()
+        
+        # Container for ghosts - use the widget inside the scroll area
+        # self.court_widgets[1] is a CourtDisplayWidget
+        if not self.court_widgets:
+            self.refresh_display()
+            self.update_timer.start(1000)
+            return
+
+        first_court = self.court_widgets[1]
+        container = first_court.parent()
+        
+        self.animation_group = QParallelAnimationGroup()
+        self.ghosts = [] # Keep references to delete later
+        
+        # Sort slides to handle overlapping movements if necessary?
+        # Parallel animation handles it fine visually.
+        
+        for slide in slides:
+            src_idx = slide['from']
+            dst_idx = slide['to']
+            
+            if src_idx not in self.court_widgets or dst_idx not in self.court_widgets:
+                continue
+
+            src_widget = self.court_widgets[src_idx]
+            dst_widget = self.court_widgets[dst_idx]
+            
+            # Create snapshot of source
+            pixmap = QPixmap(src_widget.size())
+            src_widget.render(pixmap)
+            
+            # Create cover for source (to hide the static widget underneath)
+            # Use a color that matches the background or looks like an empty slot
+            cover = QLabel(container)
+            cover.setStyleSheet("background-color: #2a2a2a;") 
+            cover.setGeometry(src_widget.geometry())
+            cover.show()
+            self.ghosts.append(cover)
+            
+            # Create ghost label
+            ghost = QLabel(container)
+            ghost.setPixmap(pixmap)
+            ghost.setGeometry(src_widget.geometry())
+            ghost.show()
+            self.ghosts.append(ghost)
+            
+            # Animation
+            anim = QPropertyAnimation(ghost, b"pos")
+            anim.setDuration(600) # 600ms for a snappy slide
+            anim.setStartValue(src_widget.pos())
+            anim.setEndValue(dst_widget.pos())
+            anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+            
+            self.animation_group.addAnimation(anim)
+            
+            # Raise ghost to ensure it flies over everything
+            ghost.raise_()
+
+        # Connect finished signal
+        self.animation_group.finished.connect(self.on_animation_finished)
+        self.animation_group.start()
+
+    def on_animation_finished(self):
+        """Cleanup after animation"""
+        for ghost in self.ghosts:
+            ghost.deleteLater()
+        self.ghosts = []
+        
+        self.refresh_display()
+        self.update_timer.start(1000)
+
     def refresh_display(self):
         """Refresh court displays"""
         try:

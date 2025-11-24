@@ -54,7 +54,7 @@ def test_session_saves_after_complete_match():
     
     # Complete the match
     print("Completing match...")
-    success = complete_match(session, match.id, 11, 9)
+    success, _ = complete_match(session, match.id, 11, 9)
     assert success, "Failed to complete match"
     
     # Verify match is completed

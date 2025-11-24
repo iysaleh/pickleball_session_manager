@@ -154,7 +154,7 @@ class TestSessionManagement(unittest.TestCase):
         session.matches.append(match)
         
         # Complete the match
-        result = complete_match(session, "test_match", 21, 15)
+        result, _ = complete_match(session, "test_match", 21, 15)
         
         self.assertTrue(result)
         self.assertEqual(match.status, 'completed')
