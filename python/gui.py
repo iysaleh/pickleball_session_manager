@@ -142,6 +142,238 @@ class PlayerListWidget(QWidget):
         self.update_player_count()
 
 
+class ManageLocksDialog(QDialog):
+    """Dialog for managing player locks and bans"""
+    
+    def __init__(self, players: List[Player], banned_pairs: List, locked_teams: List, parent=None):
+        super().__init__(parent)
+        self.players = players
+        self.banned_pairs = banned_pairs
+        self.locked_teams = locked_teams
+        self.init_ui()
+        
+    def get_player_name(self, player_id):
+        for p in self.players:
+            if p.id == player_id:
+                return p.name
+        return player_id
+        
+    def init_ui(self):
+        layout = QVBoxLayout()
+        
+        tabs = QTabWidget()
+        self.locks_tab = QWidget()
+        self.bans_tab = QWidget()
+        
+        self.setup_locks_tab()
+        self.setup_bans_tab()
+        
+        tabs.addTab(self.locks_tab, "Player Locks (Partners)")
+        tabs.addTab(self.bans_tab, "Banned Pairs")
+        
+        layout.addWidget(tabs)
+        
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn)
+        
+        self.setLayout(layout)
+        self.setWindowTitle("Manage Locks & Bans")
+        self.resize(500, 400)
+        
+        # Style
+        self.setStyleSheet("""
+            QDialog { background-color: #2a2a2a; color: white; }
+            QTabWidget::pane { border: 1px solid #555; }
+            QTabBar::tab { background: #3a3a3a; color: white; padding: 8px; }
+            QTabBar::tab:selected { background: #2196F3; }
+            QWidget { background-color: #2a2a2a; color: white; }
+            QListWidget { background-color: #3a3a3a; border: 1px solid #555; }
+            QPushButton { background-color: #0d47a1; color: white; padding: 5px; border-radius: 3px; }
+        """)
+
+    def setup_locks_tab(self):
+        layout = QVBoxLayout()
+        
+        self.locks_list = QListWidget()
+        self.refresh_locks()
+        layout.addWidget(self.locks_list)
+        
+        btn_layout = QHBoxLayout()
+        add_btn = QPushButton("Add Lock")
+        add_btn.clicked.connect(self.add_lock)
+        remove_btn = QPushButton("Remove Lock")
+        remove_btn.clicked.connect(self.remove_lock)
+        
+        btn_layout.addWidget(add_btn)
+        btn_layout.addWidget(remove_btn)
+        layout.addLayout(btn_layout)
+        
+        self.locks_tab.setLayout(layout)
+
+    def setup_bans_tab(self):
+        layout = QVBoxLayout()
+        
+        self.bans_list = QListWidget()
+        self.refresh_bans()
+        layout.addWidget(self.bans_list)
+        
+        btn_layout = QHBoxLayout()
+        add_btn = QPushButton("Add Ban")
+        add_btn.clicked.connect(self.add_ban)
+        remove_btn = QPushButton("Remove Ban")
+        remove_btn.clicked.connect(self.remove_ban)
+        
+        btn_layout.addWidget(add_btn)
+        btn_layout.addWidget(remove_btn)
+        layout.addLayout(btn_layout)
+        
+        self.bans_tab.setLayout(layout)
+        
+    def refresh_locks(self):
+        self.locks_list.clear()
+        for team in self.locked_teams:
+            names = [self.get_player_name(pid) for pid in team]
+            item = QListWidgetItem(" + ".join(names))
+            item.setData(Qt.ItemDataRole.UserRole, team)
+            self.locks_list.addItem(item)
+            
+    def refresh_bans(self):
+        self.bans_list.clear()
+        for pair in self.banned_pairs:
+            names = [self.get_player_name(pid) for pid in pair]
+            item = QListWidgetItem(" <> ".join(names))
+            item.setData(Qt.ItemDataRole.UserRole, pair)
+            self.bans_list.addItem(item)
+
+    def add_lock(self):
+        self.show_add_dialog("Add Player Lock", self.locked_teams, is_lock=True)
+
+    def add_ban(self):
+        self.show_add_dialog("Add Banned Pair", self.banned_pairs, is_lock=False)
+        
+    def show_add_dialog(self, title, target_list, is_lock):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        layout = QVBoxLayout()
+        
+        combo1 = QComboBox()
+        combo2 = QComboBox()
+        
+        sorted_players = sorted(self.players, key=lambda p: p.name)
+        
+        # Identify players who are already locked
+        locked_player_ids = set()
+        if is_lock:
+            for team in self.locked_teams:
+                for pid in team:
+                    locked_player_ids.add(pid)
+        
+        # Helper to update a combo's items
+        def update_combo_options(combo, exclude_id=None):
+            # Block signals to prevent recursion loops
+            combo.blockSignals(True)
+            
+            # Save current selection
+            current_id = combo.currentData()
+            
+            combo.clear()
+            combo.addItem("(Select a player)", None)
+            
+            found_current = False
+            for p in sorted_players:
+                # Skip if player is already locked (and we are adding a lock)
+                if is_lock and p.id in locked_player_ids:
+                    continue
+                    
+                if p.id != exclude_id:
+                    combo.addItem(p.name, p.id)
+                    if p.id == current_id:
+                        found_current = True
+            
+            # Restore selection if still valid, otherwise reset
+            if found_current:
+                 index = combo.findData(current_id)
+                 combo.setCurrentIndex(index)
+            else:
+                 combo.setCurrentIndex(0)
+                 
+            combo.blockSignals(False)
+        
+        # Initial population
+        update_combo_options(combo1)
+        update_combo_options(combo2)
+
+        def on_combo1_changed(index):
+            selected_id = combo1.currentData()
+            update_combo_options(combo2, selected_id)
+            
+        def on_combo2_changed(index):
+            selected_id = combo2.currentData()
+            update_combo_options(combo1, selected_id)
+            
+        combo1.currentIndexChanged.connect(on_combo1_changed)
+        combo2.currentIndexChanged.connect(on_combo2_changed)
+
+        layout.addWidget(QLabel("Player 1:"))
+        layout.addWidget(combo1)
+        layout.addWidget(QLabel("Player 2:"))
+        layout.addWidget(combo2)
+        
+        btn = QPushButton("Add")
+        layout.addWidget(btn)
+        
+        def on_add():
+            p1 = combo1.currentData()
+            p2 = combo2.currentData()
+            
+            if p1 is None or p2 is None:
+                QMessageBox.warning(dialog, "Error", "Please select two players")
+                return
+            
+            if p1 == p2:
+                QMessageBox.warning(dialog, "Error", "Select different players")
+                return
+            
+            # Check duplicates
+            if is_lock:
+                # Check if either player is already locked
+                for team in self.locked_teams:
+                    if p1 in team or p2 in team:
+                         QMessageBox.warning(dialog, "Error", "One or both players are already in a locked team")
+                         return
+                new_item = [p1, p2]
+            else:
+                # Check if pair already banned
+                if (p1, p2) in self.banned_pairs or (p2, p1) in self.banned_pairs:
+                    QMessageBox.warning(dialog, "Error", "Pair already banned")
+                    return
+                new_item = (p1, p2)
+            
+            target_list.append(new_item)
+            if is_lock:
+                self.refresh_locks()
+            else:
+                self.refresh_bans()
+            dialog.accept()
+            
+        btn.clicked.connect(on_add)
+        dialog.setLayout(layout)
+        dialog.exec()
+
+    def remove_lock(self):
+        row = self.locks_list.currentRow()
+        if row >= 0:
+            del self.locked_teams[row]
+            self.refresh_locks()
+            
+    def remove_ban(self):
+        row = self.bans_list.currentRow()
+        if row >= 0:
+            del self.banned_pairs[row]
+            self.refresh_bans()
+
+
 class SetupDialog(QDialog):
     """Dialog for session setup"""
     
@@ -149,6 +381,8 @@ class SetupDialog(QDialog):
         super().__init__(parent)
         self.session: Optional[Session] = None
         self.previous_players = previous_players or []
+        self.banned_pairs = []
+        self.locked_teams = []
         self.init_ui()
     
     def init_ui(self):
@@ -196,6 +430,11 @@ class SetupDialog(QDialog):
         layout.addWidget(QLabel("Players:"))
         self.player_widget = PlayerListWidget()
         layout.addWidget(self.player_widget)
+        
+        # Manage Locks Button
+        manage_btn = QPushButton("🤝 Manage Partnerships & Bans")
+        manage_btn.clicked.connect(self.manage_locks)
+        layout.addWidget(manage_btn)
         
         # Add previous players if available
         if self.previous_players:
@@ -271,6 +510,14 @@ class SetupDialog(QDialog):
         self.setWindowTitle("Session Setup")
         self.resize(600, 500)
     
+    def manage_locks(self):
+        players = self.player_widget.get_players()
+        if not players:
+             QMessageBox.warning(self, "Error", "Add players first")
+             return
+        dialog = ManageLocksDialog(players, self.banned_pairs, self.locked_teams, self)
+        dialog.exec()
+
     def add_test_players(self):
         """Add 18 test players"""
         names = [
@@ -315,7 +562,8 @@ class SetupDialog(QDialog):
                 session_type=session_type,
                 players=players,
                 courts=self.courts_spin.value(),
-                banned_pairs=[],
+                banned_pairs=self.banned_pairs,
+                locked_teams=self.locked_teams,
                 court_sliding_mode=self.sliding_combo.currentText(),
                 randomize_player_order=False
             )
@@ -850,6 +1098,11 @@ class SessionWindow(QMainWindow):
         players_btn.clicked.connect(self.manage_players)
         button_layout.addWidget(players_btn)
         
+        locks_btn = QPushButton("🤝 Manage Partnerships & Bans")
+        locks_btn.setStyleSheet("QPushButton { background-color: #607D8B; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
+        locks_btn.clicked.connect(self.manage_locks)
+        button_layout.addWidget(locks_btn)
+        
         stats_btn = QPushButton("📊 Show Statistics")
         stats_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
         stats_btn.clicked.connect(self.show_statistics)
@@ -895,6 +1148,43 @@ class SessionWindow(QMainWindow):
         info += f"Completed: {summary['completed_matches']}"
         
         self.title.setText(info)
+    
+    def manage_locks(self):
+        """Open dialog to manage locks and bans"""
+        if self.session.config.locked_teams is None:
+            self.session.config.locked_teams = []
+            
+        dialog = ManageLocksDialog(self.session.config.players, self.session.config.banned_pairs, self.session.config.locked_teams, self)
+        if dialog.exec():
+            # Regenerate queue to respect new constraints
+            try:
+                # Clear existing queue
+                self.session.match_queue = []
+                
+                # Regenerate if Round Robin
+                if self.session.config.mode == 'round-robin':
+                    from python.roundrobin import generate_round_robin_queue
+                    
+                    self.session.match_queue = generate_round_robin_queue(
+                        [p for p in self.session.config.players if p.id in self.session.active_players],
+                        self.session.config.session_type,
+                        self.session.config.banned_pairs,
+                        locked_teams=self.session.config.locked_teams,
+                        player_stats=self.session.player_stats,
+                        active_matches=self.session.matches
+                    )
+                
+                # For Competitive Variety, queue is usually dynamic/empty so clearing it allows
+                # the population logic to run fresh with new constraints.
+                
+                self.refresh_display()
+                
+                # Save session
+                from python.session_persistence import save_session
+                save_session(self.session)
+                
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Error updating queue: {str(e)}")
     
     def toggle_wait_times_display(self):
         """Toggle the display of wait times in the waitlist"""
