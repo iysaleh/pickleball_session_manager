@@ -193,21 +193,36 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
     current_game_number = len([m for m in session.matches if m.status == 'completed'])
     
     if role == 'partner':
-        # Hard cap: must wait 2 games since last playing together (for 12+ players)
-        if len(session.active_players) >= 12 and player2 in stats1.partner_last_game:
+        if player2 in stats1.partner_last_game:
             last_game = stats1.partner_last_game[player2]
             # Games that have happened AFTER they last played together
             games_elapsed = current_game_number - last_game
-            if games_elapsed < PARTNER_REPETITION_GAMES_REQUIRED:
+            
+            # ALWAYS enforce at least 1 game gap (cannot play back-to-back with same partner)
+            # This prevents immediate re-matching after a game or forfeit
+            if games_elapsed < 1:
                 return False
+            
+            # Hard cap: must wait 2 games since last playing together (for 12+ players)
+            if len(session.active_players) >= 12:
+                if games_elapsed < PARTNER_REPETITION_GAMES_REQUIRED:
+                    return False
+
     elif role == 'opponent':
-        # Hard cap: must wait 1 game since last playing against each other (for 12+ players)
-        if len(session.active_players) >= 12 and player2 in stats1.opponent_last_game:
+        if player2 in stats1.opponent_last_game:
             last_game = stats1.opponent_last_game[player2]
             # Games that have happened AFTER they last played together
             games_elapsed = current_game_number - last_game
-            if games_elapsed < OPPONENT_REPETITION_GAMES_REQUIRED:
+            
+            # ALWAYS enforce at least 1 game gap (cannot play back-to-back against same opponent)
+            if games_elapsed < 1:
                 return False
+                
+            # Hard cap: must wait 1 game since last playing against each other (for 12+ players)
+            # (Note: This is redundant with above check for < 1, but kept for clarity of constants)
+            if len(session.active_players) >= 12:
+                if games_elapsed < OPPONENT_REPETITION_GAMES_REQUIRED:
+                    return False
     
     return True
 

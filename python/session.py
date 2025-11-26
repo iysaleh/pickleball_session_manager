@@ -320,6 +320,11 @@ def forfeit_match(session: Session, match_id: str) -> bool:
             if partner_id != player_id:
                 stats.partners_played.add(partner_id)
     
+    # Update variety tracking for competitive-variety mode to prevent immediate rescheduling
+    if session.config.mode == 'competitive-variety':
+        from .competitive_variety import update_variety_tracking_after_match
+        update_variety_tracking_after_match(session, match.court_number, match.team1, match.team2)
+    
     return True
 
 

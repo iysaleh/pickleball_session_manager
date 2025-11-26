@@ -1711,26 +1711,31 @@ class SessionWindow(QMainWindow):
                         from python.roundrobin import generate_round_robin_queue
                         from python.queue_manager import populate_empty_courts, get_waiting_players
                         
-                        self.session.match_queue = generate_round_robin_queue(
-                            [p for p in self.session.config.players if p.id in self.session.active_players],
-                            self.session.config.session_type,
-                            self.session.config.banned_pairs,
-                            player_stats=self.session.player_stats,
-                            active_matches=self.session.matches
-                        )
+                        if self.session.config.mode == 'round-robin':
+                            self.session.match_queue = generate_round_robin_queue(
+                                [p for p in self.session.config.players if p.id in self.session.active_players],
+                                self.session.config.session_type,
+                                self.session.config.banned_pairs,
+                                player_stats=self.session.player_stats,
+                                active_matches=self.session.matches
+                            )
+                        else:
+                            # For competitive-variety, clear the queue to let dynamic allocator handle it
+                            self.session.match_queue = []
                         
                         # Prioritize matches with waiting players at the front of the queue
-                        waiting_ids = set(get_waiting_players(self.session))
-                        if waiting_ids:
-                            waiting_matches = []
-                            other_matches = []
-                            for queued_match in self.session.match_queue:
-                                match_players = set(queued_match.team1 + queued_match.team2)
-                                if match_players & waiting_ids:
-                                    waiting_matches.append(queued_match)
-                                else:
-                                    other_matches.append(queued_match)
-                            self.session.match_queue = waiting_matches + other_matches
+                        if self.session.match_queue:
+                            waiting_ids = set(get_waiting_players(self.session))
+                            if waiting_ids:
+                                waiting_matches = []
+                                other_matches = []
+                                for queued_match in self.session.match_queue:
+                                    match_players = set(queued_match.team1 + queued_match.team2)
+                                    if match_players & waiting_ids:
+                                        waiting_matches.append(queued_match)
+                                    else:
+                                        other_matches.append(queued_match)
+                                self.session.match_queue = waiting_matches + other_matches
                         
                         # Populate any empty courts with the newly regenerated queue
                         populate_empty_courts(self.session)

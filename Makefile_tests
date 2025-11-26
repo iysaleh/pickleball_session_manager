@@ -1,0 +1,5 @@
+test_forfeit:
+	python3 test_forfeit_repetition.py
+
+test_add_player:
+	python3 test_add_player_repetition.py
