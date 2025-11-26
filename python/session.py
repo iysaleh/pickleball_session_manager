@@ -76,6 +76,26 @@ def add_player_to_session(session: Session, player: Player) -> Session:
     
     # Check if player already exists
     if any(p.id == player.id for p in session.config.players):
+        # If player exists but is inactive, reactivate them
+        if player.id not in session.active_players:
+            session.active_players.add(player.id)
+            # Add to waiting list so they can get back into games
+            if player.id not in session.waiting_players:
+                session.waiting_players.append(player.id)
+            
+            # Regenerate queue if needed
+            if session.config.mode == 'round-robin':
+                updated_players = session.config.players
+                active_player_objs = [p for p in updated_players if p.id in session.active_players]
+                session.match_queue = generate_round_robin_queue(
+                    active_player_objs,
+                    session.config.session_type,
+                    session.config.banned_pairs,
+                    session.max_queue_size,
+                    session.config.locked_teams,
+                    session.player_stats,
+                    session.matches
+                )
         return session
     
     # Add to players list

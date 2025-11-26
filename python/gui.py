@@ -1680,31 +1680,13 @@ class SessionWindow(QMainWindow):
                                 if player_id in match.team1 or player_id in match.team2:
                                     forfeit_match(self.session, match.id)
                         
-                        # Remove from active players and config
-                        self.session.active_players.discard(player_id)
-                        self.session.config.players = [p for p in self.session.config.players if p.id != player_id]
+                        # Remove from active players (keeps in config to preserve history)
+                        remove_player_from_session(self.session, player_id)
                     
                     # Add players
                     for player_name in players_to_add:
                         new_player = Player(id=f"player_{datetime.now().timestamp()}", name=player_name)
-                        self.session.config.players.append(new_player)
-                        self.session.active_players.add(new_player.id)
-                        
-                        # Initialize stats - set games_waited to max + 1
-                        max_wait = max([self.session.player_stats[p.id].games_waited for p in self.session.config.players if p.id != new_player.id], default=0)
-                        
-                        from python.types import PlayerStats
-                        self.session.player_stats[new_player.id] = PlayerStats(
-                            player_id=new_player.id,
-                            wins=0,
-                            losses=0,
-                            games_played=0,
-                            games_waited=max_wait + 1,
-                            partners_played=set(),
-                            opponents_played=set(),
-                            total_points_for=0,
-                            total_points_against=0
-                        )
+                        add_player_to_session(self.session, new_player)
                     
                     # Regenerate match queue once at the end
                     if players_to_add or players_to_remove:

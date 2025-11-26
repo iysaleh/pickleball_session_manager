@@ -420,7 +420,7 @@ This is great. Some improvements if you please:
 * We are only working on the python code right now, not the javascript version of the app. Do not write any implementation documentation or summary files in any format (text , markdown). Do not use EOF syntax to write temporary test files, instead just write the test file and run the test separately. Persist the tests. 
 * You don't need to cd to the "pickleball_python_rework" directory to run tests or any python code, that is the current working directory you are in. Commands like 'cd "C:\Users\Ibraheem Saleh\Documents\ProjectDevelopment\pickleball_rework_python" && python test_court_dropdowns.py  2>&1' only need the 2nd part: "python test_court_dropdowns.py 2>&1"
 * Whenever you change something related to the Competetive Variety Matchmaking algorithm, you always run the fuzzing tests for it:"make run_fuzz_tests").
-* Tests built should have a make target added for them. Always run tests from their make targets, do not tail the output of tests that are run, just parse the entire output (or grep for what you care about!)
+* Tests built should have a make target added for them in the Makefile (Do not create new makefiles just for new tests, use the existing Makefile). Always run tests from their make targets, do not tail the output of tests that are run, just parse the entire output (or grep for what you care about!)
 * Do not prompt me to run the tests, always run the tests without prompting me. Run the tests without the tail command.
 * Never run any git tools.
 
@@ -435,7 +435,23 @@ This is great. Some improvements if you please:
 * If you add a partnership, you should not be able to select either of the two players in the partnership to create another lock.
 
 
-
+Forfeit Feature:
+* If you forfeit a match, the same exact players get immediately scheduled on the same court with the same configuration. That's not what should happen, instead that matchup should be skipped and   │
+│   not played until other matches have passed.                                                                                                                                                           │
+│   * If you add or remove a player, the same 2 people who were just on a team together are often placed in another game being on the same team together -- see @pickleball_session_20251126_113424.txt   │
+│   -- Bob Smith and Kate Beckinsale are on the same team together again after having just played a game. The parternship variety rules seem to not work in the event that a player is added/removed mid  │
+│   session. Fix the logic here so that it makes more sense.                                                                                                                                              │
+│   * The above situations are mostly talking about competetive variety matchmaking, but it could also apply to round robin.
+#Revisions
+* If you remove a player on an active court, the Match History becomes cleared (show statistics still shows the games that were played)
+* If you remove a player mid-session, they should still show up in statistics, and the Export Session results.
+* We also get this exception in console:
+Traceback (most recent call last):
+  File "/Users/ibraheem.saleh/dev/pickleball/python/gui.py", line 1347, in refresh_display
+    team1_str = ", ".join(team1_names)
+TypeError: sequence item 0: expected str instance, NoneType found
+REFRESH ERROR: Error in refresh_display:
+sequence item 0: expected str instance, NoneType found
 
 
 # Useful Commands:
