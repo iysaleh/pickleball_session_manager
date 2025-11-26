@@ -13,3 +13,4 @@ pickleball-session-*txt
 **/__pycache__
 pickleball_session*.txt
 test-output*
+**.swp
