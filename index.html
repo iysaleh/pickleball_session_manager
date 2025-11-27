@@ -40,6 +40,13 @@
         
         .stat-value { font-family: monospace; }
         
+        .clickable-header {
+            cursor: pointer;
+        }
+        .clickable-header:hover {
+            background-color: #343a40;
+        }
+
         /* Loading overlay */
         #loading {
             position: fixed;
@@ -111,6 +118,15 @@
                                 </div>
 
                                 <div class="mb-3">
+                                    <label class="form-label">Court Sliding</label>
+                                    <select id="sliding-select" class="form-select">
+                                        <option value="None" selected>None</option>
+                                        <option value="Right to Left">Right to Left</option>
+                                        <option value="Left to Right">Left to Right</option>
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
                                     <label class="form-label">Players</label>
                                     <div class="input-group mb-2">
                                         <input type="text" id="new-player-input" class="form-control" placeholder="Enter player name">
@@ -118,7 +134,10 @@
                                     </div>
                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                         <small class="text-muted">Player Count: <span id="player-count">0</span></small>
-                                        <button id="add-test-players-btn" class="btn btn-sm btn-outline-secondary" type="button">Add 18 Test Players</button>
+                                        <div>
+                                            <button id="setup-locks-btn" class="btn btn-sm btn-outline-info me-1">🤝 Locks & Bans</button>
+                                            <button id="add-test-players-btn" class="btn btn-sm btn-outline-secondary" type="button">Add Test Players</button>
+                                        </div>
                                     </div>
                                     <ul id="player-list" class="list-group" style="max-height: 200px; overflow-y: auto;">
                                         <!-- Players go here -->
@@ -164,7 +183,10 @@
                     <div class="card mb-3 shadow-sm">
                         <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
                             <h5 class="mb-0">⏳ Waitlist</h5>
-                            <span id="waitlist-count" class="badge bg-dark">0</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <button id="toggle-wait-time-btn" class="btn btn-sm btn-dark" style="font-size: 0.7rem;">Show Time</button>
+                                <span id="waitlist-count" class="badge bg-dark">0</span>
+                            </div>
                         </div>
                         <ul id="waitlist" class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
                             <!-- Waitlist items -->
@@ -195,6 +217,8 @@
                     
                     <!-- Actions -->
                     <div class="d-grid gap-2">
+                        <button id="make-court-btn" class="btn btn-outline-primary">🏗️ Make Court</button>
+                        <button id="manage-locks-btn" class="btn btn-outline-secondary">🤝 Locks & Bans</button>
                         <button id="manage-players-btn" class="btn btn-outline-light">👥 Manage Players</button>
                         <button id="stats-btn" class="btn btn-outline-warning">📊 Statistics</button>
                     </div>
@@ -224,6 +248,11 @@
                                     <th>Win %</th>
                                     <th>Waited</th>
                                     <th>Wait Time</th>
+                                    <th>Partners</th>
+                                    <th>Opponents</th>
+                                    <th>Pt Diff</th>
+                                    <th>Pts For</th>
+                                    <th>Pts Against</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -250,6 +279,132 @@
                     <ul id="modal-player-list" class="list-group">
                         <!-- List -->
                     </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Make Court Modal -->
+    <div class="modal fade" id="makeCourtModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Make Court</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Court</label>
+                        <select id="make-court-select" class="form-select"></select>
+                    </div>
+                    <div class="row">
+                        <div class="col-6">
+                            <h6 class="text-danger">Team 1</h6>
+                            <div id="make-court-team1" class="d-flex flex-column gap-2"></div>
+                        </div>
+                        <div class="col-6">
+                            <h6 class="text-primary">Team 2</h6>
+                            <div id="make-court-team2" class="d-flex flex-column gap-2"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="confirm-make-court-btn" class="btn btn-primary">Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage Locks Modal -->
+    <div class="modal fade" id="locksModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Manage Locks & Bans</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-tabs mb-3" role="tablist">
+                        <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-locks">Locked Teams</a></li>
+                        <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-bans">Banned Pairs</a></li>
+                    </ul>
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="tab-locks">
+                            <div class="input-group mb-3">
+                                <select id="lock-p1" class="form-select"></select>
+                                <span class="input-group-text">+</span>
+                                <select id="lock-p2" class="form-select"></select>
+                                <button id="add-lock-btn" class="btn btn-success">Lock</button>
+                            </div>
+                            <ul id="locks-list" class="list-group"></ul>
+                        </div>
+                        <div class="tab-pane fade" id="tab-bans">
+                            <div class="input-group mb-3">
+                                <select id="ban-p1" class="form-select"></select>
+                                <span class="input-group-text"><></span>
+                                <select id="ban-p2" class="form-select"></select>
+                                <button id="add-ban-btn" class="btn btn-danger">Ban</button>
+                            </div>
+                            <ul id="bans-list" class="list-group"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Court (Swap) Modal -->
+    <div class="modal fade" id="editCourtModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Court (Swap Players)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <h6 class="text-danger">Team 1</h6>
+                            <div id="edit-court-team1" class="d-flex flex-column gap-2"></div>
+                        </div>
+                        <div class="col-6">
+                            <h6 class="text-primary">Team 2</h6>
+                            <div id="edit-court-team2" class="d-flex flex-column gap-2"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" id="swap-teams-btn" class="btn btn-warning me-auto">Swap Sides</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="confirm-edit-court-btn" class="btn btn-primary">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Match Score Modal -->
+    <div class="modal fade" id="editScoreModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Match Score</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="edit-score-match-id">
+                    <div class="mb-3">
+                        <label class="form-label" id="edit-score-team1-label">Team 1</label>
+                        <input type="number" id="edit-score-team1-input" class="form-control" min="0" max="30">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" id="edit-score-team2-label">Team 2</label>
+                        <input type="number" id="edit-score-team2-input" class="form-control" min="0" max="30">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="save-score-btn" class="btn btn-primary">Save</button>
                 </div>
             </div>
         </div>
@@ -299,10 +454,6 @@
                     z.extractall(".")
                 
                 print(f"Files unpacked. Root: {os.listdir('.')}")
-                if "python" in os.listdir("."):
-                    print(f"Python pkg: {os.listdir('python')}")
-                else:
-                    raise Exception("Unpack failed: python directory not found")
                 
                 document.querySelector("#loading-status").innerText = "Starting application..."
                 
