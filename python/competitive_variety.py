@@ -15,8 +15,11 @@ MAX_RATING = 2200
 MIN_RATING = 800
 
 # Hard constraints for repetition
-PARTNER_REPETITION_GAMES_REQUIRED = 2  # Must wait 2 games before playing with same partner
-OPPONENT_REPETITION_GAMES_REQUIRED = 1  # Must wait 1 game before playing against same opponent
+PARTNER_REPETITION_GAMES_REQUIRED = 3  # Must wait 3 games before playing with same partner
+OPPONENT_REPETITION_GAMES_REQUIRED = 2  # Must wait 2 games before playing against same opponent
+
+# Roaming Range for Matchmaking
+ROAMING_RANK_PERCENTAGE = 0.5  # Players can play with others within +/- 50% of total players range
 
 
 def calculate_elo_rating(player_stats) -> float:
@@ -184,45 +187,196 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
             if max1 < min2 or max2 < min1:
                 return False
     
-    # Check repetition constraints
-    if player1 not in session.player_stats or player2 not in session.player_stats:
-        return True
+def _get_last_played_info(session: Session, player_id: str) -> Tuple[Optional[Match], int]:
+    """
+    Get the last completed match a player played in, and its global game number.
+    Returns (match, game_number). game_number is 1-based index of completed matches.
+    Returns (None, -1) if player hasn't played.
+    """
+    completed_matches = [m for m in session.matches if m.status == 'completed']
+    # Iterate backwards to find last match
+    for i in range(len(completed_matches) - 1, -1, -1):
+        match = completed_matches[i]
+        if player_id in match.team1 or player_id in match.team2:
+            return match, i + 1
+    return None, -1
+
+
+def can_play_with_player(session: Session, player1: str, player2: str, role: str, allow_cross_bracket: bool = False) -> bool:
+    """
+    Check if two players can play together in the given role.
+    role = 'partner' or 'opponent'
     
-    stats1 = session.player_stats[player1]
-    # Current game number: count of completed matches (games that have finished)
-    current_game_number = len([m for m in session.matches if m.status == 'completed'])
-    
-    if role == 'partner':
-        if player2 in stats1.partner_last_game:
-            last_game = stats1.partner_last_game[player2]
-            # Games that have happened AFTER they last played together
-            games_elapsed = current_game_number - last_game
-            
-            # ALWAYS enforce at least 1 game gap (cannot play back-to-back with same partner)
-            # This prevents immediate re-matching after a game or forfeit
-            if games_elapsed < 1:
+    Hard constraints:
+    - Banned pairs cannot be partners
+    - Locked teams MUST be partners (and cannot be opponents)
+    - If partners: must wait PARTNER_REPETITION_GAMES_REQUIRED games
+    - If opponents: must wait OPPONENT_REPETITION_GAMES_REQUIRED games
+    - Must respect 50% matchmaking bracket for non-provisional players (unless allow_cross_bracket=True)
+    - Only applies when 12+ players (otherwise fewer constraints)
+    """
+    # 0. Check Locked Teams & Banned Pairs
+    # Check Banned Pairs (only applies to partners)
+    if role == 'partner' and session.config.banned_pairs:
+        for banned in session.config.banned_pairs:
+            if player1 in banned and player2 in banned:
                 return False
+
+    # Check Locked Teams
+    if session.config.locked_teams:
+        p1_locked_partner = None
+        for team in session.config.locked_teams:
+            if player1 in team:
+                for member in team:
+                    if member != player1:
+                        p1_locked_partner = member
+                        break
+                break
+        
+        p2_locked_partner = None
+        for team in session.config.locked_teams:
+            if player2 in team:
+                for member in team:
+                    if member != player2:
+                        p2_locked_partner = member
+                        break
+                break
+        
+        if role == 'partner':
+            # If p1 is locked to someone else, cannot partner with p2
+            if p1_locked_partner and p1_locked_partner != player2:
+                return False
+            # If p2 is locked to someone else, cannot partner with p1
+            if p2_locked_partner and p2_locked_partner != player1:
+                return False
+            # If they are locked to each other, they CAN (and must) play together
+            # This overrides partner repetition constraints
+            if p1_locked_partner == player2:
+                return True
+        
+        elif role == 'opponent':
+            # If they are locked to each other, they CANNOT be opponents
+            if p1_locked_partner == player2:
+                return False
+
+    # Check bracket compatibility (Roaming 50% Rule) - only for 12+ players
+    # Relaxed if allow_cross_bracket is True
+    if not allow_cross_bracket and len(session.active_players) >= 12:
+        if not is_provisional(session, player1) or not is_provisional(session, player2):
+            # Calculate rank difference limit
+            limit = int(len(session.active_players) * ROAMING_RANK_PERCENTAGE)
             
-            # Hard cap: must wait 2 games since last playing together (for 12+ players)
-            if len(session.active_players) >= 12:
-                if games_elapsed < PARTNER_REPETITION_GAMES_REQUIRED:
+            # Get ranks
+            rank1, _ = get_player_ranking(session, player1)
+            rank2, _ = get_player_ranking(session, player2)
+            
+            # Check roaming range
+            if abs(rank1 - rank2) > limit:
+                return False
+    
+    # ---------------------------------------------------------
+    # Repetition Constraints (Robust Two-Phase Check)
+    # ---------------------------------------------------------
+    
+    completed_matches = [m for m in session.matches if m.status == 'completed']
+    current_matches_count = len(completed_matches)
+    
+    # Check 1: Global Recency (The "Wait N Games" Rule)
+    # If they played together/against in the last X matches globally, forbid it.
+    
+    if len(session.active_players) >= 8:
+        # Check Partner Repetition (Last 3 Global Games)
+        if role == 'partner':
+            matches_to_check = completed_matches[-PARTNER_REPETITION_GAMES_REQUIRED:] if PARTNER_REPETITION_GAMES_REQUIRED > 0 else []
+            for m in matches_to_check:
+                p1_t1 = player1 in m.team1
+                p1_t2 = player1 in m.team2
+                p2_t1 = player2 in m.team1
+                p2_t2 = player2 in m.team2
+                
+                if (p1_t1 and p2_t1) or (p1_t2 and p2_t2):
                     return False
 
-    elif role == 'opponent':
-        if player2 in stats1.opponent_last_game:
-            last_game = stats1.opponent_last_game[player2]
-            # Games that have happened AFTER they last played together
-            games_elapsed = current_game_number - last_game
-            
-            # ALWAYS enforce at least 1 game gap (cannot play back-to-back against same opponent)
-            if games_elapsed < 1:
-                return False
+        # Check Opponent Repetition (Last 3 Global Games)
+        elif role == 'opponent':
+            matches_to_check = completed_matches[-OPPONENT_REPETITION_GAMES_REQUIRED:] if OPPONENT_REPETITION_GAMES_REQUIRED > 0 else []
+            for m in matches_to_check:
+                p1_t1 = player1 in m.team1
+                p1_t2 = player1 in m.team2
+                p2_t1 = player2 in m.team1
+                p2_t2 = player2 in m.team2
                 
-            # Hard cap: must wait 1 game since last playing against each other (for 12+ players)
-            # (Note: This is redundant with above check for < 1, but kept for clarity of constants)
-            if len(session.active_players) >= 12:
-                if games_elapsed < OPPONENT_REPETITION_GAMES_REQUIRED:
+                if (p1_t1 and p2_t2) or (p1_t2 and p2_t1):
                     return False
+    else:
+        # For < 8 players, enforce at least 1 game gap globally (Immediate Back-to-Back Global)
+        if completed_matches:
+            last_match = completed_matches[-1]
+            if role == 'partner':
+                if (player1 in last_match.team1 and player2 in last_match.team1) or \
+                   (player1 in last_match.team2 and player2 in last_match.team2):
+                    return False
+            elif role == 'opponent':
+                if (player1 in last_match.team1 and player2 in last_match.team2) or \
+                   (player1 in last_match.team2 and player2 in last_match.team1):
+                    return False
+
+    # Check 2: Player-Specific History Scan (The "Personal Gap" Rule)
+    # We must scan back through the *player's own history* to find when they last played with this partner.
+    # The number of *intervening games this player played* must be >= REQUIRED.
+    
+    player_matches = []
+    # Collect all matches this player participated in, in order
+    for m in completed_matches:
+        if player1 in m.team1 or player1 in m.team2:
+            player_matches.append(m)
+            
+    if player_matches:
+        # Scan backwards through player's personal history
+        last_played_together_idx = -1
+        last_played_against_idx = -1
+        
+        for i in range(len(player_matches) - 1, -1, -1):
+            m = player_matches[i]
+            
+            # Check Partnership
+            if role == 'partner':
+                if (player2 in m.team1 and player1 in m.team1) or \
+                   (player2 in m.team2 and player1 in m.team2):
+                    last_played_together_idx = i
+                    break # Found the last time
+            
+            # Check Opponent
+            elif role == 'opponent':
+                if (player1 in m.team1 and player2 in m.team2) or \
+                   (player1 in m.team2 and player2 in m.team1):
+                    last_played_against_idx = i
+                    break # Found the last time
+        
+        current_personal_game_count = len(player_matches)
+        
+        if role == 'partner' and last_played_together_idx != -1:
+            # Games played SINCE that match
+            # If I played in match index 0, and now count is 1. Gap is 1-0-1 = 0.
+            # If I played in match index 0, then match index 1. Now count is 2.
+            # Gap = 2 - 0 - 1 = 1 intervening game.
+            intervening_games = current_personal_game_count - last_played_together_idx - 1
+            
+            # Apply constraint
+            if len(session.active_players) >= 8:
+                 if intervening_games < PARTNER_REPETITION_GAMES_REQUIRED:
+                     return False
+            elif intervening_games < 1: # Basic back-to-back check for small groups
+                 return False
+
+        elif role == 'opponent' and last_played_against_idx != -1:
+            intervening_games = current_personal_game_count - last_played_against_idx - 1
+            
+            if len(session.active_players) >= 8:
+                 if intervening_games < OPPONENT_REPETITION_GAMES_REQUIRED:
+                     return False
+            elif intervening_games < 1:
+                 return False
     
     return True
 
@@ -264,7 +418,7 @@ def score_potential_match(session: Session, team1: List[str], team2: List[str]) 
     return score
 
 
-def _can_form_valid_teams(session: Session, players: List[str]) -> bool:
+def _can_form_valid_teams(session: Session, players: List[str], allow_cross_bracket: bool = False) -> bool:
     """
     Check if 4 players can form valid teams respecting all competitive variety constraints.
     """
@@ -282,17 +436,17 @@ def _can_form_valid_teams(session: Session, players: List[str]) -> bool:
         valid = True
         
         # Check within-team partnerships
-        if not can_play_with_player(session, team1[0], team1[1], 'partner'):
+        if not can_play_with_player(session, team1[0], team1[1], 'partner', allow_cross_bracket):
             valid = False
         
-        if valid and not can_play_with_player(session, team2[0], team2[1], 'partner'):
+        if valid and not can_play_with_player(session, team2[0], team2[1], 'partner', allow_cross_bracket):
             valid = False
         
         # Check cross-team opponents
         if valid:
             for p1 in team1:
                 for p2 in team2:
-                    if not can_play_with_player(session, p1, p2, 'opponent'):
+                    if not can_play_with_player(session, p1, p2, 'opponent', allow_cross_bracket):
                         valid = False
                         break
                 if not valid:
@@ -473,39 +627,76 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                              pass
 
                 if not best_team1:
-                    # First try selecting by ELO rating (best balanced players)
-                    player_ratings = [(p, calculate_elo_rating(session.player_stats.get(p, 
-                                      type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))) 
-                                      for p in available_players]
-                    player_ratings.sort(key=lambda x: x[1], reverse=True)
+                    # Filter available players by priority (Wait Time / Last Played)
+                    # Sort by:
+                    # 1. Last Game Index (Ascending) - None/-1 comes first (never played)
+                    # 2. Games Played (Ascending) - Tie breaker for never played
                     
-                    # Try combinations starting with top-rated players
-                    for combo in combinations([p[0] for p in player_ratings[:8]], 4):
-                        if _can_form_valid_teams(session, list(combo)):
-                            # Found a valid combination - use first config that works
-                            configs = [
-                                ([combo[0], combo[1]], [combo[2], combo[3]]),
-                                ([combo[0], combo[2]], [combo[1], combo[3]]),
-                                ([combo[0], combo[3]], [combo[1], combo[2]]),
-                            ]
-                            for team1, team2 in configs:
-                                if (can_play_with_player(session, team1[0], team1[1], 'partner') and
-                                    can_play_with_player(session, team2[0], team2[1], 'partner')):
-                                    # Check all opponent pairs
-                                    valid = True
-                                    for p1 in team1:
-                                        for p2 in team2:
-                                            if not can_play_with_player(session, p1, p2, 'opponent'):
-                                                valid = False
+                    player_priority = []
+                    for p in available_players:
+                        _, last_idx = _get_last_played_info(session, p)
+                        games_played = session.player_stats.get(p, 
+                            type('', (), {'games_played': 0})()).games_played if p in session.player_stats else 0
+                        player_priority.append((p, last_idx, games_played))
+                    
+                    # Sort: -1 first, then small indices.
+                    player_priority.sort(key=lambda x: (x[1], x[2]))
+                    
+                    # Take top candidates (enough to form a few matches, but filter out recent players if possible)
+                    # If we need 4 players, taking top 12 gives good ELO mixing flexibility 
+                    # while ensuring people who just played (high index) are excluded if others exist.
+                    
+                    # Logic: If we have many waiters, exclude the ones who just played.
+                    num_candidates = max(12, len(available_players) // 2)
+                    # Cap at 16 to prevent slowness, but ensure at least 12 if possible
+                    num_candidates = min(16, max(12, num_candidates))
+                    
+                    # If we have distinct groups (waiters vs just played), we want to strictly pick waiters.
+                    # The sort `(last_idx, games_played)` puts `(-1, 0)` at top, and `(10, 10)` at bottom.
+                    # So picking top N will naturally exclude bottom.
+                    
+                    # Candidates sorted by PRIORITY (Wait Time)
+                    candidates_for_matching = [x[0] for x in player_priority[:num_candidates]]
+                    
+                    # We do NOT sort by ELO here, because we want to prioritize Waiters.
+                    # combinations() will pick the first 4 candidates (highest priority) first.
+                    
+                    # Limit combination search to top 12 of the filtered list to keep it fast
+                    search_limit = min(12, len(candidates_for_matching))
+                    
+                    # Two passes:
+                    # 1. Strict Bracketing (allow_cross_bracket=False)
+                    # 2. Relaxed Bracketing (allow_cross_bracket=True)
+                    
+                    for allow_cross in [False, True]:
+                        for combo in combinations(candidates_for_matching[:search_limit], 4):
+                            if _can_form_valid_teams(session, list(combo), allow_cross_bracket=allow_cross):
+                                # Found a valid combination - use first config that works
+                                configs = [
+                                    ([combo[0], combo[1]], [combo[2], combo[3]]),
+                                    ([combo[0], combo[2]], [combo[1], combo[3]]),
+                                    ([combo[0], combo[3]], [combo[1], combo[2]]),
+                                ]
+                                for team1, team2 in configs:
+                                    if (can_play_with_player(session, team1[0], team1[1], 'partner', allow_cross) and
+                                        can_play_with_player(session, team2[0], team2[1], 'partner', allow_cross)):
+                                        # Check all opponent pairs
+                                        valid = True
+                                        for p1 in team1:
+                                            for p2 in team2:
+                                                if not can_play_with_player(session, p1, p2, 'opponent', allow_cross):
+                                                    valid = False
+                                                    break
+                                            if not valid:
                                                 break
-                                        if not valid:
+                                        if valid:
+                                            best_team1 = list(team1)
+                                            best_team2 = list(team2)
                                             break
-                                    if valid:
-                                        best_team1 = list(team1)
-                                        best_team2 = list(team2)
-                                        break
-                            if best_team1:
-                                break
+                                if best_team1:
+                                    break
+                        if best_team1:
+                            break
                 
                 if best_team1 and best_team2:
                     match = Match(
