@@ -4,7 +4,7 @@ Competitive Variety Matchmaking - ELO-based skill-balanced matchmaking with hard
 
 from typing import List, Dict, Tuple, Set, Optional
 from datetime import datetime
-from .types import Player, QueuedMatch, Session
+from .types import Player, QueuedMatch, Session, Match
 import math
 from itertools import combinations
 

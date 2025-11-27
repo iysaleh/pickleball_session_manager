@@ -1,1813 +1,323 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
-  <!-- Primary Meta Tags -->
-  <title>Better Pickleball Sessions - Professional Session Management & Matchmaking</title>
-  <meta name="title" content="Better Pickleball Sessions - Professional Session Management">
-  <meta name="description" content="Free professional pickleball session manager with smart matchmaking algorithms. Organize round robin tournaments, King of the Court competitions, track rankings and statistics. Perfect for clubs and social play.">
-  <meta name="keywords" content="pickleball, session manager, round robin, king of the court, tournament manager, matchmaking, pickleball app, court management, rankings, statistics">
-  <meta name="author" content="Better Pickleball Sessions">
-  <meta name="robots" content="index, follow">
-  <meta name="language" content="English">
-  
-  <!-- Canonical URL -->
-  <link rel="canonical" href="https://betterpickleballsessions.com/">
-  
-  <!-- Open Graph / Facebook -->
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://betterpickleballsessions.com/">
-  <meta property="og:title" content="Better Pickleball Sessions - Professional Session Management">
-  <meta property="og:description" content="Free professional pickleball session manager with smart matchmaking algorithms. Organize tournaments, track rankings, and manage court schedules effortlessly.">
-  <meta property="og:image" content="https://betterpickleballsessions.com/og-image.png">
-  <meta property="og:site_name" content="Better Pickleball Sessions">
-  
-  <!-- Twitter -->
-  <meta property="twitter:card" content="summary_large_image">
-  <meta property="twitter:url" content="https://betterpickleballsessions.com/">
-  <meta property="twitter:title" content="Better Pickleball Sessions - Professional Session Management">
-  <meta property="twitter:description" content="Free professional pickleball session manager with smart matchmaking algorithms. Organize tournaments, track rankings, and manage court schedules.">
-  <meta property="twitter:image" content="https://betterpickleballsessions.com/og-image.png">
-  
-  <!-- Favicon -->
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎾</text></svg>">
-  
-  <!-- Structured Data (JSON-LD) -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "name": "Better Pickleball Sessions",
-    "description": "Professional pickleball session management with smart matchmaking algorithms for organizing tournaments and social play",
-    "url": "https://betterpickleballsessions.com",
-    "applicationCategory": "SportsApplication",
-    "operatingSystem": "Any",
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "USD"
-    },
-    "featureList": [
-      "Smart matchmaking algorithms",
-      "Round Robin tournaments",
-      "King of the Court competitions",
-      "Real-time rankings and statistics",
-      "Match history tracking",
-      "Multiple court management",
-      "Singles and doubles support",
-      "Locked teams mode",
-      "Auto-save sessions"
-    ]
-  }
-  </script>
-  <style>
-    :root {
-      /* Light mode colors */
-      --bg-primary: #ffffff;
-      --bg-secondary: #f8f9fa;
-      --bg-tertiary: #e9ecef;
-      --text-primary: #333333;
-      --text-secondary: #555555;
-      --text-tertiary: #777777;
-      --border-color: #ddd;
-      --border-light: #e0e0e0;
-      --shadow: rgba(0, 0, 0, 0.1);
-      --shadow-hover: rgba(0, 0, 0, 0.15);
-      --input-bg: #ffffff;
-      --input-border: #ddd;
-      --disabled-bg: #f5f5f5;
-      --disabled-text: #999;
-      --card-bg: #ffffff;
-      --gradient-start: #667eea;
-      --gradient-end: #764ba2;
-      --header-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    }
-    
-    [data-theme="dark"] {
-      /* Dark mode colors - GitHub-inspired with better contrast */
-      --bg-primary: #0d1117;
-      --bg-secondary: #161b22;
-      --bg-tertiary: #21262d;
-      --text-primary: #c9d1d9;
-      --text-secondary: #8b949e;
-      --text-tertiary: #6e7681;
-      --border-color: #30363d;
-      --border-light: #21262d;
-      --shadow: rgba(0, 0, 0, 0.6);
-      --shadow-hover: rgba(0, 0, 0, 0.8);
-      --input-bg: #0d1117;
-      --input-border: #30363d;
-      --disabled-bg: #21262d;
-      --disabled-text: #484f58;
-      --card-bg: #161b22;
-      --gradient-start: #58a6ff;
-      --gradient-end: #bc8cff;
-      --header-bg: linear-gradient(135deg, #4a8fff 0%, #a371f7 100%);
-    }
-    
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
-      min-height: 100vh;
-      padding: 20px;
-      transition: background 0.3s ease;
-    }
-    
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-      background: var(--bg-primary);
-      border-radius: 12px;
-      box-shadow: 0 8px 32px var(--shadow);
-      overflow: hidden;
-      transition: background 0.3s ease, box-shadow 0.3s ease;
-    }
-    
-    header {
-      background: var(--header-bg);
-      color: white;
-      padding: 15px 30px;
-      text-align: center;
-      position: relative;
-    }
-    
-    nav {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      margin-top: 15px;
-      flex-wrap: wrap;
-    }
-    
-    nav button {
-      background: rgba(255, 255, 255, 0.2);
-      border: 2px solid rgba(255, 255, 255, 0.3);
-      color: white;
-      padding: 8px 20px;
-      border-radius: 25px;
-      cursor: pointer;
-      font-size: 0.95em;
-      transition: all 0.3s ease;
-      backdrop-filter: blur(10px);
-      font-weight: 500;
-    }
-    
-    nav button:hover {
-      background: rgba(255, 255, 255, 0.3);
-      transform: translateY(-2px);
-    }
-    
-    nav button.active {
-      background: rgba(255, 255, 255, 0.4);
-      border-color: rgba(255, 255, 255, 0.6);
-      font-weight: 600;
-    }
-    
-    .theme-toggle-btn {
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      background: rgba(255, 255, 255, 0.2);
-      border: 2px solid rgba(255, 255, 255, 0.3);
-      color: white;
-      padding: 10px 15px;
-      border-radius: 25px;
-      cursor: pointer;
-      font-size: 1.2em;
-      transition: all 0.3s ease;
-      backdrop-filter: blur(10px);
-    }
-    
-    .theme-toggle-btn:hover {
-      background: rgba(255, 255, 255, 0.3);
-      transform: scale(1.05);
-    }
-    
-    h1 {
-      font-size: 2.5em;
-      margin-bottom: 10px;
-    }
-    
-    .subtitle {
-      opacity: 0.9;
-      font-size: 1.1em;
-    }
-    
-    .content {
-      padding: 30px;
-    }
-    
-    .section {
-      margin-bottom: 30px;
-      padding: 20px;
-      background: var(--bg-secondary);
-      border-radius: 8px;
-      transition: background 0.3s ease;
-    }
-    
-    .section-title {
-      font-size: 1.5em;
-      margin-bottom: 15px;
-      color: var(--text-primary);
-      border-bottom: 2px solid var(--gradient-start);
-      padding-bottom: 10px;
-      transition: color 0.3s ease;
-    }
-    
-    .form-group {
-      margin-bottom: 15px;
-    }
-    
-    label {
-      display: block;
-      margin-bottom: 5px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      transition: color 0.3s ease;
-    }
-    
-    input, select, button {
-      padding: 10px 15px;
-      border: 1px solid var(--input-border);
-      border-radius: 6px;
-      background: var(--input-bg);
-      color: var(--text-primary);
-      transition: all 0.3s ease;
-      font-size: 1em;
-    }
-    
-    input, select {
-      width: 100%;
-      max-width: 400px;
-    }
-    
-    button {
-      background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
-      color: white;
-      border: none;
-      cursor: pointer;
-      font-weight: 600;
-      transition: all 0.3s, transform 0.2s;
-    }
-    
-    button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-    }
-    
-    button:disabled {
-      background: var(--disabled-bg);
-      color: var(--disabled-text);
-      cursor: not-allowed;
-      transform: none;
-    }
-    
-    .btn-secondary {
-      background: #6c757d;
-    }
-    
-    .btn-warning {
-      background: #ffc107;
-      color: #000;
-      font-weight: 600;
-    }
-    
-    .btn-warning:hover {
-      background: #e0a800;
-    }
-    
-    .btn-danger {
-      background: #dc3545;
-    }
-    
-    .btn-success {
-      background: #28a745;
-    }
-    
-    .player-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 10px;
-    }
-    
-    .player-tag {
-      background: var(--bg-tertiary);
-      color: var(--text-primary);
-      padding: 8px 15px;
-      border-radius: 20px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      box-shadow: 0 2px 4px var(--shadow);
-      border: 1px solid var(--border-light);
-      transition: background 0.3s ease, color 0.3s ease;
-    }
-    
-    .player-tag button {
-      padding: 2px 8px;
-      font-size: 0.8em;
-      background: #dc3545;
-      border-radius: 50%;
-    }
-    
-    .inactive-player {
-      opacity: 0.5;
-      background: var(--bg-tertiary);
-    }
-    
-    .inactive-player button {
-      background: #28a745;
-    }
-    
-    .courts-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 20px;
-      margin-top: 20px;
-      max-height: calc(100vh - 350px);
-      overflow-y: auto;
-      overflow-x: auto;
-      padding-right: 10px;
-    }
-    
-    .courts-grid::-webkit-scrollbar {
-      width: 8px;
-    }
-    
-    .courts-grid::-webkit-scrollbar-track {
-      background: var(--bg-tertiary);
-      border-radius: 4px;
-    }
-    
-    .courts-grid::-webkit-scrollbar-thumb {
-      background: var(--gradient-start);
-      border-radius: 4px;
-    }
-    
-    .courts-grid::-webkit-scrollbar-thumb:hover {
-      background: var(--gradient-end);
-    }
-    
-    @media (max-width: 768px) {
-      .courts-grid {
-        grid-template-columns: 1fr !important;
-        max-height: calc(100vh - 300px);
-      }
-    }
-    
-    .court {
-      background: var(--card-bg);
-      border: 2px solid var(--gradient-start);
-      border-radius: 8px;
-      padding: 20px;
-      box-shadow: 0 4px 12px var(--shadow);
-      display: flex;
-      flex-direction: column;
-      transition: all 0.3s ease;
-    }
-    
-    .court-header {
-      font-size: 1.3em;
-      font-weight: 700;
-      color: var(--gradient-start);
-      margin-bottom: 15px;
-      text-align: center;
-      transition: color 0.3s ease;
-    }
-    
-    .court-content {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 20px;
-      flex: 1;
-    }
-    
-    .match-status {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 0.9em;
-      font-weight: 600;
-      margin-left: 10px;
-    }
-    
-    .status-waiting {
-      background: #ffc107;
-      color: #000;
-    }
-    
-    .status-in-progress {
-      background: #28a745;
-      color: white;
-    }
-    
-    .status-completed {
-      background: #6c757d;
-      color: white;
-    }
-    
-    .status-forfeited {
-      background: #dc3545;
-      color: white;
-    }
-    
-    .status-empty {
-      background: #6c757d;
-      color: white;
-    }
-    
-    .team {
-      padding: 15px;
-      background: var(--bg-tertiary);
-      border-radius: 6px;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      transition: background 0.3s ease;
-      justify-content: center;
-      min-height: 100px;
-    }
-    
-    .team-left {
-      border: 2px solid #667eea;
-    }
-    
-    .team-right {
-      border: 2px solid #764ba2;
-    }
-    
-    .team-label {
-      font-weight: 700;
-      color: #667eea;
-      margin-bottom: 10px;
-      font-size: 1.1em;
-    }
-    
-    .team-right .team-label {
-      color: #764ba2;
-    }
-    
-    .team-players {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      align-items: center;
-      width: 100%;
-      overflow: hidden;
-    }
-    
-    .player-name {
-      background: white;
-      padding: 5px 12px;
-      border-radius: 15px;
-      font-size: 0.9em;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-      max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      text-align: center;
-    }
-    
-    .match-controls {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 15px;
-      flex: 0 0 auto;
-      min-width: 200px;
-    }
-    
-    .score-input {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-    
-    .score-input input {
-      width: 60px;
-      text-align: center;
-      font-size: 0.95em;
-      font-weight: bold;
-      padding: 6px;
-      -moz-appearance: textfield;
-      appearance: textfield;
-    }
-    
-    .score-input input::-webkit-outer-spin-button,
-    .score-input input::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
-    
-    /* Remove spinners from all number inputs */
-    input[type="number"]::-webkit-outer-spin-button,
-    input[type="number"]::-webkit-inner-spin-button,
-    input[type="text"]::-webkit-outer-spin-button,
-    input[type="text"]::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
-    
-    input[type="number"] {
-      -moz-appearance: textfield;
-      appearance: textfield;
-    }
-    
-    .vs-text {
-      font-weight: 700;
-      color: var(--text-secondary);
-      font-size: 1.1em;
-    }
-    
-    .control-buttons {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      width: 100%;
-    }
-    
-    .control-buttons button {
-      width: 100%;
-      padding: 10px 15px;
-      font-size: 0.9em;
-    }
-    
-    .waiting-area {
-      background: var(--bg-tertiary);
-      border: 2px solid #ffc107;
-      border-radius: 8px;
-      padding: 20px;
-      margin-top: 20px;
-      transition: background 0.3s ease;
-    }
-    
-    .waiting-title {
-      font-size: 1.3em;
-      font-weight: 700;
-      color: var(--text-primary);
-      margin-bottom: 10px;
-      transition: color 0.3s ease;
-    }
-    
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 15px;
-      margin-top: 20px;
-    }
-    
-    .stat-card {
-      background: var(--card-bg);
-      padding: 15px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px var(--shadow);
-      transition: all 0.3s ease;
-    }
-    
-    .stat-card h4 {
-      color: var(--gradient-start);
-      margin-bottom: 10px;
-      transition: color 0.3s ease;
-    }
-    
-    .stat-line {
-      display: flex;
-      justify-content: space-between;
-      margin: 5px 0;
-      font-size: 0.9em;
-      color: var(--text-secondary);
-      transition: color 0.3s ease;
-    }
-    
-    /* Modal Styles */
-    .modal {
-      display: none;
-      position: fixed;
-      z-index: 1000;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(4px);
-      animation: fadeIn 0.2s ease;
-    }
-    
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    
-    .modal.show {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    
-    .modal-content {
-      background: var(--bg-primary);
-      border-radius: 12px;
-      padding: 0;
-      max-width: 800px;
-      width: 90%;
-      max-height: 80vh;
-      overflow: hidden;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-      animation: slideIn 0.3s ease;
-      display: flex;
-      flex-direction: column;
-    }
-    
-    @keyframes slideIn {
-      from {
-        transform: translateY(-50px);
-        opacity: 0;
-      }
-      to {
-        transform: translateY(0);
-        opacity: 1;
-      }
-    }
-    
-    .modal-header {
-      background: var(--header-bg);
-      color: white;
-      padding: 20px 30px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-shrink: 0;
-    }
-    
-    .modal-header h2 {
-      margin: 0;
-      font-size: 1.5em;
-    }
-    
-    .modal-close {
-      background: transparent;
-      border: none;
-      color: white;
-      font-size: 2em;
-      cursor: pointer;
-      padding: 0;
-      width: 40px;
-      height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 50%;
-      transition: background 0.2s ease;
-    }
-    
-    .modal-close:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
-    
-    .modal-body {
-      padding: 30px;
-      overflow-y: auto;
-      flex: 1;
-    }
-    
-    /* Rankings Styles */
-    #rankings-list {
-      margin-top: 0;
-    }
-    
-    .ranking-item {
-      display: flex;
-      align-items: center;
-      gap: 15px;
-      padding: 15px;
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      margin-bottom: 10px;
-      transition: all 0.3s ease;
-    }
-    
-    .ranking-item:hover {
-      box-shadow: 0 4px 12px var(--shadow-hover);
-      transform: translateY(-2px);
-    }
-    
-    .rank-badge {
-      font-size: 1.5em;
-      font-weight: bold;
-      min-width: 50px;
-      height: 50px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 50%;
-      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-      color: white;
-      flex-shrink: 0;
-    }
-    
-    .rank-badge.rank-1 {
-      background: linear-gradient(135deg, #ffd700, #ffed4e);
-      color: #000;
-      font-size: 1.8em;
-    }
-    
-    .rank-badge.rank-2 {
-      background: linear-gradient(135deg, #c0c0c0, #e8e8e8);
-      color: #000;
-      font-size: 1.7em;
-    }
-    
-    .rank-badge.rank-3 {
-      background: linear-gradient(135deg, #cd7f32, #e6a85c);
-      color: #fff;
-      font-size: 1.6em;
-    }
-    
-    .ranking-info {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      gap: 20px;
-    }
-    
-    .ranking-name {
-      font-size: 1.1em;
-      font-weight: 600;
-      color: var(--text-primary);
-      min-width: 150px;
-    }
-    
-    .ranking-stats {
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-    }
-    
-    .ranking-stat {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 5px 15px;
-      background: var(--bg-secondary);
-      border-radius: 6px;
-    }
-    
-    .ranking-stat-label {
-      font-size: 0.75em;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      margin-bottom: 2px;
-    }
-    
-    .ranking-stat-value {
-      font-size: 1.1em;
-      font-weight: bold;
-      color: var(--text-primary);
-    }
-    
-    .ranking-stat-value.positive {
-      color: #28a745;
-    }
-    
-    .ranking-stat-value.negative {
-      color: #dc3545;
-    }
-    
-    .controls {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 20px;
-    }
-    
-    .hidden {
-      display: none;
-    }
-    
-    .config-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 15px;
-    }
-    
-    .banned-pairs-list {
-      margin-top: 10px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    
-    .banned-pair-tag {
-      background: #dc3545;
-      color: white;
-      padding: 5px 12px;
-      border-radius: 15px;
-      font-size: 0.9em;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    .banned-pair-tag button {
-      background: white;
-      color: #dc3545;
-      padding: 2px 6px;
-      font-size: 0.8em;
-    }
-    
-    /* Match History Styles */
-    #match-history-list {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-      margin-top: 20px;
-    }
-    
-    .history-card {
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 15px;
-      box-shadow: 0 2px 8px var(--shadow);
-      transition: all 0.3s ease;
-    }
-    
-    .history-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #eee;
-    }
-    
-    .history-court {
-      font-weight: 600;
-      color: #667eea;
-      font-size: 1.1em;
-    }
-    
-    .history-teams {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 15px;
-    }
-    
-    .history-team {
-      flex: 1;
-      padding: 12px;
-      background: #f8f9fa;
-      border-radius: 6px;
-      text-align: center;
-      font-weight: 500;
-    }
-    
-    .history-team.winner {
-      background: #d4edda;
-      color: #155724;
-      font-weight: 700;
-      border: 2px solid #28a745;
-    }
-    
-    .history-team.loser {
-      background: #f8d7da;
-      color: #721c24;
-      border: 2px solid #dc3545;
-    }
-    
-    .history-score {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex: 0 0 auto;
-    }
-    
-    .history-score-input {
-      width: 60px !important;
-      text-align: center;
-      font-weight: bold;
-      font-size: 1.1em;
-      max-width: 60px;
-      -moz-appearance: textfield;
-      appearance: textfield;
-    }
-    
-    .history-score-input::-webkit-outer-spin-button,
-    .history-score-input::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
-    
-    .btn-small {
-      padding: 6px 12px;
-      font-size: 0.85em;
-      background: #667eea;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    
-    .btn-small:hover {
-      background: #5568d3;
-    }
-    
-    /* Empty Court Styles */
-    .empty-court {
-      opacity: 0.7;
-      border-color: #ccc;
-    }
-    
-    .empty-court-content {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 150px;
-      padding: 20px;
-    }
-    
-    .empty-message {
-      font-size: 1.2em;
-      color: var(--text-secondary);
-      margin-bottom: 15px;
-      transition: color 0.3s ease;
-    }
-    
-    .court-history {
-      width: 100%;
-      background: var(--bg-tertiary);
-      border-radius: 6px;
-      padding: 12px;
-      margin-top: 10px;
-      transition: background 0.3s ease;
-    }
-    
-    .court-history-header {
-      font-weight: 700;
-      color: var(--gradient-start);
-      margin-bottom: 8px;
-      font-size: 0.9em;
-      transition: color 0.3s ease;
-    }
-    
-    .history-item {
-      padding: 6px 0;
-      font-size: 0.85em;
-      color: var(--text-secondary);
-      border-bottom: 1px solid var(--border-light);
-      transition: color 0.3s ease, border-color 0.3s ease;
-    }
-    
-    .history-item:last-child {
-      border-bottom: none;
-    }
-    
-    .history-more {
-      padding: 6px 0;
-      font-size: 0.8em;
-      color: var(--text-tertiary);
-      font-style: italic;
-      transition: color 0.3s ease;
-    }
-    
-    /* Queue Styles */
-    .queue-match {
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 15px;
-      margin-bottom: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 20px;
-      transition: all 0.3s ease;
-    }
-    
-    .queue-match-number {
-      font-weight: 700;
-      font-size: 1.1em;
-      color: var(--gradient-start);
-      min-width: 60px;
-    }
-    
-    .queue-teams {
-      flex: 1;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 20px;
-    }
-    
-    .queue-team {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-    
-    .queue-player {
-      font-size: 0.95em;
-      color: var(--text-primary);
-    }
-    
-    /* Player list column styling with manual background control */
-    .player-list-item-bg-0 {
-      background: transparent;
-    }
-    
-    .player-list-item-bg-1 {
-      background: rgba(102, 126, 234, 0.06);
-      border-radius: 4px;
-      margin-left: -5px;
-      padding-left: 5px;
-      margin-right: -5px;
-      padding-right: 5px;
-    }
-    
-    [data-theme="dark"] .player-list-item-bg-1 {
-      background: rgba(88, 166, 255, 0.1);
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pickleball Session Manager (PyScript)</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- PyScript -->
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css" />
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+
+    <style>
+        body {
+            background-color: #212529;
+            color: #f8f9fa;
+        }
+        .court-card {
+            border: 2px solid #495057;
+            background-color: #2b3035;
+            transition: all 0.3s;
+        }
+        .court-active {
+            border-color: #198754; /* Green border for active */
+            box-shadow: 0 0 10px rgba(25, 135, 84, 0.3);
+        }
+        .court-empty {
+            border-style: dashed;
+            opacity: 0.7;
+        }
+        .team-box {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+        .team1 { background-color: rgba(220, 53, 69, 0.2); border: 1px solid #dc3545; }
+        .team2 { background-color: rgba(13, 110, 253, 0.2); border: 1px solid #0d6efd; }
+        
+        .stat-value { font-family: monospace; }
+        
+        /* Loading overlay */
+        #loading {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        #error-display {
+            display: none;
+            color: #ff6b6b;
+            background: #2b0000;
+            padding: 20px;
+            margin: 20px;
+            border: 1px solid #ff0000;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-width: 90%;
+            overflow-x: auto;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <header role="banner">
-      <button class="theme-toggle-btn" id="theme-toggle" title="Toggle dark/light mode" aria-label="Toggle dark/light mode">🌙</button>
-      <h1>🎾 Better Pickleball Sessions</h1>
-      <p style="color: #ff6b6b; font-size: 1.8em; font-weight: 900; margin: 15px 0;">⚠️ Warning: This Page is Under Active Development, Do Not Use Yet ⚠️</p>
-      <p class="subtitle">Professional session management made easy</p>
-      <nav role="navigation" aria-label="Main navigation">
-        <button id="nav-setup" class="nav-btn active" aria-label="Setup session">Setup</button>
-        <button id="nav-session" class="nav-btn" aria-label="View active session">Active Session</button>
-        <button id="nav-modes" class="nav-btn" aria-label="Game modes and configuration">Modes & Config</button>
-        <button id="nav-about" class="nav-btn" aria-label="About this application">About</button>
-      </nav>
-    </header>
+    <div id="loading">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <div class="mt-2 text-white">Initializing Python Environment...</div>
+        <div id="loading-status" class="text-muted small mt-1">Downloading resources...</div>
+    </div>
+
+    <div id="error-display"></div>
+
+    <div class="container py-4" id="app-container" style="display: none;">
+        
+        <!-- SETUP VIEW -->
+        <div id="setup-view">
+            <div class="row justify-content-center">
+                <div class="col-md-8 col-lg-6">
+                    <div class="card shadow-lg">
+                        <div class="card-header bg-primary text-white">
+                            <h3 class="mb-0">Pickleball Session Setup</h3>
+                        </div>
+                        <div class="card-body">
+                            <form onsubmit="return false;">
+                                <div class="mb-3">
+                                    <label class="form-label">Game Mode</label>
+                                    <select id="mode-select" class="form-select">
+                                        <option value="round-robin">Round Robin</option>
+                                        <option value="king-of-court">King of the Court</option>
+                                        <option value="competitive-variety" selected>Competitive Variety</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Session Type</label>
+                                    <select id="type-select" class="form-select">
+                                        <option value="doubles" selected>Doubles</option>
+                                        <option value="singles">Singles</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Number of Courts</label>
+                                    <input type="number" id="courts-input" class="form-control" value="4" min="1" max="20">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Players</label>
+                                    <div class="input-group mb-2">
+                                        <input type="text" id="new-player-input" class="form-control" placeholder="Enter player name">
+                                        <button id="add-player-btn" class="btn btn-outline-light" type="button">Add</button>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <small class="text-muted">Player Count: <span id="player-count">0</span></small>
+                                        <button id="add-test-players-btn" class="btn btn-sm btn-outline-secondary" type="button">Add 18 Test Players</button>
+                                    </div>
+                                    <ul id="player-list" class="list-group" style="max-height: 200px; overflow-y: auto;">
+                                        <!-- Players go here -->
+                                    </ul>
+                                </div>
+
+                                <div class="d-grid gap-2">
+                                    <button id="start-session-btn" class="btn btn-primary btn-lg">Start Session</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SESSION VIEW -->
+        <div id="session-view" style="display: none;">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4 p-3 bg-dark rounded shadow">
+                <div>
+                    <h2 id="session-title" class="mb-0">Active Session</h2>
+                    <small id="session-subtitle" class="text-muted">Loading...</small>
+                </div>
+                <div>
+                    <button id="export-btn" class="btn btn-info me-2">📥 Export</button>
+                    <button id="end-session-btn" class="btn btn-danger">End Session</button>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- Left: Courts -->
+                <div class="col-lg-8 mb-4">
+                    <h4 class="mb-3">Active Courts</h4>
+                    <div id="courts-container" class="row g-3">
+                        <!-- Courts injected here -->
+                    </div>
+                </div>
+
+                <!-- Right: Sidebar -->
+                <div class="col-lg-4">
+                    <!-- Waitlist -->
+                    <div class="card mb-3 shadow-sm">
+                        <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">⏳ Waitlist</h5>
+                            <span id="waitlist-count" class="badge bg-dark">0</span>
+                        </div>
+                        <ul id="waitlist" class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
+                            <!-- Waitlist items -->
+                        </ul>
+                    </div>
+
+                    <!-- Queue -->
+                    <div class="card mb-3 shadow-sm">
+                        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">📋 Queue</h5>
+                            <span id="queue-count" class="badge bg-light text-dark">0</span>
+                        </div>
+                        <ul id="queue-list" class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
+                            <!-- Queue items -->
+                        </ul>
+                    </div>
+
+                    <!-- History -->
+                    <div class="card mb-3 shadow-sm">
+                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">📜 History</h5>
+                            <span id="history-count" class="badge bg-light text-dark">0</span>
+                        </div>
+                        <ul id="history-list" class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
+                            <!-- History items -->
+                        </ul>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="d-grid gap-2">
+                        <button id="manage-players-btn" class="btn btn-outline-light">👥 Manage Players</button>
+                        <button id="stats-btn" class="btn btn-outline-warning">📊 Statistics</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Stats Modal -->
+    <div class="modal fade" id="statsModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Player Statistics</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Player</th>
+                                    <th>ELO</th>
+                                    <th>W-L</th>
+                                    <th>Games</th>
+                                    <th>Win %</th>
+                                    <th>Waited</th>
+                                    <th>Wait Time</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage Players Modal -->
+    <div class="modal fade" id="playersModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Manage Players</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="input-group mb-3">
+                        <input type="text" id="modal-player-input" class="form-control" placeholder="Player name">
+                        <button id="modal-add-player-btn" class="btn btn-success">Add</button>
+                    </div>
+                    <ul id="modal-player-list" class="list-group">
+                        <!-- List -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- PyScript Config -->
+    <script type="py" config>
+        {
+            "packages": []
+        }
+    </script>
     
-    <main class="content" role="main">
-      <!-- Setup Section -->
-      <article id="setup-section" class="section">
-        <h2 class="section-title">Session Setup</h2>
-        
-        <!-- Test Mode Container (hidden by default) -->
-        <div id="test-mode-container" style="display: none; margin-bottom: 20px;">
-          <div style="padding: 15px; background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px;">
-            <h3 style="margin: 0 0 10px 0; color: #856404;">🧪 Test Mode Active</h3>
-            <p style="margin: 0 0 10px 0; color: #856404; font-size: 0.9em;">
-              Quick setup for testing - adds 18 players automatically
-            </p>
-            <button id="add-test-players-btn" style="background: #ffc107; color: #000; font-weight: 600;">
-              ⚡ Add 18 Test Players
-            </button>
-          </div>
-        </div>
-        
-        <div class="config-grid">
-          <div class="form-group">
-            <label for="game-mode">Game Mode</label>
-            <select id="game-mode">
-              <option value="round-robin">Round Robin</option>
-              <option value="king-of-court">King of the Court</option>
-            </select>
-          </div>
-          
-          <div class="form-group">
-            <label for="session-type">Session Type</label>
-            <select id="session-type">
-              <option value="doubles">Doubles</option>
-              <option value="singles">Singles</option>
-            </select>
-          </div>
-          
-          <div class="form-group">
-            <label for="num-courts">Number of Courts</label>
-            <input type="number" id="num-courts" min="1" max="10" value="4">
-          </div>
-        </div>
-        
-        <!-- Locked Teams Checkbox (only for doubles) -->
-        <div id="locked-teams-container" class="form-group" style="margin-top: 15px;">
-          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-            <input type="checkbox" id="locked-teams-checkbox" style="width: auto; cursor: pointer;">
-            <span>Locked Teams (partners stay together)</span>
-          </label>
-          <p style="color: var(--text-secondary); font-size: 0.85em; margin-top: 5px; margin-left: 30px;">
-            Enable this to keep the same pairs of players together for the entire session. Only opponents change.
-          </p>
-        </div>
-        
-        <!-- Locked Teams Setup (hidden by default) -->
-        <div id="locked-teams-setup" class="hidden" style="margin-top: 15px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
-          <h4 style="margin-bottom: 10px; color: var(--text-primary);">Add Teams</h4>
-          <p style="color: var(--text-secondary); font-size: 0.85em; margin-bottom: 15px;">
-            Add pairs of players as locked teams. These pairs will stay together throughout the session.
-          </p>
-          <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-            <input type="text" id="team-player1-name" placeholder="Player 1 name" style="flex: 1;">
-            <input type="text" id="team-player2-name" placeholder="Player 2 name" style="flex: 1;">
-            <button id="add-locked-team-btn" class="btn" style="white-space: nowrap;">Add Team</button>
-          </div>
-          <div style="margin-top: 15px;">
-            <label>Teams</label>
-            <div id="locked-teams-list" style="margin-top: 10px;"></div>
-          </div>
-        </div>
-        
-        <!-- Advanced Config Toggle -->
-        <div style="margin-top: 20px; margin-bottom: 10px;">
-          <button id="advanced-config-toggle" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); padding: 8px 15px; display: flex; align-items: center; gap: 8px; font-size: 0.9em;">
-            <span style="font-size: 1.2em;">⚙️</span>
-            <span>Advanced Configuration</span>
-          </button>
-        </div>
-        
-        <!-- Advanced Config Section (hidden by default) -->
-        <div id="advanced-config-section" class="hidden" style="padding: 15px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 15px;">
-          <h3 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 1.1em;">Advanced Settings</h3>
-          
-          <div class="form-group">
-            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-              <input type="checkbox" id="randomize-player-order-checkbox" style="width: auto; cursor: pointer;">
-              <span>Randomize Initial Player Order</span>
-            </label>
-            <p style="color: var(--text-secondary); font-size: 0.85em; margin-top: 5px; margin-left: 30px;">
-              Shuffle players randomly when starting the session instead of using the order they were added. This ensures first matches are not always the same players.
-            </p>
-          </div>
-          
-          <div class="form-group" style="margin-top: 15px;">
-            <label for="setup-max-queue-size">Max Queue Size</label>
-            <input type="number" id="setup-max-queue-size" min="10" max="1000" value="100">
-            <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Maximum number of matches to pre-calculate in the queue</p>
-          </div>
+    <!-- Environment & Loader -->
+    <script type="py">
+        import os
+        import sys
+        import zipfile
+        import io
+        from pyscript import document, window
+        from pyodide.http import pyfetch
 
-          <!-- King of the Court Algorithm Settings -->
-          <div style="margin-top: 25px; padding-top: 15px; border-top: 2px solid var(--border-color);">
-            <h4 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 1em;">⚔️ King of the Court Algorithm Tuning</h4>
-            <p style="color: var(--text-secondary); font-size: 0.85em; margin-bottom: 15px;">
-              These settings control the matchmaking algorithm for King of the Court mode.
-            </p>
+        # Error display helper
+        def show_error(msg):
+            err_el = document.querySelector("#error-display")
+            err_el.innerText = msg
+            err_el.style.display = "block"
+            document.querySelector("#loading").style.display = "none"
 
-            <!-- ELO Rating System -->
-            <details style="margin-bottom: 15px;">
-              <summary style="cursor: pointer; font-weight: 600; color: var(--text-primary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
-                ELO Rating System
-              </summary>
-              <div style="padding: 10px; margin-top: 10px;">
-                <div class="form-group">
-                  <label for="koc-base-rating">Base Rating (Default: 1500)</label>
-                  <input type="number" id="koc-base-rating" min="800" max="2200" value="1500" step="50">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Starting ELO rating for new players</p>
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-min-rating">Minimum Rating (Default: 800)</label>
-                  <input type="number" id="koc-min-rating" min="500" max="1500" value="800" step="50">
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-max-rating">Maximum Rating (Default: 2200)</label>
-                  <input type="number" id="koc-max-rating" min="1500" max="3000" value="2200" step="50">
-                </div>
-              </div>
-            </details>
-
-            <!-- Provisional Players -->
-            <details style="margin-bottom: 15px;">
-              <summary style="cursor: pointer; font-weight: 600; color: var(--text-primary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
-                Provisional Players
-              </summary>
-              <div style="padding: 10px; margin-top: 10px;">
-                <div class="form-group">
-                  <label for="koc-provisional-games">Games Before Stable Ranking (Default: 2)</label>
-                  <input type="number" id="koc-provisional-games" min="1" max="10" value="2">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Number of games before a player stops being "provisional" and their ranking stabilizes</p>
-                </div>
-              </div>
-            </details>
-
-            <!-- Ranking Disparity -->
-            <details style="margin-bottom: 15px;">
-              <summary style="cursor: pointer; font-weight: 600; color: var(--text-primary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
-                Ranking Disparity Control
-              </summary>
-              <div style="padding: 10px; margin-top: 10px;">
-                <div class="form-group">
-                  <label for="koc-ranking-range">Matchmaking Range % (Default: 50%)</label>
-                  <input type="number" id="koc-ranking-range" min="25" max="100" value="50" step="5">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">
-                    Percentage of player pool that can be matched together. 50% means top half plays with top half, bottom half plays with bottom half.
-                  </p>
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-close-rank">Close Rank Threshold (Default: 4)</label>
-                  <input type="number" id="koc-close-rank" min="1" max="10" value="4">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Maximum rank difference for "close" matchups</p>
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-very-close-rank">Very Close Rank Threshold (Default: 3)</label>
-                  <input type="number" id="koc-very-close-rank" min="1" max="10" value="3">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Ideal rank difference for best matchups</p>
-                </div>
-              </div>
-            </details>
-
-            <!-- Waiting Strategy -->
-            <details style="margin-bottom: 15px;">
-              <summary style="cursor: pointer; font-weight: 600; color: var(--text-primary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
-                Strategic Waiting
-              </summary>
-              <div style="padding: 10px; margin-top: 10px;">
-                <div class="form-group">
-                  <label for="koc-max-consecutive-waits">Max Consecutive Waits (Default: 1)</label>
-                  <input type="number" id="koc-max-consecutive-waits" min="0" max="5" value="1">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Maximum times a player can wait before being forced into a match</p>
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-min-completed-matches">Min Completed Matches for Waiting (Default: 6)</label>
-                  <input type="number" id="koc-min-completed-matches" min="0" max="20" value="6">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Minimum completed matches before strategic waiting begins</p>
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-min-busy-courts">Min Busy Courts for Waiting (Default: 2)</label>
-                  <input type="number" id="koc-min-busy-courts" min="1" max="10" value="2">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Minimum busy courts before considering strategic waiting</p>
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-court-sync-threshold">Court Sync Threshold (Default: 2)</label>
-                  <input type="number" id="koc-court-sync-threshold" min="1" max="10" value="2">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Wait for N courts to finish when we have players for N+ courts (improves variety by batching matches)</p>
-                </div>
-              </div>
-            </details>
-
-            <!-- Variety Optimization -->
-            <details style="margin-bottom: 15px;">
-              <summary style="cursor: pointer; font-weight: 600; color: var(--text-primary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
-                Variety & Repetition Control
-              </summary>
-              <div style="padding: 10px; margin-top: 10px;">
-                <div class="form-group">
-                  <label for="koc-back-to-back-overlap">Back-to-Back Overlap Threshold (Default: 3)</label>
-                  <input type="number" id="koc-back-to-back-overlap" min="2" max="4" value="3">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Max overlapping players allowed in consecutive matches</p>
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-single-court-loop">Single Court Loop Threshold (Default: 2)</label>
-                  <input type="number" id="koc-single-court-loop" min="1" max="5" value="2">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Times same group can play in last 10 matches before waiting</p>
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-high-repetition">High Repetition Threshold % (Default: 60%)</label>
-                  <input type="number" id="koc-high-repetition" min="30" max="90" value="60" step="5">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Percentage threshold for detecting high repetition</p>
-                </div>
-              </div>
-            </details>
-
-            <!-- Team Assignment Penalties -->
-            <details style="margin-bottom: 15px;">
-              <summary style="cursor: pointer; font-weight: 600; color: var(--text-primary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
-                Team Assignment Penalties (Advanced)
-              </summary>
-              <div style="padding: 10px; margin-top: 10px;">
-                <div class="form-group">
-                  <label for="koc-partnership-penalty">Partnership Repeat Penalty (Default: 80)</label>
-                  <input type="number" id="koc-partnership-penalty" min="0" max="500" value="80" step="10">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Penalty for repeated partnerships (all-time)</p>
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-recent-partnership-penalty">Recent Partnership Penalty (Default: 300)</label>
-                  <input type="number" id="koc-recent-partnership-penalty" min="0" max="1000" value="300" step="50">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Heavy penalty for recent partnerships (within last 2 rounds)</p>
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-opponent-penalty">Opponent Repeat Penalty (Default: 25)</label>
-                  <input type="number" id="koc-opponent-penalty" min="0" max="200" value="25" step="5">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Penalty for repeated opponents (all-time)</p>
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-recent-overlap-penalty">Recent Overlap Penalty (Default: 200)</label>
-                  <input type="number" id="koc-recent-overlap-penalty" min="0" max="1000" value="200" step="50">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Penalty for recent player overlap (3+ same players)</p>
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                  <label for="koc-team-balance-penalty">Team Balance Penalty (Default: 20)</label>
-                  <input type="number" id="koc-team-balance-penalty" min="0" max="100" value="20" step="5">
-                  <p style="margin-top: 5px; font-size: 0.85em; color: var(--text-secondary);">Penalty for unbalanced teams (win rate difference)</p>
-                </div>
-              </div>
-            </details>
-          </div>
-        </div>
-        
-        <!-- Player Input Section (hidden when locked teams is enabled) -->
-        <div id="player-input-section">
-          <div class="form-group" style="margin-top: 20px;">
-            <label for="player-name">Add Players</label>
-            <div style="display: flex; gap: 10px;">
-              <input type="text" id="player-name" placeholder="Enter player name">
-              <button id="add-player-btn">Add Player</button>
-            </div>
-          </div>
-          
-          <div class="player-list" id="player-list"></div>
-          
-          <div class="form-group" style="margin-top: 20px;">
-            <label>Banned Pairs (Players who won't play together)</label>
-            <div style="display: flex; gap: 10px;">
-              <select id="banned-player1"></select>
-              <select id="banned-player2"></select>
-              <button id="add-banned-pair-btn">Ban Pair</button>
-            </div>
-            <div class="banned-pairs-list" id="banned-pairs-list"></div>
-          </div>
-        </div>
-        
-        <div class="controls">
-          <button id="start-session-btn">Start Session</button>
-          <button id="setup-end-session-clear-btn" class="btn-danger" style="display: none;">End Session and Clear Data</button>
-          <button id="setup-end-session-keep-btn" class="btn-danger" style="display: none;">End Session and Keep Players</button>
-        </div>
-      </article>
-      
-      <!-- Session Control Section -->
-      <article id="control-section" class="section hidden">
-        <h2 class="section-title">Session Controls<span id="session-game-mode"></span></h2>
-        
-        <div class="form-group">
-          <label>Active Players</label>
-          <div id="session-player-controls" style="display: flex; gap: 10px; margin-bottom: 10px;">
-            <input type="text" id="session-player-name" placeholder="Add player to session">
-            <button id="add-session-player-btn">Add Player</button>
-          </div>
-          <div id="session-team-controls" style="display: none; gap: 10px; margin-bottom: 10px; flex-direction: column;">
-            <div style="display: flex; gap: 10px;">
-              <input type="text" id="session-team-player1-name" placeholder="Player 1 name">
-              <input type="text" id="session-team-player2-name" placeholder="Player 2 name">
-              <button id="add-session-team-btn">Add Team</button>
-            </div>
-          </div>
-          <div class="player-list" id="active-players-list"></div>
-        </div>
-        
-        <div class="controls">
-          <button id="show-queue-btn">Show Queue</button>
-          <button id="show-history-btn">Show History</button>
-          <button id="show-rankings-btn">Show Rankings</button>
-          <button id="show-stats-btn">Show Statistics</button>
-          <button id="export-session-btn" class="btn-secondary">📋 Export Session</button>
-          <button id="edit-session-btn" class="btn-warning">Edit Session Config</button>
-          <button id="clear-session-btn" class="btn-warning">Clear Session Data</button>
-          <button id="end-session-clear-btn" class="btn-danger">End Session and Clear Data</button>
-          <button id="end-session-keep-btn" class="btn-danger">End Session and Keep Players</button>
-        </div>
-      </article>
-      
-      <!-- Courts Display -->
-      <article id="courts-section" class="section hidden">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
-          <h2 class="section-title" style="margin: 0;">Active Courts</h2>
-          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-            <button id="make-court-btn" style="padding: 8px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95em; font-weight: 600;">🎾 Make Court</button>
-            <label for="courts-per-row" style="font-size: 0.9em;">Courts per row:</label>
-            <input type="number" id="courts-per-row" value="2" style="width: 60px; text-align: center;">
-            <button id="apply-courts-layout-btn" style="padding: 5px 15px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em;">Apply</button>
-          </div>
-        </div>
-        <div class="courts-grid" id="courts-grid"></div>
-        
-        <div class="waiting-area" id="waiting-area" style="display: none;">
-          <div class="waiting-title">⏳ Waiting Players</div>
-          <div class="player-list" id="waiting-players"></div>
-        </div>
-      </article>
-      
-      <!-- Match Queue Section -->
-      <article id="queue-section" class="section hidden">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-          <h2 class="section-title" style="margin: 0;">📋 Match Queue</h2>
-          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-            <label for="max-queue-size" style="font-size: 0.9em;">Max queue size:</label>
-            <input type="number" id="max-queue-size" value="100" min="10" max="1000" style="width: 70px; text-align: center;">
-            <label for="matches-per-page" style="font-size: 0.9em;">Matches per page:</label>
-            <input type="number" id="matches-per-page" value="10" style="width: 60px; text-align: center;">
-            <button id="apply-queue-pagination-btn">Apply</button>
-          </div>
-        </div>
-        
-        <div id="queue-pagination" style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 15px;">
-          <button id="queue-prev-btn">← Previous</button>
-          <span id="queue-page-info" style="font-weight: 600; color: var(--text-primary);"></span>
-          <button id="queue-next-btn">Next →</button>
-        </div>
-        
-        <div id="queue-list"></div>
-      </article>
-      
-      <!-- Match History Section -->
-      <article id="match-history-section" class="section hidden">
-        <h2 class="section-title">Match History</h2>
-        <div id="match-history-list"></div>
-      </article>
-      
-      <!-- Rankings Modal -->
-      <aside id="rankings-modal" class="modal" role="dialog" aria-labelledby="rankings-title" aria-hidden="true">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h2 id="rankings-title">🏆 Current Rankings</h2>
-            <button class="modal-close" id="rankings-modal-close" aria-label="Close rankings modal">&times;</button>
-          </div>
-          <div class="modal-body">
-            <div id="rankings-list"></div>
-          </div>
-        </div>
-      </aside>
-      
-      <!-- Statistics Modal -->
-      <aside id="stats-modal" class="modal" role="dialog" aria-labelledby="stats-title" aria-hidden="true">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h2 id="stats-title">📊 Player Statistics</h2>
-            <button class="modal-close" id="stats-modal-close" aria-label="Close statistics modal">&times;</button>
-          </div>
-          <div class="modal-body">
-            <div class="stats-grid" id="stats-grid"></div>
-          </div>
-        </div>
-      </aside>
-      
-      <!-- Make Court Modal -->
-      <aside id="make-court-modal" class="modal" role="dialog" aria-labelledby="make-court-title" aria-hidden="true">
-        <div class="modal-content" style="max-width: 600px;">
-          <div class="modal-header">
-            <h2 id="make-court-title">🎾 Create Custom Court</h2>
-            <button class="modal-close" id="make-court-modal-close" aria-label="Close make court modal">&times;</button>
-          </div>
-          <div class="modal-body">
-            <div style="margin-bottom: 20px;">
-              <h3 style="color: var(--text-primary); margin-bottom: 15px; font-size: 1.1em;">Select Court & Players</h3>
-              
-              <!-- Court Selection -->
-              <div style="margin-bottom: 20px;">
-                <label style="font-size: 0.95em; margin-bottom: 8px; display: block;">Which court?</label>
-                <select id="make-court-court-select" style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary);"></select>
-              </div>
-              
-              <h4 style="color: var(--text-primary); margin-bottom: 15px; font-size: 1em;">Select Players</h4>
-              
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                <!-- Team 1 -->
-                <div style="padding: 15px; background: var(--bg-secondary); border-radius: 8px; border: 2px solid #667eea;">
-                  <h4 style="color: #667eea; margin-bottom: 10px; text-align: center;">Team 1</h4>
-                  <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <div class="form-group" style="margin-bottom: 0;">
-                      <label style="font-size: 0.9em; margin-bottom: 5px;">Player 1</label>
-                      <select id="make-court-team1-player1" class="make-court-select" style="width: 100%;"></select>
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                      <label style="font-size: 0.9em; margin-bottom: 5px;">Player 2</label>
-                      <select id="make-court-team1-player2" class="make-court-select" style="width: 100%;"></select>
-                    </div>
-                  </div>
-                </div>
+        async def load_app():
+            try:
+                document.querySelector("#loading-status").innerText = "Fetching app_data.zip..."
+                print("Fetching app_data.zip...")
+                response = await pyfetch("./app_data.zip")
+                if response.status != 200:
+                    raise Exception(f"Failed to fetch app_data.zip: {response.status}")
                 
-                <!-- Team 2 -->
-                <div style="padding: 15px; background: var(--bg-secondary); border-radius: 8px; border: 2px solid #764ba2;">
-                  <h4 style="color: #764ba2; margin-bottom: 10px; text-align: center;">Team 2</h4>
-                  <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <div class="form-group" style="margin-bottom: 0;">
-                      <label style="font-size: 0.9em; margin-bottom: 5px;">Player 1</label>
-                      <select id="make-court-team2-player1" class="make-court-select" style="width: 100%;"></select>
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                      <label style="font-size: 0.9em; margin-bottom: 5px;">Player 2</label>
-                      <select id="make-court-team2-player2" class="make-court-select" style="width: 100%;"></select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <!-- Win Probability Display -->
-              <div style="padding: 15px; background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)); border-radius: 8px; margin-bottom: 20px; color: white;">
-                <div style="text-align: center;">
-                  <p style="margin: 0 0 10px 0; font-size: 0.9em; opacity: 0.9;">Estimated Win Probability</p>
-                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 15px;">
-                    <div style="flex: 1;">
-                      <div id="make-court-team1-prob" style="font-size: 2em; font-weight: bold;">50%</div>
-                      <div style="font-size: 0.85em; opacity: 0.9;">Team 1</div>
-                    </div>
-                    <div style="font-size: 1.5em; font-weight: bold;">vs</div>
-                    <div style="flex: 1;">
-                      <div id="make-court-team2-prob" style="font-size: 2em; font-weight: bold;">50%</div>
-                      <div style="font-size: 0.85em; opacity: 0.9;">Team 2</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <!-- Validation Messages -->
-              <div id="make-court-validation-message" style="padding: 10px; border-radius: 6px; margin-bottom: 15px; display: none;"></div>
-              
-              <!-- Suggested Lineup (for auto-balance) -->
-              <div id="make-court-suggested-section" style="padding: 15px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 15px; display: none;">
-                <p style="margin: 0 0 10px 0; font-size: 0.9em; color: var(--text-secondary);">
-                  💡 <strong>Suggested Balanced Lineup:</strong> We recommend this team composition for the most competitive match:
-                </p>
-                <button id="make-court-apply-suggested" style="background: #667eea; color: white; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em;">
-                  Apply Suggestion
-                </button>
-              </div>
-            </div>
-            
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-              <button id="make-court-create-btn" style="flex: 1; background: #28a745; color: white; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 1em;">
-                Create Court
-              </button>
-              <button id="make-court-cancel-btn" style="flex: 1; background: #6c757d; color: white; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 1em;">
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      </aside>
-      
-      <!-- Modes & Config Page -->
-      <article id="modes-page" class="section hidden">
-        <h2 class="section-title">🎮 Game Modes & Configuration</h2>
-        
-        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
-          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">🔄 Round Robin Mode</h3>
-          <p style="color: var(--text-primary); margin-bottom: 10px;">
-            In Round Robin mode, the algorithm creates matches designed to maximize variety and fairness:
-          </p>
-          <ul style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
-            <li><strong>Partner Diversity:</strong> Players are paired with different partners as much as possible</li>
-            <li><strong>Opponent Variety:</strong> Players face different opponents across matches</li>
-            <li><strong>Fair Play Time:</strong> All players get roughly equal playing time</li>
-            <li><strong>No Duplicate Matchups:</strong> The same 4 players won't face each other in the same configuration</li>
-            <li><strong>Banned Pairs:</strong> Specify pairs of players who won't be partnered together</li>
-          </ul>
-          <p style="color: var(--text-secondary); margin-top: 15px; font-style: italic;">
-            Perfect for social play where everyone wants to play with and against different people.
-          </p>
-        </div>
-        
-        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
-          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">👑 King of the Court Mode</h3>
-          <p style="color: var(--text-primary); margin-bottom: 10px;">
-            King of the Court uses an advanced ELO-style ranking system with strict rank-based matchmaking for fair, competitive play:
-          </p>
-          <ul style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
-            <li><strong>ELO-Style Rankings:</strong> Sophisticated rating system where win value depends on opponent strength (logarithmic scaling)</li>
-            <li><strong>Strict Rank Brackets:</strong> In an 18-player session, #1 can only play ranks #2-#9, #18 can only play #10-#17 (50% range rule)</li>
-            <li><strong>Close-Rank Prioritization:</strong> System prefers matching closely-ranked players (e.g., #16, #17, #18, #19 together)</li>
-            <li><strong>Strategic Waiting:</strong> Algorithm waits for better matchups rather than rushing games - quality over speed</li>
-            <li><strong>New Player Integration:</strong> Players with &lt;3 games get provisional rankings and can play with anyone initially</li>
-            <li><strong>Variety Within Brackets:</strong> Prioritizes opponents you haven't faced yet within your ranking range</li>
-            <li><strong>Dynamic Rankings:</strong> Win more to move up brackets; lose more to move down - always face appropriate competition</li>
-            <li><strong>Hard Rank Locks:</strong> Never pairs top-half with bottom-half players unless provisional</li>
-          </ul>
-          <p style="color: var(--text-secondary); margin-top: 15px; font-style: italic;">
-            Perfect for competitive play where fair, skill-appropriate matchups are crucial. The algorithm ensures top players face top competition, bottom players get balanced games, and everyone experiences appropriate challenge levels with maximal variety within their skill bracket.
-          </p>
-        </div>
-        
-        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
-          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">⚙️ Configuration Options</h3>
-          
-          <div style="margin-bottom: 20px;">
-            <h4 style="color: var(--text-primary); margin-bottom: 10px;">Session Type</h4>
-            <p style="color: var(--text-secondary); line-height: 1.6;">
-              <strong>Doubles:</strong> 2v2 matches with 4 players per court<br>
-              <strong>Singles:</strong> 1v1 matches with 2 players per court
-            </p>
-          </div>
-          
-          <div style="margin-bottom: 20px;">
-            <h4 style="color: var(--text-primary); margin-bottom: 10px;">Number of Courts</h4>
-            <p style="color: var(--text-secondary); line-height: 1.6;">
-              Set how many courts are available (1-10). More courts mean more simultaneous matches and less wait time.
-            </p>
-          </div>
-          
-          <div style="margin-bottom: 20px;">
-            <h4 style="color: var(--text-primary); margin-bottom: 10px;">Locked Teams (Doubles Only)</h4>
-            <p style="color: var(--text-secondary); line-height: 1.6;">
-              Enable this to keep the same pairs of players together for the entire session. Perfect for tournaments or when players want to stay with their chosen partner. Only opponents will change between matches.
-            </p>
-          </div>
-          
-          <div style="margin-bottom: 20px;">
-            <h4 style="color: var(--text-primary); margin-bottom: 10px;">Banned Pairs</h4>
-            <p style="color: var(--text-secondary); line-height: 1.6;">
-              Specify pairs of players who should never be partnered together. Useful for skill mismatches or personal preferences.
-            </p>
-          </div>
-          
-          <div style="margin-bottom: 20px;">
-            <h4 style="color: var(--text-primary); margin-bottom: 10px;">Max Queue Size</h4>
-            <p style="color: var(--text-secondary); line-height: 1.6;">
-              Controls how many matches are pre-calculated in advance (default: 100). Increase for longer sessions.
-            </p>
-          </div>
-        </div>
-        
-        <div style="padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
-          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">💡 Tips for Best Results</h3>
-          <ul style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
-            <li>Add all players before starting the session for optimal match distribution</li>
-            <li>Use Round Robin for social play and variety</li>
-            <li>Use King of the Court for competitive, skill-based play</li>
-            <li>Set the number of courts based on your facility and player count</li>
-            <li>Enable Locked Teams for tournaments or when partners want to stay together</li>
-            <li>Use Banned Pairs to prevent pairing players with large skill gaps</li>
-            <li>Players added mid-session will be integrated fairly into the rotation</li>
-          </ul>
-        </div>
-      </article>
-      
-      <!-- About Page -->
-      <article id="about-page" class="section hidden">
-        <h2 class="section-title">ℹ️ About Better Pickleball Sessions</h2>
-        
-        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
-          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">Welcome!</h3>
-          <p style="color: var(--text-primary); line-height: 1.8; margin-bottom: 15px;">
-            Better Pickleball Sessions is a professional-grade session management tool designed to make organizing pickleball games effortless and fair. Whether you're running a casual social session or a competitive tournament, our advanced algorithms ensure everyone gets balanced play time and variety.
-          </p>
-          <p style="color: var(--text-secondary); line-height: 1.8;">
-            Built with modern web technologies and sophisticated matchmaking algorithms, this tool handles everything from player management to match scheduling, rankings, and statistics tracking.
-          </p>
-        </div>
-        
-        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
-          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">✨ Key Features</h3>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
-            <div>
-              <h4 style="color: var(--text-primary); margin-bottom: 8px;">🎯 Smart Matchmaking</h4>
-              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
-                Advanced algorithms maximize partner diversity, opponent variety, and fair play distribution
-              </p>
-            </div>
-            <div>
-              <h4 style="color: var(--text-primary); margin-bottom: 8px;">⏱️ Real-Time Management</h4>
-              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
-                Track matches in progress, manage scores, and see live rankings and statistics
-              </p>
-            </div>
-            <div>
-              <h4 style="color: var(--text-primary); margin-bottom: 8px;">🏆 Two Game Modes</h4>
-              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
-                Choose between social Round Robin or competitive King of the Court formats
-              </p>
-            </div>
-            <div>
-              <h4 style="color: var(--text-primary); margin-bottom: 8px;">👥 Flexible Teams</h4>
-              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
-                Support for singles, doubles, locked teams, and dynamic partner rotation
-              </p>
-            </div>
-            <div>
-              <h4 style="color: var(--text-primary); margin-bottom: 8px;">💾 Auto-Save</h4>
-              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
-                Sessions are automatically saved to your browser - survive refreshes and crashes
-              </p>
-            </div>
-            <div>
-              <h4 style="color: var(--text-primary); margin-bottom: 8px;">📊 Rich Analytics</h4>
-              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
-                View detailed player statistics, win rates, and match history
-              </p>
-            </div>
-            <div>
-              <h4 style="color: var(--text-primary); margin-bottom: 8px;">🌙 Dark Mode</h4>
-              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
-                Toggle between light and dark themes for comfortable viewing in any lighting
-              </p>
-            </div>
-            <div>
-              <h4 style="color: var(--text-primary); margin-bottom: 8px;">📱 Responsive Design</h4>
-              <p style="color: var(--text-secondary); font-size: 0.95em; line-height: 1.6;">
-                Works perfectly on desktop, tablet, and mobile devices
-              </p>
-            </div>
-          </div>
-        </div>
-        
-        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
-          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">🚀 Getting Started</h3>
-          <ol style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
-            <li><strong>Go to Setup:</strong> Click the "Setup" tab in the navigation</li>
-            <li><strong>Choose Mode:</strong> Select Round Robin or King of the Court</li>
-            <li><strong>Add Players:</strong> Enter player names (or teams if using locked teams)</li>
-            <li><strong>Configure Settings:</strong> Set number of courts, session type, and any advanced options</li>
-            <li><strong>Start Session:</strong> Click "Start Session" to begin</li>
-            <li><strong>Manage Matches:</strong> Switch to "Active Session" to see courts, complete matches, and track progress</li>
-            <li><strong>View Progress:</strong> Check rankings, statistics, and match history anytime</li>
-          </ol>
-        </div>
-        
-        <div style="margin-bottom: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
-          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">🎾 Perfect For</h3>
-          <ul style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
-            <li>Club social sessions and open play</li>
-            <li>Round robin tournaments</li>
-            <li>King of the Court competitions</li>
-            <li>League play and ladder matches</li>
-            <li>Private group sessions</li>
-            <li>Coaching and training sessions</li>
-            <li>Corporate team building events</li>
-          </ul>
-        </div>
-        
-        <div style="padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
-          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">💻 Technology</h3>
-          <p style="color: var(--text-secondary); line-height: 1.8; margin-bottom: 15px;">
-            Better Pickleball Sessions is built with:
-          </p>
-          <ul style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8;">
-            <li><strong>Modern TypeScript:</strong> Type-safe, maintainable code</li>
-            <li><strong>Advanced Algorithms:</strong> Sophisticated matchmaking logic for fairness</li>
-            <li><strong>Local Storage:</strong> No server required - your data stays on your device</li>
-            <li><strong>Responsive Design:</strong> Beautiful UI that works on all devices</li>
-            <li><strong>No Installation:</strong> Just visit the website and start using it</li>
-            <li><strong>Free Forever:</strong> No subscriptions, no accounts, no hidden fees</li>
-          </ul>
-        </div>
-        
-        <div style="margin-top: 30px; padding: 20px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow);">
-          <h3 style="color: var(--gradient-start); margin-bottom: 15px;">🔓 Open Source</h3>
-          <p style="color: var(--text-primary); line-height: 1.8; margin-bottom: 15px;">
-            Better Pickleball Sessions is open source and freely available on GitHub!
-          </p>
-          <p style="color: var(--text-secondary); line-height: 1.8; margin-bottom: 15px;">
-            This project is released under an open source license, which means you can:
-          </p>
-          <ul style="color: var(--text-secondary); margin-left: 20px; line-height: 1.8; margin-bottom: 15px;">
-            <li>View and study the source code</li>
-            <li>Report bugs and issues</li>
-            <li>Request new features</li>
-            <li>Contribute improvements</li>
-            <li>Use it for your own projects</li>
-          </ul>
-          <p style="color: var(--text-primary); line-height: 1.8; margin-bottom: 15px;">
-            <strong>Found a bug or have a feature request?</strong>
-          </p>
-          <p style="color: var(--text-secondary); line-height: 1.8; margin-bottom: 15px;">
-            Please report issues, bugs, or feature requests on our GitHub repository:
-          </p>
-          <div style="text-align: center; margin-top: 20px;">
-            <a href="https://github.com/iysaleh/pickleball_session_manager" target="_blank" rel="noopener noreferrer" 
-               style="display: inline-block; padding: 12px 30px; background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)); 
-                      color: white; text-decoration: none; border-radius: 25px; font-weight: 600; font-size: 1.05em; 
-                      transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);">
-              🔗 View on GitHub →
-            </a>
-          </div>
-        </div>
-        
-        <div style="margin-top: 30px; padding: 20px; background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)); border-radius: 8px; text-align: center;">
-          <h3 style="color: white; margin-bottom: 10px;">🎉 Ready to organize better sessions?</h3>
-          <p style="color: rgba(255, 255, 255, 0.9); margin-bottom: 20px;">
-            Click "Setup" in the navigation to get started!
-          </p>
-          <button id="about-goto-setup" style="background: white; color: var(--gradient-start); padding: 12px 30px; font-size: 1.1em; font-weight: 600; border: none; border-radius: 25px; cursor: pointer;">
-            Go to Setup →
-          </button>
-        </div>
-      </article>
-    </main>
-    
-    <noscript>
-      <div style="padding: 40px; text-align: center; background: #fff3cd; border: 2px solid #ffc107; margin: 20px; border-radius: 8px;">
-        <h2 style="color: #856404;">JavaScript Required</h2>
-        <p style="color: #856404;">Better Pickleball Sessions requires JavaScript to run. Please enable JavaScript in your browser to use this application.</p>
-        <h3 style="margin-top: 30px; color: #856404;">About Better Pickleball Sessions:</h3>
-        <p style="color: #856404; max-width: 800px; margin: 15px auto; line-height: 1.6;">
-          Better Pickleball Sessions is a free professional-grade session management tool for organizing pickleball games. 
-          Features include smart matchmaking algorithms, Round Robin tournaments, King of the Court competitions, 
-          real-time rankings and statistics, match history tracking, and support for multiple courts.
-        </p>
-      </div>
-    </noscript>
-  </div>
-  
-  <script type="module" src="/src/main.ts"></script>
+                data = await response.bytes()
+                
+                document.querySelector("#loading-status").innerText = "Unpacking..."
+                print("Unpacking zip...")
+                
+                # Unpack to current directory (should be /home/pyodide)
+                with zipfile.ZipFile(io.BytesIO(data)) as z:
+                    z.extractall(".")
+                
+                print(f"Files unpacked. Root: {os.listdir('.')}")
+                if "python" in os.listdir("."):
+                    print(f"Python pkg: {os.listdir('python')}")
+                else:
+                    raise Exception("Unpack failed: python directory not found")
+                
+                document.querySelector("#loading-status").innerText = "Starting application..."
+                
+                # Now import main
+                import pyscript_app.main
+                
+            except Exception as e:
+                import traceback
+                trace = traceback.format_exc()
+                print(trace)
+                show_error(f"Loader Error:\n{trace}")
+
+        import asyncio
+        asyncio.ensure_future(load_app())
+    </script>
+
 </body>
 </html>
