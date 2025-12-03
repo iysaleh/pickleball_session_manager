@@ -324,67 +324,77 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
     # Check 2: Player-Specific History Scan (The "Personal Gap" Rule)
     # We must scan back through the *player's own history* to find when they last played with this partner.
     # The number of *intervening games this player played* must be >= REQUIRED.
+    # MUST CHECK BOTH PLAYERS INDIVIDUALLY!
     
-    player_matches = []
-    # Collect all matches this player participated in, in order
-    for m in completed_matches:
-        if player1 in m.team1 or player1 in m.team2:
-            player_matches.append(m)
-            
-    if player_matches:
-        # Scan backwards through player's personal history
-        last_played_together_idx = -1
-        last_played_against_idx = -1
-        
-        for i in range(len(player_matches) - 1, -1, -1):
-            m = player_matches[i]
-            
-            # Check Partnership
-            if (player2 in m.team1 and player1 in m.team1) or \
-               (player2 in m.team2 and player1 in m.team2):
-                if last_played_together_idx == -1:
-                    last_played_together_idx = i
-            
-            # Check Opponent
-            if (player1 in m.team1 and player2 in m.team2) or \
-               (player1 in m.team2 and player2 in m.team1):
-                if last_played_against_idx == -1:
-                    last_played_against_idx = i
-            
-            if last_played_together_idx != -1 and last_played_against_idx != -1:
-                break
-        
-        current_personal_game_count = len(player_matches)
-        
-        if role == 'partner' and last_played_together_idx != -1:
-            # Games played SINCE that match
-            intervening_games = current_personal_game_count - last_played_together_idx - 1
-            
-            # Apply constraint
-            if len(session.active_players) >= 8:
-                 if intervening_games < PARTNER_REPETITION_GAMES_REQUIRED:
-                     return False
-            elif intervening_games < 1: # Basic back-to-back check for small groups
-                 return False
-
-        elif role == 'opponent':
-            # 1. Check Opponent Repetition (Standard)
-            if last_played_against_idx != -1:
-                intervening_games = current_personal_game_count - last_played_against_idx - 1
+    for subject_player in [player1, player2]:
+        player_matches = []
+        # Collect all matches this player participated in, in order
+        for m in completed_matches:
+            if subject_player in m.team1 or subject_player in m.team2:
+                player_matches.append(m)
                 
+        if player_matches:
+            # Scan backwards through subject_player's personal history
+            last_played_together_idx = -1
+            last_played_against_idx = -1
+            
+            for i in range(len(player_matches) - 1, -1, -1):
+                m = player_matches[i]
+                
+                # Check Partnership
+                if (player1 in m.team1 and player2 in m.team1) or \
+                   (player1 in m.team2 and player2 in m.team2):
+                    if last_played_together_idx == -1:
+                        last_played_together_idx = i
+                
+                # Check Opponent
+                if (player1 in m.team1 and player2 in m.team2) or \
+                   (player1 in m.team2 and player2 in m.team1):
+                    if last_played_against_idx == -1:
+                        last_played_against_idx = i
+                
+                if last_played_together_idx != -1 and last_played_against_idx != -1:
+                    break
+            
+            current_personal_game_count = len(player_matches)
+            
+            if role == 'partner' and last_played_together_idx != -1:
+                # Games played SINCE that match
+                intervening_games = current_personal_game_count - last_played_together_idx - 1
+                
+                # Apply constraint
                 if len(session.active_players) >= 8:
-                     if intervening_games < OPPONENT_REPETITION_GAMES_REQUIRED:
+                     if intervening_games < PARTNER_REPETITION_GAMES_REQUIRED:
                          return False
-                elif intervening_games < 1:
+                elif intervening_games < 1: # Basic back-to-back check for small groups
                      return False
             
-            # 2. Check Partner -> Opponent Repetition (Variety Rule)
-            # If we were partners very recently, avoid playing against each other immediately
-            if last_played_together_idx != -1:
-                intervening_games = current_personal_game_count - last_played_together_idx - 1
-                if len(session.active_players) >= 8:
-                    if intervening_games < 1:  # Must have at least 1 intervening game
-                        return False
+            # Check Opponent -> Partner Repetition (Variety Rule)
+            # If we were opponents very recently, avoid playing as partners immediately
+            if role == 'partner' and last_played_against_idx != -1:
+                 intervening_games = current_personal_game_count - last_played_against_idx - 1
+                 if len(session.active_players) >= 8:
+                     if intervening_games < 1: # Must have at least 1 intervening game
+                         return False
+
+            elif role == 'opponent':
+                # 1. Check Opponent Repetition (Standard)
+                if last_played_against_idx != -1:
+                    intervening_games = current_personal_game_count - last_played_against_idx - 1
+                    
+                    if len(session.active_players) >= 8:
+                         if intervening_games < OPPONENT_REPETITION_GAMES_REQUIRED:
+                             return False
+                    elif intervening_games < 1:
+                         return False
+                
+                # 2. Check Partner -> Opponent Repetition (Variety Rule)
+                # If we were partners very recently, avoid playing against each other immediately
+                if last_played_together_idx != -1:
+                    intervening_games = current_personal_game_count - last_played_together_idx - 1
+                    if len(session.active_players) >= 8:
+                        if intervening_games < 1:  # Must have at least 1 intervening game
+                            return False
 
     return True
 
