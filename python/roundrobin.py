@@ -73,18 +73,22 @@ def generate_round_robin_queue(
             games_played[pid] = stats.games_played
             
             # Pre-populate partnerships from session history
-            for partner_id in stats.partners_played:
-                if partner_id in partnership_count[pid]:
-                    partnership_count[pid][partner_id] += 1
-                else:
-                    partnership_count[pid][partner_id] = 1
+            if isinstance(stats.partners_played, dict):
+                for partner_id, count in stats.partners_played.items():
+                    partnership_count[pid][partner_id] = partnership_count[pid].get(partner_id, 0) + count
+            else:
+                # Fallback for legacy sets
+                for partner_id in stats.partners_played:
+                    partnership_count[pid][partner_id] = partnership_count[pid].get(partner_id, 0) + 1
             
             # Pre-populate opponents from session history
-            for opponent_id in stats.opponents_played:
-                if opponent_id in opponent_count[pid]:
-                    opponent_count[pid][opponent_id] += 1
-                else:
-                    opponent_count[pid][opponent_id] = 1
+            if isinstance(stats.opponents_played, dict):
+                for opponent_id, count in stats.opponents_played.items():
+                    opponent_count[pid][opponent_id] = opponent_count[pid].get(opponent_id, 0) + count
+            else:
+                # Fallback for legacy sets
+                for opponent_id in stats.opponents_played:
+                    opponent_count[pid][opponent_id] = opponent_count[pid].get(opponent_id, 0) + 1
         else:
             games_played[pid] = 0
     
@@ -143,33 +147,35 @@ def generate_round_robin_queue(
         if not is_valid_team_configuration(team1, team2):
             return -1
         
-        score = 100.0
+        score = 1000.0
         
         # Boost: new partnerships (players who haven't played together)
         for player_id in team1:
             for teammate_id in team1:
                 if player_id != teammate_id:
                     if teammate_id not in partnership_count.get(player_id, {}):
-                        score += 50
+                        score += 100
         
         for player_id in team2:
             for teammate_id in team2:
                 if player_id != teammate_id:
                     if teammate_id not in partnership_count.get(player_id, {}):
-                        score += 50
+                        score += 100
         
-        # Penalty: repeated partnerships
+        # Penalty: repeated partnerships (HARD LOCK)
         for player_id in team1:
             for teammate_id in team1:
                 if player_id != teammate_id:
                     count = partnership_count.get(player_id, {}).get(teammate_id, 0)
-                    score -= count * 30
+                    if count > 0:
+                        score -= 2000  # Hard lock: force negative score
         
         for player_id in team2:
             for teammate_id in team2:
                 if player_id != teammate_id:
                     count = partnership_count.get(player_id, {}).get(teammate_id, 0)
-                    score -= count * 30
+                    if count > 0:
+                        score -= 2000  # Hard lock
         
         # Boost: new opponents
         for p1 in team1:
@@ -177,18 +183,22 @@ def generate_round_robin_queue(
                 if p2 not in opponent_count.get(p1, {}):
                     score += 20
         
-        # Penalty: repeated opponents
+        # Penalty: repeated opponents (HARD LOCK for > 1 repeat, Strong Penalty for 1)
+        # User said "Daniel and Kimberly played 3 times" (so 2 repeats).
+        # We want to avoid even 1 repeat if possible.
         for p1 in team1:
             for p2 in team2:
                 count = opponent_count.get(p1, {}).get(p2, 0)
-                score -= count * 15
+                if count > 0:
+                     score -= 2000 # Hard lock on opponent repetition too
         
         # Penalty: same 4-player group played recently
         four_key = get_four_player_key(team1, team2)
         group_count = four_player_group_count.get(four_key, 0)
-        score -= group_count * 200
+        score -= group_count * 2000 # Hard lock same group
         
         # Fair play: boost players with fewer games
+        # This is small boost (+30) compared to Hard Lock (-2000), so it won't override.
         for player_id in team1 + team2:
             if games_played[player_id] < len(matches) // len(player_ids):
                 score += 30

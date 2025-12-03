@@ -85,8 +85,8 @@ def serialize_session(session) -> Dict:
             "games_waited": stats.games_waited,
             "wins": stats.wins,
             "losses": stats.losses,
-            "partners_played": list(stats.partners_played),
-            "opponents_played": list(stats.opponents_played),
+            "partners_played": stats.partners_played,
+            "opponents_played": stats.opponents_played,
             "total_points_for": stats.total_points_for,
             "total_points_against": stats.total_points_against,
             "partner_last_game": stats.partner_last_game,
@@ -150,14 +150,27 @@ def deserialize_session(data: Dict):
             from datetime import datetime as dt
             wait_start_time = dt.fromisoformat(stats_data["wait_start_time"])
         
+        # Handle backward compatibility for stats (Set -> Dict)
+        partners_data = stats_data["partners_played"]
+        if isinstance(partners_data, list):
+            partners_played = {pid: 1 for pid in partners_data}
+        else:
+            partners_played = partners_data
+
+        opponents_data = stats_data["opponents_played"]
+        if isinstance(opponents_data, list):
+            opponents_played = {pid: 1 for pid in opponents_data}
+        else:
+            opponents_played = opponents_data
+
         player_stats[player_id] = PlayerStats(
             player_id=stats_data["player_id"],
             games_played=stats_data["games_played"],
             games_waited=stats_data["games_waited"],
             wins=stats_data["wins"],
             losses=stats_data["losses"],
-            partners_played=set(stats_data["partners_played"]),
-            opponents_played=set(stats_data["opponents_played"]),
+            partners_played=partners_played,
+            opponents_played=opponents_played,
             total_points_for=stats_data["total_points_for"],
             total_points_against=stats_data["total_points_against"],
             partner_last_game=stats_data.get("partner_last_game", {}),

@@ -36,6 +36,12 @@ run_test_bracket_restrictions:
 run_test_roaming_range:
 	python3 test_roaming_range.py
 
+run_test_roundrobin_strictness:
+	python3 test_roundrobin_strictness.py
+
+run_test_repro_roundrobin_repetition:
+	python3 test_repro_roundrobin_repetition.py
+
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
