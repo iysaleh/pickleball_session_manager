@@ -54,6 +54,15 @@ def generate_round_robin_queue(
     games_played: Dict[str, int] = {}
     used_matchups: Set[str] = set()
     
+    # Calculate total games from session history (not from queue being generated)
+    session_games_total = 0
+    if player_stats:
+        # Use average games played across all players as proxy for session progress
+        for pid in player_ids:
+            if pid in player_stats:
+                session_games_total += player_stats[pid].games_played
+        session_games_total = session_games_total // len(player_ids) if len(player_ids) > 0 else 0
+    
     # Pre-populate used_matchups with currently active matches
     if active_matches:
         for match in active_matches:
@@ -135,6 +144,68 @@ def generate_round_robin_queue(
         
         return True
     
+    def calculate_allowed_repetitions(num_players: int, total_games: int) -> int:
+        """
+        Calculate how many times players can repeat a partnership/opponent pairing
+        based on session progress (total games played and player count).
+        
+        Logic:
+        - Early in session (few games): strict uniqueness (allow 0 repetitions)
+        - As games progress: gradually allow more repetition
+        - Based on how many times we've "cycled through" all possible pairs
+        
+        Approach:
+        - With N players, there are C(N,2) possible pairs
+        - Each game creates ~2 pairs (one per team in doubles)
+        - Expected pair appearances = (total_games * 2) / C(N,2)
+        - We allow repetitions once expected appearances > threshold
+        
+        Examples:
+        - 4 players, 10 games: 20 pair-slots / 6 possible pairs ~= 3.3 appearances per pair
+          -> Allow ~2 repetitions (we should allow 3 to unblock 4-player sessions)
+        - 6 players, 20 games: 40 pair-slots / 15 possible pairs ~= 2.7 appearances per pair
+          -> Allow ~2 repetitions
+        - 8 players, 40 games: 80 pair-slots / 28 possible pairs ~= 2.9 appearances per pair
+          -> Allow ~2 repetitions
+        """
+        if num_players < 4:
+            return 0
+        
+        # Calculate number of possible unique pairs
+        num_pairs = (num_players * (num_players - 1)) // 2
+        
+        # In each match (2v2), we create approximately 2 new pairs
+        # (1 on each team, though some might repeat)
+        pair_slots_used = total_games * 2
+        
+        # Expected appearances of an average pair
+        expected_appearances = pair_slots_used / num_pairs if num_pairs > 0 else 0
+        
+        # Allow repetitions based on how many cycles we've completed
+        # For small player pools, we allow more repetitions faster
+        # For large player pools, we stay strict longer
+        
+        # Threshold scaling: smaller pools get LOWER thresholds (more permissive)
+        # Divide by pool_divisor to make small pools more permissive
+        # At 12 players: divisor = 1.0, at 6 players: divisor = 1.5, at 4 players: divisor = 3.0
+        pool_divisor = 12.0 / num_players
+        
+        threshold_1 = 1.5 / pool_divisor
+        threshold_2 = 2.5 / pool_divisor
+        threshold_3 = 3.5 / pool_divisor
+        threshold_4 = 4.5 / pool_divisor
+        
+        if expected_appearances < threshold_1:
+            return 0
+        elif expected_appearances < threshold_2:
+            return 1
+        elif expected_appearances < threshold_3:
+            return 2
+        elif expected_appearances < threshold_4:
+            return 3
+        else:
+            return 4
+    
     def score_matchup(team1: List[str], team2: List[str]) -> float:
         """Score a potential matchup for quality"""
         matchup_key = get_matchup_key(team1, team2)
@@ -146,6 +217,9 @@ def generate_round_robin_queue(
         # Invalid configuration
         if not is_valid_team_configuration(team1, team2):
             return -1
+        
+        # Calculate dynamic threshold based on session history (not current queue)
+        allowed_reps = calculate_allowed_repetitions(len(player_ids), session_games_total)
         
         score = 1000.0
         
@@ -162,20 +236,24 @@ def generate_round_robin_queue(
                     if teammate_id not in partnership_count.get(player_id, {}):
                         score += 100
         
-        # Penalty: repeated partnerships (HARD LOCK)
+        # Penalty: repeated partnerships (apply dynamic threshold)
         for player_id in team1:
             for teammate_id in team1:
                 if player_id != teammate_id:
                     count = partnership_count.get(player_id, {}).get(teammate_id, 0)
-                    if count > 0:
+                    if count > allowed_reps:
                         score -= 2000  # Hard lock: force negative score
+                    elif count > 0:
+                        score -= 100  # Soft penalty for repetition within threshold
         
         for player_id in team2:
             for teammate_id in team2:
                 if player_id != teammate_id:
                     count = partnership_count.get(player_id, {}).get(teammate_id, 0)
-                    if count > 0:
-                        score -= 2000  # Hard lock
+                    if count > allowed_reps:
+                        score -= 2000  # Hard lock: force negative score
+                    elif count > 0:
+                        score -= 100  # Soft penalty for repetition within threshold
         
         # Boost: new opponents
         for p1 in team1:
@@ -183,22 +261,24 @@ def generate_round_robin_queue(
                 if p2 not in opponent_count.get(p1, {}):
                     score += 20
         
-        # Penalty: repeated opponents (HARD LOCK for > 1 repeat, Strong Penalty for 1)
-        # User said "Daniel and Kimberly played 3 times" (so 2 repeats).
-        # We want to avoid even 1 repeat if possible.
+        # Penalty: repeated opponents (apply dynamic threshold)
         for p1 in team1:
             for p2 in team2:
                 count = opponent_count.get(p1, {}).get(p2, 0)
-                if count > 0:
-                     score -= 2000 # Hard lock on opponent repetition too
+                if count > allowed_reps:
+                    score -= 2000  # Hard lock on opponent repetition too
+                elif count > 0:
+                    score -= 50  # Soft penalty for opponent repetition within threshold
         
-        # Penalty: same 4-player group played recently
+        # Penalty: same 4-player group played recently (use dynamic threshold)
         four_key = get_four_player_key(team1, team2)
         group_count = four_player_group_count.get(four_key, 0)
-        score -= group_count * 2000 # Hard lock same group
+        if group_count > allowed_reps:
+            score -= 2000  # Hard lock same group
+        elif group_count > 0:
+            score -= 500  # Soft penalty for group repetition within threshold
         
         # Fair play: boost players with fewer games
-        # This is small boost (+30) compared to Hard Lock (-2000), so it won't override.
         for player_id in team1 + team2:
             if games_played[player_id] < len(matches) // len(player_ids):
                 score += 30
