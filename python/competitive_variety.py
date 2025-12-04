@@ -89,9 +89,38 @@ def is_provisional(session: Session, player_id: str) -> bool:
     return session.player_stats[player_id].games_played < PROVISIONAL_GAMES
 
 
+def get_roaming_rank_range(session: Session, player_id: str) -> Tuple[int, int]:
+    """
+    Get the roaming range of ranks a player can be matched with (50% moving window rule).
+    
+    For competitive variety mode:
+    - Each player can play with others in a range based on their rank
+    - Range: player_rank to (player_rank + 50% of total active players)
+    - Example: 20 players, player ranked #2: can play with ranks 2-12 (2 + 10 = 12)
+    - Example: 20 players, player ranked #14: can play with ranks 14-24 (capped at 20)
+    
+    Returns (min_rank, max_rank) inclusive.
+    Only applies when 12+ players.
+    """
+    total_players = len(session.active_players)
+    
+    if total_players < 12:
+        # No roaming range restriction for small groups
+        return 1, total_players
+    
+    player_rank, _ = get_player_ranking(session, player_id)
+    roaming_distance = int(total_players * ROAMING_RANK_PERCENTAGE)
+    
+    # Roaming window goes from player_rank to (player_rank + roaming_distance)
+    min_rank = player_rank
+    max_rank = min(player_rank + roaming_distance, total_players)
+    
+    return min_rank, max_rank
+
+
 def get_allowed_matchmaking_bracket(session: Session, player_id: str) -> Tuple[int, int]:
     """
-    Get the range of ranks a player can be matched with (50% rule).
+    Get the range of ranks a player can be matched with (50% rule - top/bottom split).
     
     For 12+ players:
     - Top 50% players only play with top 50%
@@ -99,6 +128,9 @@ def get_allowed_matchmaking_bracket(session: Session, player_id: str) -> Tuple[i
     - Provisional players can play with anyone
     
     Returns (min_rank, max_rank) inclusive.
+    
+    Note: This maintains the old bracket logic for backwards compatibility.
+    For new code, use get_roaming_rank_range() which uses a moving window instead.
     """
     if is_provisional(session, player_id):
         # Provisional players can play with anyone
@@ -117,6 +149,41 @@ def get_allowed_matchmaking_bracket(session: Session, player_id: str) -> Tuple[i
         return bracket_size + 1, total_players
     
     return 1, total_players
+
+
+def can_all_players_play_together(session: Session, player_ids: List[str]) -> bool:
+    """
+    Check if all players in a potential match can play together under roaming range rules.
+    
+    For competitive variety mode with 12+ players:
+    - All 4 players must be within each other's roaming range
+    - This ensures fair skill distribution within matches
+    
+    Returns True if all players can play together, False otherwise.
+    """
+    if len(session.active_players) < 12 or session.config.mode != 'competitive-variety':
+        return True
+    
+    # Check that all players are within roaming range of each other
+    for player_id in player_ids:
+        # Check if this player is provisional - they have no roaming restrictions
+        if is_provisional(session, player_id):
+            continue
+        
+        min_rank, max_rank = get_roaming_rank_range(session, player_id)
+        
+        # Check all other players are in this player's roaming range
+        for other_player_id in player_ids:
+            if other_player_id == player_id:
+                continue
+            
+            other_rank, _ = get_player_ranking(session, other_player_id)
+            
+            # Other player must be within this player's roaming range
+            if other_rank < min_rank or other_rank > max_rank:
+                return False
+    
+    return True
 
 
 def can_play_with_player(session: Session, player1: str, player2: str, role: str) -> bool:
@@ -185,6 +252,20 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
             
             # Check if brackets overlap
             if max1 < min2 or max2 < min1:
+                return False
+    
+    # Check roaming range compatibility (moving window rule) - only for 12+ players
+    if len(session.active_players) >= 12 and session.config.mode == 'competitive-variety':
+        if not is_provisional(session, player1) or not is_provisional(session, player2):
+            rank1, _ = get_player_ranking(session, player1)
+            rank2, _ = get_player_ranking(session, player2)
+            min1, max1 = get_roaming_rank_range(session, player1)
+            min2, max2 = get_roaming_rank_range(session, player2)
+            
+            # Both players must be within each other's roaming range
+            if rank2 < min1 or rank2 > max1:
+                return False
+            if rank1 < min2 or rank1 > max2:
                 return False
     
 def _get_last_played_info(session: Session, player_id: str) -> Tuple[Optional[Match], int]:
@@ -782,9 +863,14 @@ def can_players_form_match_together(
 ) -> bool:
     """
     Check if these 4 players can form a match together based on hard variety rules.
-    Returns False if they violate partnership or opponent repetition constraints.
+    Returns False if they violate partnership or opponent repetition constraints,
+    or if they violate the roaming range rule.
     """
     if session.config.mode != 'competitive-variety' or len(player_ids) != 4:
+        return False
+    
+    # First check: all players must be within roaming range of each other
+    if not can_all_players_play_together(session, player_ids):
         return False
     
     # Try all possible team configurations
