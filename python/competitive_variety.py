@@ -156,34 +156,87 @@ def can_all_players_play_together(session: Session, player_ids: List[str]) -> bo
     Check if all players in a potential match can play together under roaming range rules.
     
     For competitive variety mode with 12+ players:
-    - All 4 players must be within each other's roaming range
-    - This ensures fair skill distribution within matches
+    - All players must be able to see each other within roaming range
+    - For locked pairs: check that both individuals can see other players
+    - Locked pairs use average rank to determine their roaming range
     
     Returns True if all players can play together, False otherwise.
     """
     if len(session.active_players) < 12 or session.config.mode != 'competitive-variety':
         return True
     
-    # Check that all players are within roaming range of each other
-    for player_id in player_ids:
-        # Check if this player is provisional - they have no roaming restrictions
-        if is_provisional(session, player_id):
+    # Build map of locked players to their partner
+    locked_pairs = {}
+    if session.config.locked_teams:
+        for team in session.config.locked_teams:
+            if len(team) == 2:
+                locked_pairs[team[0]] = team[1]
+                locked_pairs[team[1]] = team[0]
+    
+    total_players = len(session.active_players)
+    roaming_distance = int(total_players * ROAMING_RANK_PERCENTAGE)
+    
+    # Get all non-provisional players
+    all_players = [p for p in player_ids if not is_provisional(session, p)]
+    
+    # Check all pairs of players/groups
+    processed = set()
+    
+    for i, player1_id in enumerate(all_players):
+        if player1_id in processed:
             continue
         
-        min_rank, max_rank = get_roaming_rank_range(session, player_id)
+        rank1, _ = get_player_ranking(session, player1_id)
         
-        # Check all other players are in this player's roaming range
-        for other_player_id in player_ids:
-            if other_player_id == player_id:
+        # For locked pairs, we need to check both individuals against others
+        players_to_check_1 = [player1_id]
+        if player1_id in locked_pairs and locked_pairs[player1_id] in all_players:
+            players_to_check_1.append(locked_pairs[player1_id])
+            processed.add(locked_pairs[player1_id])
+        
+        for player2_id in all_players[i+1:]:
+            if player2_id in locked_pairs and locked_pairs[player2_id] in players_to_check_1:
+                # Don't check locked partners against each other
                 continue
             
-            other_rank, _ = get_player_ranking(session, other_player_id)
+            rank2, _ = get_player_ranking(session, player2_id)
             
-            # Other player must be within this player's roaming range
-            if other_rank < min_rank or other_rank > max_rank:
-                return False
+            # For locked pairs, we need to check both individuals against others
+            players_to_check_2 = [player2_id]
+            if player2_id in locked_pairs and locked_pairs[player2_id] in all_players:
+                players_to_check_2.append(locked_pairs[player2_id])
+            
+            # Check all combinations
+            for p1 in players_to_check_1:
+                r1, _ = get_player_ranking(session, p1)
+                # Calculate range using average if in locked pair
+                if p1 in locked_pairs and locked_pairs[p1] in all_players:
+                    r_partner, _ = get_player_ranking(session, locked_pairs[p1])
+                    avg = (r1 + r_partner) / 2.0
+                    min1 = int(avg)
+                    max1 = min(int(avg) + roaming_distance, total_players)
+                else:
+                    min1, max1 = get_roaming_rank_range(session, p1)
+                
+                for p2 in players_to_check_2:
+                    r2, _ = get_player_ranking(session, p2)
+                    # Calculate range using average if in locked pair
+                    if p2 in locked_pairs and locked_pairs[p2] in all_players:
+                        r_partner2, _ = get_player_ranking(session, locked_pairs[p2])
+                        avg2 = (r2 + r_partner2) / 2.0
+                        min2 = int(avg2)
+                        max2 = min(int(avg2) + roaming_distance, total_players)
+                    else:
+                        min2, max2 = get_roaming_rank_range(session, p2)
+                    
+                    # Use actual ranks (not average) for visibility check
+                    if not ((min1 <= r2 <= max1) and (min2 <= r1 <= max2)):
+                        return False
+        
+        processed.add(player1_id)
     
     return True
+
 
 
 def can_play_with_player(session: Session, player1: str, player2: str, role: str) -> bool:
