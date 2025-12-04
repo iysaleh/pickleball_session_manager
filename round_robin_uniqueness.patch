@@ -1,0 +1,440 @@
+diff --git a/Makefile b/Makefile
+index 4d42503..1e5e29f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -36,6 +36,12 @@ run_test_bracket_restrictions:
+ run_test_roaming_range:
+ 	python3 test_roaming_range.py
+ 
++run_test_roundrobin_strictness:
++	python3 test_roundrobin_strictness.py
++
++run_test_repro_roundrobin_repetition:
++	python3 test_repro_roundrobin_repetition.py
++
+ clean:
+ 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+ 	find . -type f -name "*.pyc" -delete
+diff --git a/python/competitive_variety.py b/python/competitive_variety.py
+index a4fbfef..8cb4842 100644
+--- a/python/competitive_variety.py
++++ b/python/competitive_variety.py
+@@ -856,18 +856,21 @@ def update_variety_tracking_after_match(
+         for p2 in team1:
+             if p1 != p2:
+                 if p1 in session.player_stats and p2 in session.player_stats:
+-                    session.player_stats[p1].partners_played.add(p2)
+-                    session.player_stats[p1].partner_last_game[p2] = current_game_number
++                    stats = session.player_stats[p1]
++                    stats.partners_played[p2] = stats.partners_played.get(p2, 0) + 1
++                    stats.partner_last_game[p2] = current_game_number
+     
+     # Update opponent history for next games - track game numbers
+     for p1 in team1:
+         for p2 in team2:
+             if p1 in session.player_stats and p2 in session.player_stats:
+-                session.player_stats[p1].opponents_played.add(p2)
+-                session.player_stats[p1].opponent_last_game[p2] = current_game_number
++                stats = session.player_stats[p1]
++                stats.opponents_played[p2] = stats.opponents_played.get(p2, 0) + 1
++                stats.opponent_last_game[p2] = current_game_number
+             if p2 in session.player_stats and p1 in session.player_stats:
+-                session.player_stats[p2].opponents_played.add(p1)
+-                session.player_stats[p2].opponent_last_game[p1] = current_game_number
++                stats = session.player_stats[p2]
++                stats.opponents_played[p1] = stats.opponents_played.get(p1, 0) + 1
++                stats.opponent_last_game[p1] = current_game_number
+                 session.player_stats[p2].opponent_last_game[p1] = current_game_number
+ 
+ 
+diff --git a/python/roundrobin.py b/python/roundrobin.py
+index 6955834..815022e 100644
+--- a/python/roundrobin.py
++++ b/python/roundrobin.py
+@@ -73,18 +73,22 @@ def generate_round_robin_queue(
+             games_played[pid] = stats.games_played
+             
+             # Pre-populate partnerships from session history
+-            for partner_id in stats.partners_played:
+-                if partner_id in partnership_count[pid]:
+-                    partnership_count[pid][partner_id] += 1
+-                else:
+-                    partnership_count[pid][partner_id] = 1
++            if isinstance(stats.partners_played, dict):
++                for partner_id, count in stats.partners_played.items():
++                    partnership_count[pid][partner_id] = partnership_count[pid].get(partner_id, 0) + count
++            else:
++                # Fallback for legacy sets
++                for partner_id in stats.partners_played:
++                    partnership_count[pid][partner_id] = partnership_count[pid].get(partner_id, 0) + 1
+             
+             # Pre-populate opponents from session history
+-            for opponent_id in stats.opponents_played:
+-                if opponent_id in opponent_count[pid]:
+-                    opponent_count[pid][opponent_id] += 1
+-                else:
+-                    opponent_count[pid][opponent_id] = 1
++            if isinstance(stats.opponents_played, dict):
++                for opponent_id, count in stats.opponents_played.items():
++                    opponent_count[pid][opponent_id] = opponent_count[pid].get(opponent_id, 0) + count
++            else:
++                # Fallback for legacy sets
++                for opponent_id in stats.opponents_played:
++                    opponent_count[pid][opponent_id] = opponent_count[pid].get(opponent_id, 0) + 1
+         else:
+             games_played[pid] = 0
+     
+@@ -143,33 +147,35 @@ def generate_round_robin_queue(
+         if not is_valid_team_configuration(team1, team2):
+             return -1
+         
+-        score = 100.0
++        score = 1000.0
+         
+         # Boost: new partnerships (players who haven't played together)
+         for player_id in team1:
+             for teammate_id in team1:
+                 if player_id != teammate_id:
+                     if teammate_id not in partnership_count.get(player_id, {}):
+-                        score += 50
++                        score += 100
+         
+         for player_id in team2:
+             for teammate_id in team2:
+                 if player_id != teammate_id:
+                     if teammate_id not in partnership_count.get(player_id, {}):
+-                        score += 50
++                        score += 100
+         
+-        # Penalty: repeated partnerships
++        # Penalty: repeated partnerships (HARD LOCK)
+         for player_id in team1:
+             for teammate_id in team1:
+                 if player_id != teammate_id:
+                     count = partnership_count.get(player_id, {}).get(teammate_id, 0)
+-                    score -= count * 30
++                    if count > 0:
++                        score -= 2000  # Hard lock: force negative score
+         
+         for player_id in team2:
+             for teammate_id in team2:
+                 if player_id != teammate_id:
+                     count = partnership_count.get(player_id, {}).get(teammate_id, 0)
+-                    score -= count * 30
++                    if count > 0:
++                        score -= 2000  # Hard lock
+         
+         # Boost: new opponents
+         for p1 in team1:
+@@ -177,18 +183,22 @@ def generate_round_robin_queue(
+                 if p2 not in opponent_count.get(p1, {}):
+                     score += 20
+         
+-        # Penalty: repeated opponents
++        # Penalty: repeated opponents (HARD LOCK for > 1 repeat, Strong Penalty for 1)
++        # User said "Daniel and Kimberly played 3 times" (so 2 repeats).
++        # We want to avoid even 1 repeat if possible.
+         for p1 in team1:
+             for p2 in team2:
+                 count = opponent_count.get(p1, {}).get(p2, 0)
+-                score -= count * 15
++                if count > 0:
++                     score -= 2000 # Hard lock on opponent repetition too
+         
+         # Penalty: same 4-player group played recently
+         four_key = get_four_player_key(team1, team2)
+         group_count = four_player_group_count.get(four_key, 0)
+-        score -= group_count * 200
++        score -= group_count * 2000 # Hard lock same group
+         
+         # Fair play: boost players with fewer games
++        # This is small boost (+30) compared to Hard Lock (-2000), so it won't override.
+         for player_id in team1 + team2:
+             if games_played[player_id] < len(matches) // len(player_ids):
+                 score += 30
+diff --git a/python/session.py b/python/session.py
+index 5cd266a..9038e01 100644
+--- a/python/session.py
++++ b/python/session.py
+@@ -220,10 +220,10 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
+             stats.losses += 1
+         
+         for opponent_id in match.team2:
+-            stats.opponents_played.add(opponent_id)
++            stats.opponents_played[opponent_id] = stats.opponents_played.get(opponent_id, 0) + 1
+         for partner_id in match.team1:
+             if partner_id != player_id:
+-                stats.partners_played.add(partner_id)
++                stats.partners_played[partner_id] = stats.partners_played.get(partner_id, 0) + 1
+     
+     for player_id in match.team2:
+         stats = session.player_stats[player_id]
+@@ -236,10 +236,10 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
+             stats.losses += 1
+         
+         for opponent_id in match.team1:
+-            stats.opponents_played.add(opponent_id)
++            stats.opponents_played[opponent_id] = stats.opponents_played.get(opponent_id, 0) + 1
+         for partner_id in match.team2:
+             if partner_id != player_id:
+-                stats.partners_played.add(partner_id)
++                stats.partners_played[partner_id] = stats.partners_played.get(partner_id, 0) + 1
+     
+     # Increment games_waited for all other active players
+     for player_id in session.active_players:
+@@ -327,18 +327,18 @@ def forfeit_match(session: Session, match_id: str) -> bool:
+     for player_id in match.team1:
+         stats = session.player_stats[player_id]
+         for opponent_id in match.team2:
+-            stats.opponents_played.add(opponent_id)
++            stats.opponents_played[opponent_id] = stats.opponents_played.get(opponent_id, 0) + 1
+         for partner_id in match.team1:
+             if partner_id != player_id:
+-                stats.partners_played.add(partner_id)
++                stats.partners_played[partner_id] = stats.partners_played.get(partner_id, 0) + 1
+     
+     for player_id in match.team2:
+         stats = session.player_stats[player_id]
+         for opponent_id in match.team1:
+-            stats.opponents_played.add(opponent_id)
++            stats.opponents_played[opponent_id] = stats.opponents_played.get(opponent_id, 0) + 1
+         for partner_id in match.team2:
+             if partner_id != player_id:
+-                stats.partners_played.add(partner_id)
++                stats.partners_played[partner_id] = stats.partners_played.get(partner_id, 0) + 1
+     
+     # Update variety tracking for competitive-variety mode to prevent immediate rescheduling
+     if session.config.mode == 'competitive-variety':
+diff --git a/python/session_persistence.py b/python/session_persistence.py
+index 68fc9d4..83e25fc 100644
+--- a/python/session_persistence.py
++++ b/python/session_persistence.py
+@@ -85,8 +85,8 @@ def serialize_session(session) -> Dict:
+             "games_waited": stats.games_waited,
+             "wins": stats.wins,
+             "losses": stats.losses,
+-            "partners_played": list(stats.partners_played),
+-            "opponents_played": list(stats.opponents_played),
++            "partners_played": stats.partners_played,
++            "opponents_played": stats.opponents_played,
+             "total_points_for": stats.total_points_for,
+             "total_points_against": stats.total_points_against,
+             "partner_last_game": stats.partner_last_game,
+@@ -150,14 +150,27 @@ def deserialize_session(data: Dict):
+             from datetime import datetime as dt
+             wait_start_time = dt.fromisoformat(stats_data["wait_start_time"])
+         
++        # Handle backward compatibility for stats (Set -> Dict)
++        partners_data = stats_data["partners_played"]
++        if isinstance(partners_data, list):
++            partners_played = {pid: 1 for pid in partners_data}
++        else:
++            partners_played = partners_data
++
++        opponents_data = stats_data["opponents_played"]
++        if isinstance(opponents_data, list):
++            opponents_played = {pid: 1 for pid in opponents_data}
++        else:
++            opponents_played = opponents_data
++
+         player_stats[player_id] = PlayerStats(
+             player_id=stats_data["player_id"],
+             games_played=stats_data["games_played"],
+             games_waited=stats_data["games_waited"],
+             wins=stats_data["wins"],
+             losses=stats_data["losses"],
+-            partners_played=set(stats_data["partners_played"]),
+-            opponents_played=set(stats_data["opponents_played"]),
++            partners_played=partners_played,
++            opponents_played=opponents_played,
+             total_points_for=stats_data["total_points_for"],
+             total_points_against=stats_data["total_points_against"],
+             partner_last_game=stats_data.get("partner_last_game", {}),
+diff --git a/python/types.py b/python/types.py
+index 467080c..fe7aa50 100644
+--- a/python/types.py
++++ b/python/types.py
+@@ -26,8 +26,8 @@ class PlayerStats:
+     games_waited: int = 0
+     wins: int = 0
+     losses: int = 0
+-    partners_played: Set[str] = field(default_factory=set)
+-    opponents_played: Set[str] = field(default_factory=set)
++    partners_played: Dict[str, int] = field(default_factory=dict)
++    opponents_played: Dict[str, int] = field(default_factory=dict)
+     total_points_for: int = 0
+     total_points_against: int = 0
+     # For competitive variety: track game numbers when players were last played with/against
+diff --git a/test_persistence.py b/test_persistence.py
+index 2dd48ee..2769652 100644
+--- a/test_persistence.py
++++ b/test_persistence.py
+@@ -118,7 +118,11 @@ def test_session_with_completed_matches():
+     p1_stats = loaded.player_stats["p1"]
+     assert p1_stats.games_played == 1, "Should have 1 game played"
+     assert p1_stats.wins == 1, "Should have 1 win"
+-    assert p1_stats.opponents_played == {"p3", "p4"}, "Should have correct opponents"
++    
++    # Verify Dict values (counts)
++    expected_opponents = {"p3": 1, "p4": 1}
++    # Allow comparison with dictionary
++    assert p1_stats.opponents_played == expected_opponents, f"Should have correct opponents. Got {p1_stats.opponents_played}"
+     
+     print("  [PASS] Session with completed matches preserved")
+ 
+diff --git a/test_repro_roundrobin_repetition.py b/test_repro_roundrobin_repetition.py
+new file mode 100644
+index 0000000..b531c5c
+--- /dev/null
++++ b/test_repro_roundrobin_repetition.py
+@@ -0,0 +1,64 @@
++
++from python.roundrobin import generate_round_robin_queue
++from python.types import Player, PlayerStats
++from python.session import Session
++
++def test_round_robin_partnership_variety():
++    # Create 12 players
++    players = [Player(id=str(i), name=f"Player{i}") for i in range(12)]
++    
++    # Run the generator
++    matches = generate_round_robin_queue(
++        players=players,
++        session_type='doubles',
++        banned_pairs=[],
++        max_matches=50
++    )
++    
++    # Analyze partnerships
++    partnerships = {}
++    seen_pairs = set()
++    repeats_found_at_index = []
++    
++    # Total possible pairs
++    all_possible_pairs = set()
++    from itertools import combinations
++    for i in range(8):
++        for j in range(i+1, 8):
++            all_possible_pairs.add(tuple(sorted((str(i), str(j)))))
++            
++    print(f"Total possible pairs: {len(all_possible_pairs)}")
++    
++    for i, match in enumerate(matches):
++        pairs_in_match = []
++        t1 = tuple(sorted(match.team1))
++        t2 = tuple(sorted(match.team2))
++        pairs_in_match.append(t1)
++        pairs_in_match.append(t2)
++        
++        for pair in pairs_in_match:
++            if pair in seen_pairs:
++                # We found a repeat!
++                # Check if there were still unused pairs available
++                unused_pairs = all_possible_pairs - seen_pairs
++                if unused_pairs:
++                    print(f"Repeat found at match {i} for pair {pair}. Unused pairs remaining: {len(unused_pairs)}")
++                    # This is the condition we want to avoid: repeating while unused pairs exist.
++                else:
++                    print(f"Repeat found at match {i} for pair {pair}. No unused pairs left (expected behavior).")
++                
++                repeats_found_at_index.append((i, pair))
++            
++            seen_pairs.add(pair)
++            if pair in partnerships:
++                partnerships[pair] += 1
++            else:
++                partnerships[pair] = 1
++
++    print("\nTotal matches generated:", len(matches))
++    if repeats_found_at_index:
++        print(f"First repeat at match index {repeats_found_at_index[0][0]}")
++
++
++if __name__ == "__main__":
++    test_round_robin_partnership_variety()
+diff --git a/test_roundrobin_strictness.py b/test_roundrobin_strictness.py
+new file mode 100644
+index 0000000..7f0d98e
+--- /dev/null
++++ b/test_roundrobin_strictness.py
+@@ -0,0 +1,80 @@
++
++import unittest
++from python.roundrobin import generate_round_robin_queue
++from python.types import Player, PlayerStats, QueuedMatch
++from python.utils import create_player_stats
++
++class TestRoundRobinStrictness(unittest.TestCase):
++    def test_strict_partnership_avoidance(self):
++        """
++        Test that the generator strictly avoids repeated partnerships
++        when unique partnerships are available.
++        """
++        # Create 12 players (66 unique pairs)
++        players = [Player(id=str(i), name=f"P{i}") for i in range(12)]
++        
++        # Initialize stats
++        stats = {p.id: create_player_stats(p.id) for p in players}
++        
++        # Simulate that Player 0 and Player 1 have ALREADY played together
++        stats['0'].partners_played['1'] = 1
++        stats['1'].partners_played['0'] = 1
++        stats['0'].games_played = 1
++        stats['1'].games_played = 1
++        
++        # Generate queue
++        # We expect matches. None of them should have (0, 1) as a pair.
++        matches = generate_round_robin_queue(
++            players=players,
++            session_type='doubles',
++            banned_pairs=[],
++            max_matches=20,
++            player_stats=stats
++        )
++        
++        for m in matches:
++            t1 = sorted(m.team1)
++            t2 = sorted(m.team2)
++            
++            self.assertNotEqual(t1, ['0', '1'], "Player 0 and 1 should not be paired again")
++            self.assertNotEqual(t2, ['0', '1'], "Player 0 and 1 should not be paired again")
++
++    def test_strict_opponent_avoidance(self):
++        """
++        Test that the generator strictly avoids repeated opponents
++        when unique matchups are available.
++        """
++        players = [Player(id=str(i), name=f"P{i}") for i in range(8)]
++        stats = {p.id: create_player_stats(p.id) for p in players}
++        
++        # Simulate that Player 0 played against Player 2
++        stats['0'].opponents_played['2'] = 1
++        stats['0'].opponents_played['3'] = 1
++        stats['1'].opponents_played['2'] = 1
++        stats['1'].opponents_played['3'] = 1
++        stats['2'].opponents_played['0'] = 1
++        stats['2'].opponents_played['1'] = 1
++        stats['3'].opponents_played['0'] = 1
++        stats['3'].opponents_played['1'] = 1
++        
++        # We want to see if we can avoid repeating 0 vs 2
++        matches = generate_round_robin_queue(
++            players=players,
++            session_type='doubles',
++            banned_pairs=[],
++            max_matches=10,
++            player_stats=stats
++        )
++        
++        for m in matches:
++            # Check if 0 and 2 are on opposite teams
++            team1 = m.team1
++            team2 = m.team2
++            
++            if '0' in team1 and '2' in team2:
++                 self.fail("Player 0 and 2 played against each other again")
++            if '0' in team2 and '2' in team1:
++                 self.fail("Player 0 and 2 played against each other again") 
++
++if __name__ == "__main__":
++    unittest.main()

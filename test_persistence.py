@@ -118,7 +118,11 @@ def test_session_with_completed_matches():
     p1_stats = loaded.player_stats["p1"]
     assert p1_stats.games_played == 1, "Should have 1 game played"
     assert p1_stats.wins == 1, "Should have 1 win"
-    assert p1_stats.opponents_played == {"p3", "p4"}, "Should have correct opponents"
+    
+    # Verify Dict values (counts)
+    expected_opponents = {"p3": 1, "p4": 1}
+    # Allow comparison with dictionary
+    assert p1_stats.opponents_played == expected_opponents, f"Should have correct opponents. Got {p1_stats.opponents_played}"
     
     print("  [PASS] Session with completed matches preserved")
 

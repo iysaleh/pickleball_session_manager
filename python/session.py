@@ -220,10 +220,10 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
             stats.losses += 1
         
         for opponent_id in match.team2:
-            stats.opponents_played.add(opponent_id)
+            stats.opponents_played[opponent_id] = stats.opponents_played.get(opponent_id, 0) + 1
         for partner_id in match.team1:
             if partner_id != player_id:
-                stats.partners_played.add(partner_id)
+                stats.partners_played[partner_id] = stats.partners_played.get(partner_id, 0) + 1
     
     for player_id in match.team2:
         stats = session.player_stats[player_id]
@@ -236,10 +236,10 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
             stats.losses += 1
         
         for opponent_id in match.team1:
-            stats.opponents_played.add(opponent_id)
+            stats.opponents_played[opponent_id] = stats.opponents_played.get(opponent_id, 0) + 1
         for partner_id in match.team2:
             if partner_id != player_id:
-                stats.partners_played.add(partner_id)
+                stats.partners_played[partner_id] = stats.partners_played.get(partner_id, 0) + 1
     
     # Increment games_waited for all other active players
     for player_id in session.active_players:
@@ -327,18 +327,18 @@ def forfeit_match(session: Session, match_id: str) -> bool:
     for player_id in match.team1:
         stats = session.player_stats[player_id]
         for opponent_id in match.team2:
-            stats.opponents_played.add(opponent_id)
+            stats.opponents_played[opponent_id] = stats.opponents_played.get(opponent_id, 0) + 1
         for partner_id in match.team1:
             if partner_id != player_id:
-                stats.partners_played.add(partner_id)
+                stats.partners_played[partner_id] = stats.partners_played.get(partner_id, 0) + 1
     
     for player_id in match.team2:
         stats = session.player_stats[player_id]
         for opponent_id in match.team1:
-            stats.opponents_played.add(opponent_id)
+            stats.opponents_played[opponent_id] = stats.opponents_played.get(opponent_id, 0) + 1
         for partner_id in match.team2:
             if partner_id != player_id:
-                stats.partners_played.add(partner_id)
+                stats.partners_played[partner_id] = stats.partners_played.get(partner_id, 0) + 1
     
     # Update variety tracking for competitive-variety mode to prevent immediate rescheduling
     if session.config.mode == 'competitive-variety':

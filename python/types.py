@@ -26,8 +26,8 @@ class PlayerStats:
     games_waited: int = 0
     wins: int = 0
     losses: int = 0
-    partners_played: Set[str] = field(default_factory=set)
-    opponents_played: Set[str] = field(default_factory=set)
+    partners_played: Dict[str, int] = field(default_factory=dict)
+    opponents_played: Dict[str, int] = field(default_factory=dict)
     total_points_for: int = 0
     total_points_against: int = 0
     # For competitive variety: track game numbers when players were last played with/against

@@ -856,18 +856,21 @@ def update_variety_tracking_after_match(
         for p2 in team1:
             if p1 != p2:
                 if p1 in session.player_stats and p2 in session.player_stats:
-                    session.player_stats[p1].partners_played.add(p2)
-                    session.player_stats[p1].partner_last_game[p2] = current_game_number
+                    stats = session.player_stats[p1]
+                    stats.partners_played[p2] = stats.partners_played.get(p2, 0) + 1
+                    stats.partner_last_game[p2] = current_game_number
     
     # Update opponent history for next games - track game numbers
     for p1 in team1:
         for p2 in team2:
             if p1 in session.player_stats and p2 in session.player_stats:
-                session.player_stats[p1].opponents_played.add(p2)
-                session.player_stats[p1].opponent_last_game[p2] = current_game_number
+                stats = session.player_stats[p1]
+                stats.opponents_played[p2] = stats.opponents_played.get(p2, 0) + 1
+                stats.opponent_last_game[p2] = current_game_number
             if p2 in session.player_stats and p1 in session.player_stats:
-                session.player_stats[p2].opponents_played.add(p1)
-                session.player_stats[p2].opponent_last_game[p1] = current_game_number
+                stats = session.player_stats[p2]
+                stats.opponents_played[p1] = stats.opponents_played.get(p1, 0) + 1
+                stats.opponent_last_game[p1] = current_game_number
                 session.player_stats[p2].opponent_last_game[p1] = current_game_number
 
 
