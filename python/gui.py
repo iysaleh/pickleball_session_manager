@@ -1182,9 +1182,7 @@ class SessionWindow(QMainWindow):
         if self.sound_enabled:
             self.sound_toggle_btn.setText("🔊")
             # Test sound
-            beep_path = os.path.join(os.path.dirname(__file__), "assets", "sounds", "AnnouncementNotification.mp3")
-            if os.path.exists(beep_path):
-                 self.play_sound(beep_path)
+            self.announcement_queue.append("Voice announcements enabled")
         else:
             self.sound_toggle_btn.setText("🔇")
 
@@ -1234,40 +1232,25 @@ class SessionWindow(QMainWindow):
         text = self.announcement_queue.pop(0)
         
         try:
-            beep_path = os.path.join(os.path.dirname(__file__), "assets", "sounds", "AnnouncementNotification.mp3")
-            
             import platform
             system = platform.system()
             
             # Construct command based on OS
             if system == "Darwin": # macOS
-                sound_cmd = f"afplay {beep_path}" if os.path.exists(beep_path) else ""
-                full_cmd = f"{sound_cmd}; say \"{text}\"" if sound_cmd else f"say \"{text}\""
-                subprocess.Popen(full_cmd, shell=True)
+                subprocess.Popen(f"say \"{text}\"", shell=True)
                 
             elif system == "Linux":
-                # espeak is a common TTS on Linux, aplay for sound
-                sound_cmd = f"aplay {beep_path}" if os.path.exists(beep_path) else ""
-                # Use espeak or similar. Assuming espeak is installed.
-                full_cmd = f"{sound_cmd} && espeak \"{text}\"" if sound_cmd else f"espeak \"{text}\""
-                subprocess.Popen(full_cmd, shell=True)
+                # espeak is a common TTS on Linux
+                subprocess.Popen(f"espeak \"{text}\"", shell=True)
                 
             elif system == "Windows":
-                # PowerShell for both sound and TTS
-                # (New-Object -ComObject SAPI.SpVoice).Speak("text")
+                # PowerShell for TTS
                 tts_cmd = f'(New-Object -ComObject SAPI.SpVoice).Speak(\\"{text}\\")'
-                
-                if os.path.exists(beep_path):
-                     sound_cmd = f'(New-Object Media.SoundPlayer \\"{beep_path}\\").PlaySync()'
-                     full_cmd = f'powershell -c "{sound_cmd}; {tts_cmd}"'
-                else:
-                     full_cmd = f'powershell -c "{tts_cmd}"'
-                
-                subprocess.Popen(full_cmd, shell=True)
+                subprocess.Popen(f'powershell -c "{tts_cmd}"', shell=True)
             
-            # Estimate duration to clear the flag (rough approximation: 2s beep + 0.5s per word)
+            # Estimate duration to clear the flag (rough approximation: 0.5s per word)
             word_count = len(text.split())
-            duration = 2000 + (word_count * 400) 
+            duration = (word_count * 400) + 500
             
             # Reset flag after duration
             QTimer.singleShot(duration, self._reset_announcing_flag)
