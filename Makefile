@@ -57,6 +57,9 @@ run_test_populate_bad_match:
 run_test_full_session_replay:
 	python3 test_full_session_replay.py
 
+run_test_audio_announcement:
+	python3 test_audio_announcement.py
+
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
