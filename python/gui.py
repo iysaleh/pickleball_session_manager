@@ -5,6 +5,7 @@ PyQt6 GUI for Pickleball Session Manager
 import sys
 import json
 import os
+import subprocess
 from typing import Optional, List, Dict
 from datetime import datetime
 from PyQt6.QtWidgets import (
@@ -947,6 +948,13 @@ class SessionWindow(QMainWindow):
             self.session = session
             self.parent_window = parent_window
             self.court_widgets: Dict[int, CourtDisplayWidget] = {}
+            self.sound_enabled = False
+            self.last_known_matches: Dict[int, str] = {}
+            self.announcement_queue: List[str] = []
+            self.is_announcing = False
+            self.announcement_timer = QTimer()
+            self.announcement_timer.timeout.connect(self.process_announcement_queue)
+            self.announcement_timer.start(1000) # Check queue every second
             self.init_ui()
             self.update_timer = QTimer()
             self.update_timer.timeout.connect(self.refresh_display)
@@ -989,10 +997,38 @@ class SessionWindow(QMainWindow):
         
         # Courts section
         courts_section = QVBoxLayout()
+        
+        # Courts header with sound toggle
+        courts_header = QHBoxLayout()
+        
         courts_label = QLabel("Active Courts")
         courts_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         courts_label.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 8px; border-radius: 3px; }")
-        courts_section.addWidget(courts_label)
+        courts_header.addWidget(courts_label, 1)
+        
+        self.sound_toggle_btn = QPushButton("🔇")
+        self.sound_toggle_btn.setCheckable(True)
+        self.sound_toggle_btn.setFixedSize(40, 35)
+        self.sound_toggle_btn.setToolTip("Toggle Voice Announcements")
+        self.sound_toggle_btn.setStyleSheet("""
+            QPushButton { 
+                background-color: #3a3a3a; 
+                color: white; 
+                font-size: 20px; 
+                border: 1px solid #555; 
+                border-radius: 3px; 
+            }
+            QPushButton:checked {
+                background-color: #4CAF50;
+            }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+            }
+        """)
+        self.sound_toggle_btn.clicked.connect(self.toggle_sound)
+        courts_header.addWidget(self.sound_toggle_btn)
+        
+        courts_section.addLayout(courts_header)
         
         # Courts scroll area
         courts_scroll = QScrollArea()
@@ -1140,6 +1176,92 @@ class SessionWindow(QMainWindow):
         self.setWindowTitle("Pickleball Session Manager")
         self.resize(1400, 800)
     
+    def toggle_sound(self):
+        """Toggle sound announcements"""
+        self.sound_enabled = self.sound_toggle_btn.isChecked()
+        if self.sound_enabled:
+            self.sound_toggle_btn.setText("🔊")
+            # Test sound
+            self.announcement_queue.append("Voice announcements enabled")
+        else:
+            self.sound_toggle_btn.setText("🔇")
+
+    def play_sound(self, sound_path):
+        """Play a sound file in a cross-platform way"""
+        import platform
+        system = platform.system()
+        
+        if system == "Darwin": # macOS
+            subprocess.Popen(f"afplay {sound_path}", shell=True)
+        elif system == "Linux":
+            subprocess.Popen(f"aplay {sound_path}", shell=True)
+        elif system == "Windows":
+            # PowerShell command to play sound
+            cmd = f'powershell -c (New-Object Media.SoundPlayer "{sound_path}").PlaySync()'
+            subprocess.Popen(cmd, shell=True)
+
+    def announce_match(self, court_num: int, match: Match):
+        """Queue a match announcement"""
+        try:
+            team1_names = [get_player_name(self.session, pid) for pid in match.team1]
+            team2_names = [get_player_name(self.session, pid) for pid in match.team2]
+            
+            # Format: "New Match Ready on Court <courtName>, Team <Player1> And <Player2> versus <Player3> And <Player4>."
+            
+            court_name = f"Court {court_num}"
+            if court_num in self.court_widgets:
+                widget = self.court_widgets[court_num]
+                if widget.custom_title:
+                    court_name = widget.custom_title
+            
+            t1_str = " And ".join(team1_names)
+            t2_str = " And ".join(team2_names)
+            
+            text = f"New Match Ready on {court_name}, Team {t1_str} versus {t2_str}."
+            self.announcement_queue.append(text)
+            
+        except Exception as e:
+            print(f"Error queueing announcement: {e}")
+
+    def process_announcement_queue(self):
+        """Process the next announcement in the queue if not currently announcing"""
+        if self.is_announcing or not self.announcement_queue:
+            return
+
+        self.is_announcing = True
+        text = self.announcement_queue.pop(0)
+        
+        try:
+            import platform
+            system = platform.system()
+            
+            # Construct command based on OS
+            if system == "Darwin": # macOS
+                subprocess.Popen(f"say \"{text}\"", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                
+            elif system == "Linux":
+                # espeak is a common TTS on Linux
+                subprocess.Popen(f"espeak \"{text}\"", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                
+            elif system == "Windows":
+                # PowerShell for TTS
+                tts_cmd = f'(New-Object -ComObject SAPI.SpVoice).Speak(\\"{text}\\") > $null'
+                subprocess.Popen(f'powershell -c "{tts_cmd}"', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            # Estimate duration to clear the flag (rough approximation: 0.5s per word)
+            word_count = len(text.split())
+            duration = (word_count * 400) + 500
+            
+            # Reset flag after duration
+            QTimer.singleShot(duration, self._reset_announcing_flag)
+            
+        except Exception as e:
+            print(f"Error playing announcement: {e}")
+            self.is_announcing = False
+
+    def _reset_announcing_flag(self):
+        self.is_announcing = False
+
     def update_title(self, summary: Dict):
         """Update title with session info"""
         info = f"{self.session.config.mode.title()} - {self.session.config.session_type.title()} | "
@@ -1199,6 +1321,7 @@ class SessionWindow(QMainWindow):
     def animate_court_sliding(self, slides: List[Dict]):
         """Animate court changes"""
         self.update_timer.stop()
+        self.pending_slides = slides  # Store slides to handle announcements later
         
         # Container for ghosts - use the widget inside the scroll area
         # self.court_widgets[1] is a CourtDisplayWidget
@@ -1267,6 +1390,14 @@ class SessionWindow(QMainWindow):
             ghost.deleteLater()
         self.ghosts = []
         
+        # Pre-update last_known_matches for slid matches to prevent announcement
+        if hasattr(self, 'pending_slides'):
+            for slide in self.pending_slides:
+                dst_idx = slide['to']
+                match_id = slide['match_id']
+                self.last_known_matches[dst_idx] = match_id
+            self.pending_slides = []
+        
         self.refresh_display()
         self.update_timer.start(1000)
 
@@ -1288,6 +1419,18 @@ class SessionWindow(QMainWindow):
                 if widget is None:
                     continue
                 match = get_match_for_court(self.session, court_num)
+                
+                # Check for new match announcement
+                current_match_id = match.id if match else None
+                last_match_id = self.last_known_matches.get(court_num)
+                
+                if current_match_id and current_match_id != last_match_id:
+                    # New match detected
+                    if self.sound_enabled:
+                        self.announce_match(court_num, match)
+                
+                self.last_known_matches[court_num] = current_match_id
+                
                 widget.set_match(match)
                 if match:
                     players_in_matches.update(match.team1 + match.team2)

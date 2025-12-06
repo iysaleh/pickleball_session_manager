@@ -425,7 +425,13 @@ This is great. Some improvements if you please:
 * Never run any git tools.
 
 
-
+# Announce when courts are made
+* When new courts are made, only people looking at the screen can see that event happen. We need to add an audible announcement whenever a new court is made. There should be a way to enable or disable this feature in the Active Session window (by toggling a sound icon). Whenever a new court is made, a text to voice reader should announce: <*announcement noise plays first 1-2s> "New Match Ready on Court <courtName>, Team <Player1> And <Player2> versus <Player3> And <Player4>.
+* The court name needs to be taken from the court name label --- someone can change a court name, even if it has an internal court number.
+* If multiple courts are made at the same time, they overlap and are unable to be understood. Make any played announcements play one after the other. 
+* The announcment sound needs to be stored locally so it works cross platform, and the current beep is too gentle, get a stringer beep noise.
+* Remove all reliance on system sounds, EG sound files with the path "/System/Library/Sounds" --- this feature needs to work cross platform on windows and linux as well.
+* The slide action announces a new court, but that's not a new court. We do not need to announce when a court slides.
 
 # Teams Feature
 * Some players only want to play together with one other person through the entire session, they do not want random teammates. Update the New Session dialog to support locking players together (IE Player Partnerships). Also Add a Manage Player Locks button on the Active session page to lock players together. Note that players locked together can still be manually swapped in the edit court dialog -- locks are only considered at matchmaking. Update the round-robin and competetive variety matchmaking algorithms to consider player locks. Also, we need to add support for player partnership bans -- players that do not ever want to play together. The controls for locks and bans should be similarly located as they are related. When scheduling matches with locked players, they should always be on the same team. Try to not ruin any of the algorithms by adding support for these locks. The fuzzing tests for when the locks don't exist should still pass!!!!
