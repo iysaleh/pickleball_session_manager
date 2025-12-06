@@ -19,8 +19,8 @@ def ensure_session_dir():
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def save_player_history(player_names: List[str]):
-    """Save the list of player names to history"""
+def save_player_history(player_names: List[str], locked_teams: Optional[List[List[str]]] = None, banned_pairs: Optional[List[List[str]]] = None):
+    """Save the list of player names and team configurations to history"""
     ensure_session_dir()
     
     # Remove duplicates while preserving order
@@ -33,6 +33,8 @@ def save_player_history(player_names: List[str]):
     
     history_data = {
         "players": unique_players,
+        "locked_teams": locked_teams or [],
+        "banned_pairs": banned_pairs or [],
         "last_updated": datetime.now().isoformat()
     }
     
@@ -43,18 +45,28 @@ def save_player_history(player_names: List[str]):
         print(f"Error saving player history: {e}")
 
 
-def load_player_history() -> List[str]:
-    """Load the list of player names from history"""
+def load_player_history() -> Dict:
+    """Load the list of player names and configurations from history"""
     if not PLAYER_HISTORY_FILE.exists():
-        return []
+        return {"players": [], "locked_teams": [], "banned_pairs": []}
     
     try:
         with open(PLAYER_HISTORY_FILE, 'r') as f:
             data = json.load(f)
-            return data.get("players", [])
+            
+            # Backward compatibility - if file is a list (very old format)
+            if isinstance(data, list):
+                return {"players": data, "locked_teams": [], "banned_pairs": []}
+            
+            # If data is a dict (standard format)
+            return {
+                "players": data.get("players", []),
+                "locked_teams": data.get("locked_teams", []),
+                "banned_pairs": data.get("banned_pairs", [])
+            }
     except Exception as e:
         print(f"Error loading player history: {e}")
-        return []
+        return {"players": [], "locked_teams": [], "banned_pairs": []}
 
 
 def serialize_session(session) -> Dict:
@@ -236,7 +248,32 @@ def save_session(session) -> bool:
         
         # Also update player history
         player_names = [p.name for p in session.config.players if p.id in session.active_players]
-        save_player_history(player_names)
+        
+        # Convert locked_teams (IDs) to names
+        locked_teams_names = []
+        if session.config.locked_teams:
+            for team in session.config.locked_teams:
+                team_names = []
+                for pid in team:
+                    name = next((p.name for p in session.config.players if p.id == pid), None)
+                    if name:
+                        team_names.append(name)
+                if team_names:
+                    locked_teams_names.append(team_names)
+                    
+        # Convert banned_pairs (IDs) to names
+        banned_pairs_names = []
+        if session.config.banned_pairs:
+             for pair in session.config.banned_pairs:
+                 pair_names = []
+                 for pid in pair:
+                     name = next((p.name for p in session.config.players if p.id == pid), None)
+                     if name:
+                         pair_names.append(name)
+                 if len(pair_names) == 2:
+                     banned_pairs_names.append(pair_names)
+        
+        save_player_history(player_names, locked_teams_names, banned_pairs_names)
         
         return True
     except Exception as e:

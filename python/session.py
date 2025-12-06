@@ -57,6 +57,21 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     waiting_players = []
     if final_config.mode in ['competitive-variety', 'team-competitive-variety']:
         waiting_players = [p.id for p in players_to_use]
+        
+    # Validate Team Competitive Variety
+    if final_config.mode == 'team-competitive-variety':
+        if not final_config.locked_teams:
+             raise ValueError("Team Competitive Variety requires locked teams.")
+        
+        # Check all players are in a team
+        team_players = set()
+        for team in final_config.locked_teams:
+            for pid in team:
+                team_players.add(pid)
+                
+        for player in final_config.players:
+            if player.id not in team_players:
+                raise ValueError(f"Player {player.name} ({player.id}) is not assigned to a locked team.")
     
     return Session(
         id=generate_id(),

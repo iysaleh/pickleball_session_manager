@@ -378,10 +378,12 @@ class ManageLocksDialog(QDialog):
 class SetupDialog(QDialog):
     """Dialog for session setup"""
     
-    def __init__(self, parent=None, previous_players=None):
+    def __init__(self, parent=None, previous_players=None, previous_locked_teams=None, previous_banned_pairs=None):
         super().__init__(parent)
         self.session: Optional[Session] = None
         self.previous_players = previous_players or []
+        self.previous_locked_teams = previous_locked_teams or []
+        self.previous_banned_pairs = previous_banned_pairs or []
         self.banned_pairs = []
         self.locked_teams = []
         self.init_ui()
@@ -446,6 +448,36 @@ class SetupDialog(QDialog):
                 item.setData(Qt.ItemDataRole.UserRole, player.id)
                 self.player_widget.player_list.addItem(item)
             self.player_widget.update_player_count()
+            
+            # Reconstruct locks and bans
+            # Map Name -> ID
+            name_to_id = {p.name: p.id for p in self.player_widget.players}
+            
+            # Restore Locked Teams
+            for team_names in self.previous_locked_teams:
+                team_ids = []
+                all_found = True
+                for name in team_names:
+                    if name in name_to_id:
+                        team_ids.append(name_to_id[name])
+                    else:
+                        all_found = False
+                        break
+                if all_found and team_ids:
+                    self.locked_teams.append(team_ids)
+                    
+            # Restore Banned Pairs
+            for pair_names in self.previous_banned_pairs:
+                pair_ids = []
+                all_found = True
+                for name in pair_names:
+                    if name in name_to_id:
+                        pair_ids.append(name_to_id[name])
+                    else:
+                        all_found = False
+                        break
+                if all_found and len(pair_ids) == 2:
+                    self.banned_pairs.append(tuple(pair_ids))
         
         # Test data button
         test_btn = QPushButton("Add 18 Test Players")
@@ -2810,13 +2842,26 @@ class MainWindow(QMainWindow):
         try:
             from python.session_persistence import load_player_history
             
-            player_history = load_player_history()
+            history_data = load_player_history()
             
-            if not player_history:
+            # Handle backward compatibility (list vs dict)
+            if isinstance(history_data, list):
+                 previous_players = history_data
+                 previous_locked = []
+                 previous_banned = []
+            else:
+                 previous_players = history_data.get("players", [])
+                 previous_locked = history_data.get("locked_teams", [])
+                 previous_banned = history_data.get("banned_pairs", [])
+            
+            if not previous_players:
                 QMessageBox.warning(self, "Error", "No player history available")
                 return
             
-            setup = SetupDialog(self, previous_players=player_history)
+            setup = SetupDialog(self, 
+                                previous_players=previous_players,
+                                previous_locked_teams=previous_locked,
+                                previous_banned_pairs=previous_banned)
             if setup.exec() == QDialog.DialogCode.Accepted:
                 self.session = setup.session
                 try:

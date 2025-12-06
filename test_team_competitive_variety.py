@@ -54,6 +54,23 @@ class TestTeamCompetitiveVariety(unittest.TestCase):
         self.session.player_stats['p8'].games_played = 10
         self.session.player_stats['p8'].wins = 0
 
+    def test_validation_missing_team(self):
+        """Test that session creation fails if a player is not on a team"""
+        players = [Player(id="p1", name="P1"), Player(id="p2", name="P2"), Player(id="p3", name="P3")]
+        # Only p1, p2 on team
+        locked_teams = [["p1", "p2"]]
+        
+        config = SessionConfig(
+            mode='team-competitive-variety',
+            session_type='doubles',
+            players=players,
+            courts=1,
+            locked_teams=locked_teams
+        )
+        
+        with self.assertRaises(ValueError):
+            create_session(config)
+
     def test_initial_population_elo_matching(self):
         """Test that initial population respects ELO matching"""
         # We expect Team 1 to match with Team 2 (High vs High)

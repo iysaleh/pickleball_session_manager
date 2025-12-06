@@ -441,7 +441,7 @@ This is great. Some improvements if you please:
 * If you add a partnership, you should not be able to select either of the two players in the partnership to create another lock.
 
 
-Forfeit Feature:
+# Forfeit Feature:
 * If you forfeit a match, the same exact players get immediately scheduled on the same court with the same configuration. That's not what should happen, instead that matchup should be skipped and   │
 │   not played until other matches have passed.                                                                                                                                                           │
 │   * If you add or remove a player, the same 2 people who were just on a team together are often placed in another game being on the same team together -- see @pickleball_session_20251126_113424.txt   │
@@ -458,6 +458,13 @@ Traceback (most recent call last):
 TypeError: sequence item 0: expected str instance, NoneType found
 REFRESH ERROR: Error in refresh_display:
 sequence item 0: expected str instance, NoneType found
+
+# Team Competetive Variety Matchmaking
+* I absolutely love the competetive variety matchmaking as it is now for individual players (defined in @python/competitive_variety.py ) -- We want to create a new Teams Competetive Variety Matchmaking mode that works similarly, but is adjusted for everybody to be on locked teams. Obviously we don't need partnership constraints since a team will always be together... But we will need harsher repeat opponent constraints ( opponents should not repeat until atleast 60% of the teams have played against each other -- and the repeats should only happen if they make sense for competetive reasons)... 
+* Build tests to validate that this Team Competetive Variety Matchmaking feature works as expected.
+* When creating a Team Competetive Variety Matchmaking sessions, it should fail if someone is not configured to be on a team.
+* Do not touch the competetive variety matchmaking algorithm at all (it works perfectly!!!)
+* When resuming a session with the same players as before, also resume the locked teams... Also, new session with same players should have the
 
 
 # Useful Commands:
