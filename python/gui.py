@@ -1237,16 +1237,16 @@ class SessionWindow(QMainWindow):
             
             # Construct command based on OS
             if system == "Darwin": # macOS
-                subprocess.Popen(f"say \"{text}\"", shell=True)
+                subprocess.Popen(f"say \"{text}\"", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 
             elif system == "Linux":
                 # espeak is a common TTS on Linux
-                subprocess.Popen(f"espeak \"{text}\"", shell=True)
+                subprocess.Popen(f"espeak \"{text}\"", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 
             elif system == "Windows":
                 # PowerShell for TTS
-                tts_cmd = f'(New-Object -ComObject SAPI.SpVoice).Speak(\\"{text}\\")'
-                subprocess.Popen(f'powershell -c "{tts_cmd}"', shell=True)
+                tts_cmd = f'(New-Object -ComObject SAPI.SpVoice).Speak(\\"{text}\\") > $null'
+                subprocess.Popen(f'powershell -c "{tts_cmd}"', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             # Estimate duration to clear the flag (rough approximation: 0.5s per word)
             word_count = len(text.split())
