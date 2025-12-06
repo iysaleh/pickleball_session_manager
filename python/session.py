@@ -55,7 +55,7 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     
     # For competitive-variety mode, start all players in waiting list
     waiting_players = []
-    if final_config.mode == 'competitive-variety':
+    if final_config.mode in ['competitive-variety', 'team-competitive-variety']:
         waiting_players = [p.id for p in players_to_use]
     
     return Session(
@@ -251,6 +251,9 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
     if session.config.mode == 'competitive-variety':
         from .competitive_variety import update_variety_tracking_after_match
         update_variety_tracking_after_match(session, match.court_number, match.team1, match.team2)
+    elif session.config.mode == 'team-competitive-variety':
+        from .team_competitive_variety import update_team_variety_tracking_after_match
+        update_team_variety_tracking_after_match(session, match.court_number, match.team1, match.team2)
     
     # Handle Court Sliding
     slides = []
@@ -344,6 +347,9 @@ def forfeit_match(session: Session, match_id: str) -> bool:
     if session.config.mode == 'competitive-variety':
         from .competitive_variety import update_variety_tracking_after_match
         update_variety_tracking_after_match(session, match.court_number, match.team1, match.team2)
+    elif session.config.mode == 'team-competitive-variety':
+        from .team_competitive_variety import update_team_variety_tracking_after_match
+        update_team_variety_tracking_after_match(session, match.court_number, match.team1, match.team2)
     
     return True
 

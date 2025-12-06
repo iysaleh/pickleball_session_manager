@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import List, Set, Dict, Optional, Literal
 from datetime import datetime
 
-GameMode = Literal['king-of-court', 'round-robin', 'competitive-variety']
+GameMode = Literal['king-of-court', 'round-robin', 'competitive-variety', 'team-competitive-variety']
 SessionType = Literal['doubles', 'singles']
 MatchStatus = Literal['waiting', 'in-progress', 'completed', 'forfeited']
 

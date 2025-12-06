@@ -237,6 +237,10 @@ def populate_empty_courts(session: Session) -> Session:
         from .competitive_variety import populate_empty_courts_competitive_variety
         populate_empty_courts_competitive_variety(session)
         return session
+    elif session.config.mode == 'team-competitive-variety':
+        from .team_competitive_variety import populate_empty_courts_team_competitive_variety
+        populate_empty_courts_team_competitive_variety(session)
+        return session
     
     if session.config.mode != 'round-robin':
         # Only auto-populate for round-robin and competitive-variety for now

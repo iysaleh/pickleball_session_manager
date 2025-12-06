@@ -393,7 +393,7 @@ class SetupDialog(QDialog):
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel("Game Mode:"))
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Round Robin", "King of the Court", "Competitive Variety"])
+        self.mode_combo.addItems(["Round Robin", "King of the Court", "Competitive Variety", "Team Competitive Variety"])
         mode_layout.addWidget(self.mode_combo)
         mode_layout.addStretch()
         layout.addLayout(mode_layout)
@@ -552,8 +552,29 @@ class SetupDialog(QDialog):
                 mode: GameMode = 'round-robin'
             elif mode_text == "King of the Court":
                 mode: GameMode = 'king-of-court'
-            else:
+            elif mode_text == "Competitive Variety":
                 mode: GameMode = 'competitive-variety'
+            else:
+                mode: GameMode = 'team-competitive-variety'
+                
+                # Validation: All players must be in a locked team
+                if not self.locked_teams:
+                     QMessageBox.warning(self, "Error", "Team Competitive Variety requires Locked Teams configuration.")
+                     return
+                
+                # Check if every player is in a locked team
+                players_in_teams = set()
+                for team in self.locked_teams:
+                    players_in_teams.update(team)
+                
+                missing_players = []
+                for p in players:
+                    if p.id not in players_in_teams:
+                        missing_players.append(p.name)
+                
+                if missing_players:
+                    QMessageBox.warning(self, "Error", f"All players must be on a locked team for this mode.\nMissing: {', '.join(missing_players)}")
+                    return
             
             type_text = self.type_combo.currentText()
             session_type: SessionType = 'doubles' if type_text == "Doubles" else 'singles'
@@ -1990,7 +2011,7 @@ class SessionWindow(QMainWindow):
             layout = QVBoxLayout()
             
             # Determine columns based on game mode
-            is_competitive_variety = self.session.config.mode == 'competitive-variety'
+            is_competitive_variety = self.session.config.mode in ['competitive-variety', 'team-competitive-variety']
             
             if is_competitive_variety:
                 # Include ELO rating for competitive variety
