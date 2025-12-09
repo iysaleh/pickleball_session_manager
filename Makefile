@@ -60,6 +60,9 @@ run_test_full_session_replay:
 run_test_audio_announcement:
 	python3 test_audio_announcement.py
 
+run_test_manual_announcement:
+	python3 test_manual_announcement.py
+
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete

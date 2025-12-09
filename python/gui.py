@@ -1156,6 +1156,11 @@ class SessionWindow(QMainWindow):
         
         button_layout.addStretch()
         
+        announce_btn = QPushButton("📢 Announce Courts")
+        announce_btn.setStyleSheet("QPushButton { background-color: #673AB7; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
+        announce_btn.clicked.connect(self.announce_all_courts)
+        button_layout.addWidget(announce_btn)
+        
         main_layout.addLayout(button_layout)
         
         central_widget.setLayout(main_layout)
@@ -1181,10 +1186,40 @@ class SessionWindow(QMainWindow):
         self.sound_enabled = self.sound_toggle_btn.isChecked()
         if self.sound_enabled:
             self.sound_toggle_btn.setText("🔊")
-            # Test sound
-            self.announcement_queue.append("Voice announcements enabled")
         else:
             self.sound_toggle_btn.setText("🔇")
+
+    def announce_all_courts(self):
+        """Announce all currently active courts"""
+        has_matches = False
+        for widget in self.court_widgets.values():
+            if widget.current_match:
+                has_matches = True
+                break
+        
+        if not has_matches:
+            self.announcement_queue.append("No matches are currently in progress.")
+            return
+
+        self.announcement_queue.append("Announcing current matches.")
+        
+        for court_num in sorted(self.court_widgets.keys()):
+            widget = self.court_widgets[court_num]
+            if widget.current_match:
+                try:
+                    match = widget.current_match
+                    team1_names = [get_player_name(self.session, pid) for pid in match.team1]
+                    team2_names = [get_player_name(self.session, pid) for pid in match.team2]
+                    
+                    court_name = widget.custom_title if widget.custom_title else f"Court {court_num}"
+                    
+                    t1_str = " And ".join(team1_names)
+                    t2_str = " And ".join(team2_names)
+                    
+                    text = f"On {court_name}, {t1_str} versus {t2_str}."
+                    self.announcement_queue.append(text)
+                except Exception as e:
+                    print(f"Error announcing court {court_num}: {e}")
 
     def play_sound(self, sound_path):
         """Play a sound file in a cross-platform way"""
@@ -1206,7 +1241,7 @@ class SessionWindow(QMainWindow):
             team1_names = [get_player_name(self.session, pid) for pid in match.team1]
             team2_names = [get_player_name(self.session, pid) for pid in match.team2]
             
-            # Format: "New Match Ready on Court <courtName>, Team <Player1> And <Player2> versus <Player3> And <Player4>."
+            # Format: "New Match Ready on Court <courtName>, <Player1> And <Player2> versus <Player3> And <Player4>."
             
             court_name = f"Court {court_num}"
             if court_num in self.court_widgets:
@@ -1217,7 +1252,7 @@ class SessionWindow(QMainWindow):
             t1_str = " And ".join(team1_names)
             t2_str = " And ".join(team2_names)
             
-            text = f"New Match Ready on {court_name}, Team {t1_str} versus {t2_str}."
+            text = f"New Match Ready on {court_name}, {t1_str} versus {t2_str}."
             self.announcement_queue.append(text)
             
         except Exception as e:
