@@ -7,6 +7,51 @@ from collections import defaultdict
 from pathlib import Path
 
 
+def parse_player_statistics(content):
+    """Extract player statistics from session file"""
+    stats_idx = content.find("PLAYER STATISTICS")
+    if stats_idx == -1:
+        return {}
+    
+    stats_section = content[stats_idx:]
+    lines = stats_section.split('\n')
+    
+    # Find the start of actual data (skip header)
+    data_start = 0
+    for i, line in enumerate(lines):
+        if line.startswith('-'):
+            data_start = i + 1
+            break
+    
+    player_stats = {}
+    for line in lines[data_start:]:
+        line = line.strip()
+        if not line or line.startswith('=') or line.startswith('MATCH'):
+            break
+        
+        # Parse player statistics line
+        # Format: "Player                    ELO        W-L        Games      Win %      Wait Time"
+        # Example: "Andrew Baldwin            1902       5-0        5          100.0%     15:54"
+        match = re.search(r'(.+?)\s+(\d+)\s+(\d+-\d+)\s+(\d+)\s+([\d.]+)%\s+(\d+:\d+)', line)
+        if match:
+            player_name = match.group(1).strip()
+            elo = match.group(2)
+            wl = match.group(3)
+            games = match.group(4)
+            win_pct = match.group(5)
+            wait_time = match.group(6)
+            
+            player_stats[player_name] = {
+                'elo': int(elo),
+                'wl': wl,
+                'games': int(games),
+                'win_pct': win_pct,
+                'wait_time': wait_time
+            }
+    
+    return player_stats
+
+
 def analyze_session(filename):
     """Parse session file and analyze partnerships and opponents"""
     
@@ -16,6 +61,9 @@ def analyze_session(filename):
     
     with open(filename, 'r') as f:
         content = f.read()
+    
+    # Parse player statistics
+    player_stats = parse_player_statistics(content)
     
     # Find match history section
     match_history_idx = content.find("MATCH HISTORY:")
@@ -69,6 +117,29 @@ def analyze_session(filename):
     print(f"\n{'='*70}")
     print(f"SESSION ANALYSIS: {Path(filename).name}")
     print(f"{'='*70}\n")
+    
+    # Player Statistics Table
+    if player_stats:
+        print("PLAYER STATISTICS (sorted by ELO):")
+        print(f"{'Rank':<5} {'Player':<25} {'ELO':<7} {'W-L':<8} {'Games':<7} {'Win%':<8} {'Wait Time':<10}")
+        print("-" * 70)
+        
+        sorted_players = sorted(player_stats.items(), key=lambda x: int(x[1]['elo']), reverse=True)
+        for rank, (player, stats) in enumerate(sorted_players, 1):
+            print(f"{rank:<5} {player:<25} {stats['elo']:<7} {stats['wl']:<8} {stats['games']:<7} {stats['win_pct']:<8} {stats['wait_time']:<10}")
+        print()
+    
+    # CSV Player Statistics
+    if player_stats:
+        print("CSV PLAYER STATISTICS")
+        print("-" * 70)
+        print("Rank,Player,ELO,W-L,Games,Win%,WaitTime")
+        
+        # Sort by ELO descending
+        sorted_players = sorted(player_stats.items(), key=lambda x: int(x[1]['elo']), reverse=True)
+        for rank, (player, stats) in enumerate(sorted_players, 1):
+            print(f"{rank},{player},{stats['elo']},{stats['wl']},{stats['games']},{stats['win_pct']},{stats['wait_time']}")
+        print()
     
     # Most partnerships
     if partnerships:
