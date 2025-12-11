@@ -1,4 +1,4 @@
-.PHONY: run_fuzz_tests clean run_test_gui_new_match_highlight run_gui_crash_test run_test_dynamic_threshold run_test_roaming_range_enforcement run_test_amanda_carrie_bug run_test_populate_bad_match run_test_full_session_replay
+.PHONY: run_fuzz_tests clean run_test_gui_new_match_highlight run_gui_crash_test run_test_dynamic_threshold run_test_roaming_range_enforcement run_test_amanda_carrie_bug run_test_populate_bad_match run_test_full_session_replay run_test_export_stats
 
 run_test_gui_new_match_highlight:
 	python3 python/test_gui_new_match_highlight.py
@@ -62,6 +62,9 @@ run_test_audio_announcement:
 
 run_test_manual_announcement:
 	python3 test_manual_announcement.py
+
+run_test_export_stats:
+	python3 test_export_stats.py
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

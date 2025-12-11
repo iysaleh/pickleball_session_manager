@@ -30,9 +30,9 @@ def parse_player_statistics(content):
             break
         
         # Parse player statistics line
-        # Format: "Player                    ELO        W-L        Games      Win %      Wait Time"
-        # Example: "Andrew Baldwin            1902       5-0        5          100.0%     15:54"
-        match = re.search(r'(.+?)\s+(\d+)\s+(\d+-\d+)\s+(\d+)\s+([\d.]+)%\s+(\d+:\d+)', line)
+        # Format: "Player                    ELO        W-L        Games      Win %      Wait Time    Avg Pt Diff     Pts For    Pts Against"
+        # Example: "Alice                     1858       1-0        1          100.0%     00:00        6.0             11         5"
+        match = re.search(r'(.+?)\s+(\d+)\s+(\d+-\d+)\s+(\d+)\s+([\d.]+)%\s+(\d+:\d+)\s+([-\d.]+)\s+(\d+)\s+(\d+)', line)
         if match:
             player_name = match.group(1).strip()
             elo = match.group(2)
@@ -40,13 +40,19 @@ def parse_player_statistics(content):
             games = match.group(4)
             win_pct = match.group(5)
             wait_time = match.group(6)
+            avg_pt_diff = match.group(7)
+            pts_for = match.group(8)
+            pts_against = match.group(9)
             
             player_stats[player_name] = {
                 'elo': int(elo),
                 'wl': wl,
                 'games': int(games),
                 'win_pct': win_pct,
-                'wait_time': wait_time
+                'wait_time': wait_time,
+                'avg_pt_diff': float(avg_pt_diff),
+                'pts_for': int(pts_for),
+                'pts_against': int(pts_against)
             }
     
     return player_stats
@@ -121,24 +127,24 @@ def analyze_session(filename):
     # Player Statistics Table
     if player_stats:
         print("PLAYER STATISTICS (sorted by ELO):")
-        print(f"{'Rank':<5} {'Player':<25} {'ELO':<7} {'W-L':<8} {'Games':<7} {'Win%':<8} {'Wait Time':<10}")
-        print("-" * 70)
+        print(f"{'Rank':<5} {'Player':<25} {'ELO':<7} {'W-L':<8} {'Games':<7} {'Win%':<8} {'Wait Time':<10} {'Avg Pt Diff':<13} {'Pts For':<10} {'Pts Against':<12}")
+        print("-" * 110)
         
         sorted_players = sorted(player_stats.items(), key=lambda x: int(x[1]['elo']), reverse=True)
         for rank, (player, stats) in enumerate(sorted_players, 1):
-            print(f"{rank:<5} {player:<25} {stats['elo']:<7} {stats['wl']:<8} {stats['games']:<7} {stats['win_pct']:<8} {stats['wait_time']:<10}")
+            print(f"{rank:<5} {player:<25} {stats['elo']:<7} {stats['wl']:<8} {stats['games']:<7} {stats['win_pct']:<8} {stats['wait_time']:<10} {stats['avg_pt_diff']:<13.1f} {stats['pts_for']:<10} {stats['pts_against']:<12}")
         print()
     
     # CSV Player Statistics
     if player_stats:
         print("CSV PLAYER STATISTICS")
         print("-" * 70)
-        print("Rank,Player,ELO,W-L,Games,Win%,WaitTime")
+        print("Rank,Player,ELO,W-L,Games,Win%,WaitTime,AvgPtDiff,PtsFor,PtsAgainst")
         
         # Sort by ELO descending
         sorted_players = sorted(player_stats.items(), key=lambda x: int(x[1]['elo']), reverse=True)
         for rank, (player, stats) in enumerate(sorted_players, 1):
-            print(f"{rank},{player},{stats['elo']},{stats['wl']},{stats['games']},{stats['win_pct']},{stats['wait_time']}")
+            print(f"{rank},{player},{stats['elo']},{stats['wl']},{stats['games']},{stats['win_pct']},{stats['wait_time']},{stats['avg_pt_diff']},{stats['pts_for']},{stats['pts_against']}")
         print()
     
     # Most partnerships

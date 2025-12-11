@@ -1624,21 +1624,25 @@ class SessionWindow(QMainWindow):
                 current_wait = get_current_wait_time(stats)
                 total_wait_seconds = stats.total_wait_time + current_wait
                 
-                player_data.append((player.name, elo, record, stats.games_played, win_pct, total_wait_seconds))
+                # Calculate average point differential
+                avg_pt_diff = (stats.total_points_for - stats.total_points_against) / stats.games_played if stats.games_played > 0 else 0
+                
+                player_data.append((player.name, elo, record, stats.games_played, win_pct, total_wait_seconds, avg_pt_diff, stats.total_points_for, stats.total_points_against))
             
             # Sort by ELO descending
             player_data.sort(key=lambda x: x[1], reverse=True)
             
             # Write header
-            export_lines.append(f"{'Player':<25} {'ELO':<10} {'W-L':<10} {'Games':<10} {'Win %':<10} {'Wait Time':<12}")
-            export_lines.append("-" * 82)
+            export_lines.append(f"{'Player':<25} {'ELO':<10} {'W-L':<10} {'Games':<10} {'Win %':<10} {'Wait Time':<12} {'Avg Pt Diff':<15} {'Pts For':<10} {'Pts Against':<12}")
+            export_lines.append("-" * 132)
             
             # Write player data
-            for player_name, elo, record, games_played, win_pct, total_wait_seconds in player_data:
+            for player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against in player_data:
                 win_pct_str = f"{win_pct:.1f}%" if games_played > 0 else "N/A"
                 wait_time_str = format_duration(total_wait_seconds)
+                avg_pt_diff_str = f"{avg_pt_diff:.1f}" if games_played > 0 else "N/A"
                 export_lines.append(
-                    f"{player_name:<25} {elo:<10.0f} {record:<10} {games_played:<10} {win_pct_str:<10} {wait_time_str:<12}"
+                    f"{player_name:<25} {elo:<10.0f} {record:<10} {games_played:<10} {win_pct_str:<10} {wait_time_str:<12} {avg_pt_diff_str:<15} {pts_for:<10} {pts_against:<12}"
                 )
             
             export_lines.append("")
