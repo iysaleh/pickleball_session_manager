@@ -745,39 +745,34 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                     # Limit combination search to top 12 of the filtered list to keep it fast
                     search_limit = min(12, len(candidates_for_matching))
                     
-                    # Two passes:
-                    # 1. Strict Bracketing (allow_cross_bracket=False)
-                    # 2. Relaxed Bracketing (allow_cross_bracket=True)
-                    
-                    for allow_cross in [False, True]:
-                        for combo in combinations(candidates_for_matching[:search_limit], 4):
-                            if _can_form_valid_teams(session, list(combo), allow_cross_bracket=allow_cross):
-                                # Found a valid combination - use first config that works
-                                configs = [
-                                    ([combo[0], combo[1]], [combo[2], combo[3]]),
-                                    ([combo[0], combo[2]], [combo[1], combo[3]]),
-                                    ([combo[0], combo[3]], [combo[1], combo[2]]),
-                                ]
-                                for team1, team2 in configs:
-                                    if (can_play_with_player(session, team1[0], team1[1], 'partner', allow_cross) and
-                                        can_play_with_player(session, team2[0], team2[1], 'partner', allow_cross)):
-                                        # Check all opponent pairs
-                                        valid = True
-                                        for p1 in team1:
-                                            for p2 in team2:
-                                                if not can_play_with_player(session, p1, p2, 'opponent', allow_cross):
-                                                    valid = False
-                                                    break
-                                            if not valid:
+                    # Only one pass: Strict Bracketing (allow_cross_bracket=False)
+                    allow_cross = False
+                    for combo in combinations(candidates_for_matching[:search_limit], 4):
+                        if _can_form_valid_teams(session, list(combo), allow_cross_bracket=allow_cross):
+                            # Found a valid combination - use first config that works
+                            configs = [
+                                ([combo[0], combo[1]], [combo[2], combo[3]]),
+                                ([combo[0], combo[2]], [combo[1], combo[3]]),
+                                ([combo[0], combo[3]], [combo[1], combo[2]]),
+                            ]
+                            for team1, team2 in configs:
+                                if (can_play_with_player(session, team1[0], team1[1], 'partner', allow_cross) and
+                                    can_play_with_player(session, team2[0], team2[1], 'partner', allow_cross)):
+                                    # Check all opponent pairs
+                                    valid = True
+                                    for p1 in team1:
+                                        for p2 in team2:
+                                            if not can_play_with_player(session, p1, p2, 'opponent', allow_cross):
+                                                valid = False
                                                 break
-                                        if valid:
-                                            best_team1 = list(team1)
-                                            best_team2 = list(team2)
+                                        if not valid:
                                             break
-                                if best_team1:
-                                    break
-                        if best_team1:
-                            break
+                                    if valid:
+                                        best_team1 = list(team1)
+                                        best_team2 = list(team2)
+                                        break
+                            if best_team1:
+                                break
                 
                 if best_team1 and best_team2:
                     match = Match(
