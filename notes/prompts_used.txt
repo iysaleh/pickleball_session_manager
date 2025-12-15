@@ -487,9 +487,8 @@ sequence item 0: expected str instance, NoneType found
 
 # Easy state reset
 * We need to make it easier to track state and go back in time if we choose. Every time a match finishes, store all the necessary state to be able to load the session at that state. If you double click a match in the match history, an "Edit Match Score" pops up -- Instead of just "Save" "Cancel" options, add an option, "Load" which when clicked will load the active session to exactly right before this match was finished. Be careful about your implementation here, make sure any sneaky variables or state that also need to be updated get updated.
-
-# TODO 
-* BUG: If a court slide action happens, and a historic match is loaded, the slide action needs to be undone and the court needs to be set to the original position.
+* BUG: If a court slide action happens, and a historic match is loaded, the slide action needs to be undone and both the court needs to be set to the original position.
+* Scratch this -- seems I was wrong: Bug: When loading a match session from the history, it seems like player variety parameters aren't reset/reloaded, preventing matches from being made that should be made after the loaded match is finished.
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts

@@ -2531,6 +2531,22 @@ class SessionWindow(QMainWindow):
                     QMessageBox.warning(dialog, "Error", "Could not find saved state for this match")
                     return
                 
+                # Undo any pending court slides before loading historic state
+                if hasattr(self, 'animation_group') and self.animation_group:
+                    self.animation_group.stop()
+                
+                # Clear pending slide state
+                self.pending_slides = []
+                
+                # Clean up ghost widgets from animations
+                if hasattr(self, 'ghosts'):
+                    for ghost in self.ghosts:
+                        ghost.deleteLater()
+                    self.ghosts = []
+                
+                # Reset match tracking to avoid stale state
+                self.last_known_matches = {}
+                
                 # Load the state
                 from python.session import load_session_from_snapshot
                 success = load_session_from_snapshot(self.session, snapshot)
