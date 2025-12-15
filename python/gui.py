@@ -442,6 +442,8 @@ class SetupDialog(QDialog):
         mode_layout.addWidget(QLabel("Game Mode:"))
         self.mode_combo = QComboBox()
         self.mode_combo.addItems(["Round Robin", "King of the Court", "Competitive Variety"])
+        # Set default to 'Competitive Variety'
+        self.mode_combo.setCurrentIndex(self.mode_combo.findText("Competitive Variety"))
         mode_layout.addWidget(self.mode_combo)
         mode_layout.addStretch()
         layout.addLayout(mode_layout)
