@@ -23,13 +23,14 @@ def test_roaming_range_enforcement():
     - Tony (rank #14, ELO medium-low)
     
     Dan's roaming range with 50% rule:
-    - 50% of 20 = 10
+    - 50% of 20 = 10 players above AND 10 below (symmetric)
     - Dan is rank #2
-    - Range: 2 to 12 (can play with ranks 2-12)
+    - Range: max(1, 2-10) to min(2+10, 20) = 1 to 12 (but effectively 2-12, ~11 players)
+    - Since there's only rank 1 below, bounded to [1, 12]
     
     Tony is rank #14:
-    - Range: 14 to 4 (but capped at 20, so 14-20)
-    - Tony should NOT be able to play with Dan, Ibraheem, or Joshua
+    - Range: max(1, 14-10) to min(14+10, 20) = 4 to 20
+    - Tony should NOT be able to play with Dan (who is rank 2), as Dan is only up to rank 12
     """
     # Create 20 players with specific rankings
     player_names = [
@@ -122,19 +123,26 @@ def test_roaming_range_enforcement():
     p0_min, p0_max = get_roaming_rank_range(session, "p0")
     print(f"\nPlayer p0 (Patrick) rank #{p0_rank} roaming range: {p0_min}-{p0_max}")
     print(f"  Window size: {p0_max - p0_min + 1} ranks")
-    assert p0_min == p0_rank, f"Min should match player rank"
-    assert (p0_max - p0_min) == 10, f"Window should be 11 ranks (50% of 20 + 1 for inclusive)"
+    # For 50% roaming with 20 players: roaming_distance = 10
+    # So each player has 10 above and 10 below (where available)
+    # Expected distance: 20 (10 above + 10 below)
+    expected_distance = min(10, p0_rank - 1) + min(10, 20 - p0_rank)
+    actual_distance = p0_max - p0_min
+    print(f"  Expected distance (approx): {expected_distance}, Actual: {actual_distance}")
+    assert actual_distance == expected_distance, f"Distance should be {expected_distance}"
     print("  [PASS] Correct range")
     
     # Find a lower-ranked player
     p13_rank = all_ranks["p13"]  # Tony
     p13_min, p13_max = get_roaming_rank_range(session, "p13")
     print(f"\nPlayer p13 (Tony) rank #{p13_rank} roaming range: {p13_min}-{p13_max}")
-    assert p13_min == p13_rank, f"Min should match player rank"
-    # Window gets capped at max_rank (20)
-    expected_window = min(10, 20 - p13_rank)
-    assert (p13_max - p13_min) == expected_window, f"Window should be {expected_window} ranks"
-    print("  [PASS] Correct range (capped at player count)")
+    # For 50% roaming with 20 players: roaming_distance = 10
+    # Tony at rank 14: range [max(1,14-10), min(14+10,20)] = [4, 20]
+    expected_min = max(1, p13_rank - 10)
+    expected_max = min(p13_rank + 10, 20)
+    assert p13_min == expected_min, f"Min should be {expected_min}, got {p13_min}"
+    assert p13_max == expected_max, f"Max should be {expected_max}, got {p13_max}"
+    print("  [PASS] Correct range (symmetric with boundary constraints)")
     
     # Test that a player outside another's range is rejected
     print(f"\nFinding two players with non-overlapping ranges...")

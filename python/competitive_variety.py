@@ -91,13 +91,14 @@ def is_provisional(session: Session, player_id: str) -> bool:
 
 def get_roaming_rank_range(session: Session, player_id: str) -> Tuple[int, int]:
     """
-    Get the roaming range of ranks a player can be matched with (50% moving window rule).
+    Get the roaming range of ranks a player can be matched with (symmetric window rule).
     
     For competitive variety mode:
-    - Each player can play with others in a range based on their rank
-    - Range: player_rank to (player_rank + roaming_percent% of total active players)
-    - Example: 20 players, player ranked #2: can play with ranks 2-12 (2 + 10 = 12)
-    - Example: 20 players, player ranked #14: can play with ranks 14-24 (capped at 20)
+    - Each player can play with others within a symmetric roaming bracket
+    - Bracket extends roaming_percent% of players ABOVE and roaming_percent% BELOW
+    - Example: 16 players, 25% roaming: 4 above + 4 below + self = 9-player bracket
+    - Example: rank #2 with 25% roaming: can play with ranks 1-6 (1 below + 4 above, capped)
+    - Example: rank #8 with 25% roaming: can play with ranks 4-12 (4 below + 4 above)
     
     Uses session-level competitive_variety_roaming_range_percent setting.
     
@@ -112,10 +113,12 @@ def get_roaming_rank_range(session: Session, player_id: str) -> Tuple[int, int]:
     
     player_rank, _ = get_player_ranking(session, player_id)
     roaming_percent = session.competitive_variety_roaming_range_percent
-    roaming_distance = int(total_players * roaming_percent)
     
-    # Roaming window goes from player_rank to (player_rank + roaming_distance)
-    min_rank = player_rank
+    # Calculate how many players can be above and below (symmetric)
+    roaming_distance = max(0, int(total_players * roaming_percent))
+    
+    # Roaming window extends equally in both directions from player_rank
+    min_rank = max(1, player_rank - roaming_distance)
     max_rank = min(player_rank + roaming_distance, total_players)
     
     return min_rank, max_rank
@@ -513,6 +516,10 @@ def _can_form_valid_teams(session: Session, players: List[str], allow_cross_brac
     if len(players) != 4:
         return False
     
+    # First check: all players must be within roaming range of each other
+    if not can_all_players_play_together(session, players):
+        return False
+    
     # Try different team configurations
     configs = [
         ([players[0], players[1]], [players[2], players[3]]),
@@ -592,15 +599,19 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
             
             # Check if all players are available
             if not (match_players & players_in_matches):
+                # First check: all players must be within roaming range of each other
+                all_players = list(match_players)
+                valid = can_all_players_play_together(session, all_players)
+                
                 # Check competitive variety constraints
-                valid = True
-                for p1 in queued_match.team1:
-                    for p2 in queued_match.team1:
-                        if p1 != p2 and not can_play_with_player(session, p1, p2, 'partner'):
-                            valid = False
+                if valid:
+                    for p1 in queued_match.team1:
+                        for p2 in queued_match.team1:
+                            if p1 != p2 and not can_play_with_player(session, p1, p2, 'partner'):
+                                valid = False
+                                break
+                        if not valid:
                             break
-                    if not valid:
-                        break
                 
                 if valid:
                     for p1 in queued_match.team1:
@@ -651,6 +662,11 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                                  pair1 = locked_pairs[i]
                                  pair2 = locked_pairs[j]
                                  
+                                 # Check roaming range
+                                 all_players = pair1 + pair2
+                                 if not can_all_players_play_together(session, all_players):
+                                     continue
+                                 
                                  # Check validity of pair1 vs pair2
                                  valid_match = True
                                  for p1 in pair1:
@@ -687,6 +703,12 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                         # Try to find a pair among candidates
                         for combo in combinations(candidates, 2):
                              pair2 = list(combo)
+                             
+                             # Check roaming range
+                             all_players = pair1 + pair2
+                             if not can_all_players_play_together(session, all_players):
+                                 continue
+                             
                              if can_play_with_player(session, pair2[0], pair2[1], 'partner'):
                                  # Check opponent validity
                                  valid_match = True

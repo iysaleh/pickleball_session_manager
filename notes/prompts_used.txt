@@ -478,6 +478,12 @@ sequence item 0: expected str instance, NoneType found
 * The custom Variety dialog also needs a similar "Reset to Default" feature.
 * Update the custom variety dialog to set the minimum roaming percentage to the smallest percent of the current player pool that gives us 4 players -- for example, if it's 16 players, 25% gets us 4 players. If it's 18 players, it's 23% (make sure you round up!)
 * Roaming range can still go to 0% when there 16 players, the minimum should be 25%!
+* In the custom competetiveness dialog, the minimum settable value for roaming players needs to be the percentage that gets 4 players -- The roaming range slider should only go from minimum settable value to 100%, not 0 to 100% like it does now.
+* Roaming range should NOT appear on the custom variety dialog!
+* Bug: Competetiveness roaming range is set to 25%, at max with 16 players, nobody should be able to play with or against anyone not within 4 ranks of themselves, and yet in @pickleball_session_20251214_213217.txt Leo (Rank #2) played with Eve (Rank #8) --- something isn't working there -- The only players he should've been allows to play with are ranks #1, #3, #4, #5, #6.
+* Remember, the roaming rank range applies in both directions! If you're rank #2 in a 16 player game with a 25% roaming range, you can play with 25% above, and 25% below you!
+* Matches are still being scheduled while violating the roaming range -- something isn't working. 
+* Changing the competetiveness slider is not filling empty courts. Also, update the "Casual" competetiveness setting to be 80% roaming range.
 
 # Easy state reset
 * We need to make it easier to track state and go back in time if we choose. Every time a match finishes, store all the necessary state to be able to load the session at that state. If you double click a match in the match history, an "Edit Match Score" pops up -- Instead of just "Save" "Cancel" options, add an option, "Load" which when clicked will load the active session to exactly right before this match was finished. Be careful about your implementation here, make sure any sneaky variables or state that also need to be updated get updated.
