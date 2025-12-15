@@ -145,6 +145,24 @@ class Session:
     player_last_court: Dict[str, int] = field(default_factory=dict)  # player_id -> court_number
     court_players: Dict[int, List[str]] = field(default_factory=dict)  # court_number -> [player_ids]
     courts_mixed_history: Set[tuple] = field(default_factory=set)  # Set of (court_a, court_b) tuples that have mixed
+    # Match history snapshots for loading previous states
+    match_history_snapshots: List['MatchSnapshot'] = field(default_factory=list)
+
+
+@dataclass
+class MatchSnapshot:
+    """A snapshot of session state right before a match was completed"""
+    match_id: str
+    timestamp: datetime
+    # Complete copy of the session state before this match was completed
+    matches: List[Dict]  # Serialized matches
+    waiting_players: List[str]
+    player_stats: Dict  # Serialized player stats
+    active_players: List[str]
+    match_queue: List[Dict]  # Serialized queue
+    player_last_court: Dict[str, int]
+    court_players: Dict[int, List[str]]
+    courts_mixed_history: List[tuple]
 
 
 @dataclass

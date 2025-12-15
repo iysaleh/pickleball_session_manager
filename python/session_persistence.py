@@ -104,6 +104,23 @@ def serialize_session(session) -> Dict:
             "team2": queued_match.team2
         })
     
+    # Serialize match history snapshots
+    snapshots_data = []
+    for snapshot in session.match_history_snapshots:
+        snapshot_data = {
+            "match_id": snapshot.match_id,
+            "timestamp": snapshot.timestamp.isoformat(),
+            "matches": snapshot.matches,
+            "waiting_players": snapshot.waiting_players,
+            "player_stats": snapshot.player_stats,
+            "active_players": snapshot.active_players,
+            "match_queue": snapshot.match_queue,
+            "player_last_court": snapshot.player_last_court,
+            "court_players": snapshot.court_players,
+            "courts_mixed_history": snapshot.courts_mixed_history
+        }
+        snapshots_data.append(snapshot_data)
+    
     return {
         "session_id": session.id,
         "config": {
@@ -120,6 +137,7 @@ def serialize_session(session) -> Dict:
         "player_stats": stats_data,
         "active_players": list(session.active_players),
         "match_queue": queue_data,
+        "match_history_snapshots": snapshots_data,
         "saved_at": datetime.now().isoformat()
     }
 
@@ -205,10 +223,108 @@ def deserialize_session(data: Dict):
         )
         matches.append(match)
     
+def deserialize_session(data: Dict):
+    """Convert JSON-serialized dictionary back to session object"""
+    from python.types import Session, SessionConfig, Player, Match, PlayerStats, QueuedMatch, MatchSnapshot
+    from python.utils import generate_id
+    
+    # Reconstruct config
+    players = [Player(id=p["id"], name=p["name"]) for p in data["config"]["players"]]
+    config = SessionConfig(
+        mode=data["config"]["mode"],
+        session_type=data["config"]["session_type"],
+        players=players,
+        courts=data["config"]["courts"],
+        banned_pairs=data["config"]["banned_pairs"],
+        locked_teams=data["config"]["locked_teams"],
+        randomize_player_order=data["config"]["randomize_player_order"]
+    )
+    
+    # Reconstruct player stats
+    player_stats = {}
+    for player_id, stats_data in data["player_stats"].items():
+        # Reconstruct wait_start_time if it exists
+        wait_start_time = None
+        if stats_data.get("wait_start_time"):
+            from datetime import datetime as dt
+            wait_start_time = dt.fromisoformat(stats_data["wait_start_time"])
+        
+        # Handle backward compatibility for stats (Set -> Dict)
+        partners_data = stats_data["partners_played"]
+        if isinstance(partners_data, list):
+            partners_played = {pid: 1 for pid in partners_data}
+        else:
+            partners_played = partners_data
+
+        opponents_data = stats_data["opponents_played"]
+        if isinstance(opponents_data, list):
+            opponents_played = {pid: 1 for pid in opponents_data}
+        else:
+            opponents_played = opponents_data
+
+        player_stats[player_id] = PlayerStats(
+            player_id=stats_data["player_id"],
+            games_played=stats_data["games_played"],
+            games_waited=stats_data["games_waited"],
+            wins=stats_data["wins"],
+            losses=stats_data["losses"],
+            partners_played=partners_played,
+            opponents_played=opponents_played,
+            total_points_for=stats_data["total_points_for"],
+            total_points_against=stats_data["total_points_against"],
+            partner_last_game=stats_data.get("partner_last_game", {}),
+            opponent_last_game=stats_data.get("opponent_last_game", {}),
+            court_history=stats_data.get("court_history", []),
+            total_wait_time=stats_data.get("total_wait_time", 0),
+            wait_start_time=wait_start_time
+        )
+    
+    # Reconstruct matches
+    matches = []
+    for match_data in data["matches"]:
+        start_time = None
+        if match_data.get("start_time"):
+            from datetime import datetime as dt
+            start_time = dt.fromisoformat(match_data["start_time"])
+        
+        end_time = None
+        if match_data.get("end_time"):
+            from datetime import datetime as dt
+            end_time = dt.fromisoformat(match_data["end_time"])
+        
+        match = Match(
+            id=match_data["id"],
+            court_number=match_data["court_number"],
+            team1=match_data["team1"],
+            team2=match_data["team2"],
+            status=match_data["status"],
+            score=match_data.get("score"),
+            start_time=start_time,
+            end_time=end_time
+        )
+        matches.append(match)
+    
     # Reconstruct match queue
     match_queue = []
     for queue_data in data["match_queue"]:
         match_queue.append(QueuedMatch(team1=queue_data["team1"], team2=queue_data["team2"]))
+    
+    # Reconstruct match history snapshots
+    match_history_snapshots = []
+    for snapshot_data in data.get("match_history_snapshots", []):
+        snapshot = MatchSnapshot(
+            match_id=snapshot_data["match_id"],
+            timestamp=datetime.fromisoformat(snapshot_data["timestamp"]),
+            matches=snapshot_data["matches"],
+            waiting_players=snapshot_data["waiting_players"],
+            player_stats=snapshot_data["player_stats"],
+            active_players=snapshot_data["active_players"],
+            match_queue=snapshot_data["match_queue"],
+            player_last_court=snapshot_data.get("player_last_court", {}),
+            court_players=snapshot_data.get("court_players", {}),
+            courts_mixed_history=snapshot_data.get("courts_mixed_history", [])
+        )
+        match_history_snapshots.append(snapshot)
     
     # Create session object
     session = Session(
@@ -218,7 +334,8 @@ def deserialize_session(data: Dict):
         waiting_players=data["waiting_players"],
         player_stats=player_stats,
         active_players=set(data["active_players"]),
-        match_queue=match_queue
+        match_queue=match_queue,
+        match_history_snapshots=match_history_snapshots
     )
     
     return session

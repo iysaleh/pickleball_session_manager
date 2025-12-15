@@ -6,7 +6,7 @@ from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 from .types import (
     Session, SessionConfig, Player, Match, MatchStatus, PlayerStats, 
-    QueuedMatch, AdvancedConfig
+    QueuedMatch, AdvancedConfig, MatchSnapshot
 )
 from .utils import generate_id, create_player_stats, shuffle_list, get_default_advanced_config
 from .roundrobin import generate_round_robin_queue
@@ -181,6 +181,153 @@ def get_completed_matches(session: Session) -> List[Match]:
     return [m for m in session.matches if m.status in ['completed', 'forfeited']]
 
 
+def _create_session_snapshot(session: Session, match_id: str) -> MatchSnapshot:
+    """Create a snapshot of the current session state before a match is completed"""
+    
+    # Serialize matches
+    matches_data = []
+    for match in session.matches:
+        match_data = {
+            "id": match.id,
+            "court_number": match.court_number,
+            "team1": match.team1,
+            "team2": match.team2,
+            "status": match.status,
+            "score": match.score,
+            "start_time": match.start_time.isoformat() if match.start_time else None,
+            "end_time": match.end_time.isoformat() if match.end_time else None
+        }
+        matches_data.append(match_data)
+    
+    # Serialize player stats
+    stats_data = {}
+    for player_id, stats in session.player_stats.items():
+        stats_data[player_id] = {
+            "player_id": stats.player_id,
+            "games_played": stats.games_played,
+            "games_waited": stats.games_waited,
+            "wins": stats.wins,
+            "losses": stats.losses,
+            "partners_played": dict(stats.partners_played),
+            "opponents_played": dict(stats.opponents_played),
+            "total_points_for": stats.total_points_for,
+            "total_points_against": stats.total_points_against,
+            "partner_last_game": dict(stats.partner_last_game),
+            "opponent_last_game": dict(stats.opponent_last_game),
+            "court_history": list(stats.court_history),
+            "total_wait_time": stats.total_wait_time,
+            "wait_start_time": stats.wait_start_time.isoformat() if stats.wait_start_time else None
+        }
+    
+    # Serialize queue
+    queue_data = []
+    for queued_match in session.match_queue:
+        queue_data.append({
+            "team1": queued_match.team1,
+            "team2": queued_match.team2
+        })
+    
+    return MatchSnapshot(
+        match_id=match_id,
+        timestamp=datetime.now(),
+        matches=matches_data,
+        waiting_players=list(session.waiting_players),
+        player_stats=stats_data,
+        active_players=list(session.active_players),
+        match_queue=queue_data,
+        player_last_court=dict(session.player_last_court),
+        court_players={k: list(v) for k, v in session.court_players.items()},
+        courts_mixed_history=list(session.courts_mixed_history)
+    )
+
+
+def load_session_from_snapshot(session: Session, snapshot: MatchSnapshot) -> bool:
+    """Load session state from a snapshot (reverting to state before a match was completed)"""
+    
+    try:
+        # Restore matches
+        session.matches = []
+        for match_data in snapshot.matches:
+            start_time = None
+            if match_data.get("start_time"):
+                start_time = datetime.fromisoformat(match_data["start_time"])
+            
+            end_time = None
+            if match_data.get("end_time"):
+                end_time = datetime.fromisoformat(match_data["end_time"])
+            
+            match = Match(
+                id=match_data["id"],
+                court_number=match_data["court_number"],
+                team1=match_data["team1"],
+                team2=match_data["team2"],
+                status=match_data["status"],
+                score=match_data.get("score"),
+                start_time=start_time,
+                end_time=end_time
+            )
+            session.matches.append(match)
+        
+        # Restore player stats
+        session.player_stats = {}
+        for player_id, stats_data in snapshot.player_stats.items():
+            wait_start_time = None
+            if stats_data.get("wait_start_time"):
+                wait_start_time = datetime.fromisoformat(stats_data["wait_start_time"])
+            
+            session.player_stats[player_id] = PlayerStats(
+                player_id=stats_data["player_id"],
+                games_played=stats_data["games_played"],
+                games_waited=stats_data["games_waited"],
+                wins=stats_data["wins"],
+                losses=stats_data["losses"],
+                partners_played=dict(stats_data["partners_played"]),
+                opponents_played=dict(stats_data["opponents_played"]),
+                total_points_for=stats_data["total_points_for"],
+                total_points_against=stats_data["total_points_against"],
+                partner_last_game=dict(stats_data["partner_last_game"]),
+                opponent_last_game=dict(stats_data["opponent_last_game"]),
+                court_history=list(stats_data["court_history"]),
+                total_wait_time=stats_data["total_wait_time"],
+                wait_start_time=wait_start_time
+            )
+        
+        # Restore waiting players
+        session.waiting_players = list(snapshot.waiting_players)
+        
+        # Restore active players
+        session.active_players = set(snapshot.active_players)
+        
+        # Restore match queue
+        session.match_queue = []
+        for queue_data in snapshot.match_queue:
+            session.match_queue.append(QueuedMatch(
+                team1=queue_data["team1"],
+                team2=queue_data["team2"]
+            ))
+        
+        # Restore competitive variety state
+        session.player_last_court = dict(snapshot.player_last_court)
+        session.court_players = {k: list(v) for k, v in snapshot.court_players.items()}
+        session.courts_mixed_history = set(snapshot.courts_mixed_history)
+        
+        # Remove the snapshot that was just loaded (and all after it) from history
+        # This preserves snapshots from before this point
+        snapshot_idx = -1
+        for idx, snap in enumerate(session.match_history_snapshots):
+            if snap.match_id == snapshot.match_id:
+                snapshot_idx = idx
+                break
+        
+        if snapshot_idx >= 0:
+            session.match_history_snapshots = session.match_history_snapshots[:snapshot_idx]
+        
+        return True
+    except Exception as e:
+        print(f"Error loading session from snapshot: {e}")
+        return False
+
+
 def complete_match(session: Session, match_id: str, team1_score: int, team2_score: int) -> Tuple[bool, List[Dict]]:
     """Complete a match with scores. Returns (success, list_of_slides)."""
     
@@ -197,6 +344,10 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
     
     if not match:
         return False, []
+    
+    # Create snapshot BEFORE updating match status (so we capture pre-completion state)
+    snapshot = _create_session_snapshot(session, match_id)
+    session.match_history_snapshots.append(snapshot)
     
     # Update match
     match.status = 'completed'

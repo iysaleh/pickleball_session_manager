@@ -1983,6 +1983,18 @@ class SessionWindow(QMainWindow):
             save_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 5px; }")
             button_layout.addWidget(save_btn)
             
+            # Check if there's a snapshot for this match to enable Load button
+            has_snapshot = any(snap.match_id == match_id for snap in self.session.match_history_snapshots)
+            
+            load_btn = QPushButton("Load")
+            load_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 5px; }")
+            load_btn.setEnabled(has_snapshot)
+            if has_snapshot:
+                load_btn.setToolTip("Load session to state before this match was completed")
+            else:
+                load_btn.setToolTip("No saved state for this match")
+            button_layout.addWidget(load_btn)
+            
             cancel_btn = QPushButton("Cancel")
             cancel_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 5px; }")
             button_layout.addWidget(cancel_btn)
@@ -2008,7 +2020,31 @@ class SessionWindow(QMainWindow):
                 dialog.accept()
                 self.refresh_display()
             
+            def load_state():
+                # Find the snapshot for this match
+                snapshot = None
+                for snap in self.session.match_history_snapshots:
+                    if snap.match_id == match_id:
+                        snapshot = snap
+                        break
+                
+                if not snapshot:
+                    QMessageBox.warning(dialog, "Error", "Could not find saved state for this match")
+                    return
+                
+                # Load the state
+                from python.session import load_session_from_snapshot
+                success = load_session_from_snapshot(self.session, snapshot)
+                
+                if success:
+                    dialog.accept()
+                    self.refresh_display()
+                    QMessageBox.information(self, "Success", "Session loaded to state before this match was completed")
+                else:
+                    QMessageBox.critical(dialog, "Error", "Failed to load session state")
+            
             save_btn.clicked.connect(save_changes)
+            load_btn.clicked.connect(load_state)
             cancel_btn.clicked.connect(dialog.reject)
             
             dialog.exec()
