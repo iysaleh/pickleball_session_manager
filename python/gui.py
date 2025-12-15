@@ -30,6 +30,26 @@ from python.session import (
 )
 
 
+class DeselectableListWidget(QListWidget):
+    """QListWidget that allows deselecting an item by clicking it again"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # No signal connection needed, using mousePressEvent override
+        
+    def mousePressEvent(self, event):
+        """Handle mouse press to toggle selection"""
+        item = self.itemAt(event.pos())
+        # If the item is already selected, deselect it
+        if item and item.isSelected():
+            self.clearSelection()
+            self.setCurrentItem(item) # Keep focus
+            event.accept()
+        else:
+            # Otherwise, let default behavior handle selection
+            super().mousePressEvent(event)
+
+
 class CompetitivenessLabel(QLabel):
     """Custom label for competitiveness that handles double-click for custom dialog"""
     
@@ -1130,9 +1150,11 @@ class SessionWindow(QMainWindow):
         
         right_section.addLayout(waiting_header)
         
-        self.waiting_list = QListWidget()
+        self.waiting_list = DeselectableListWidget()
         self.waiting_list.setMinimumWidth(250)
         self.waiting_list.setMaximumHeight(150)
+        # Connect signal to clear other lists when selected
+        self.waiting_list.itemSelectionChanged.connect(self.on_waiting_list_selection_changed)
         right_section.addWidget(self.waiting_list)
         
         self.waiting_count = QLabel("0 players waiting")
@@ -1161,9 +1183,11 @@ class SessionWindow(QMainWindow):
         history_label.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 8px; border-radius: 3px; }")
         right_section.addWidget(history_label)
         
-        self.history_list = QListWidget()
+        self.history_list = DeselectableListWidget()
         self.history_list.setMinimumWidth(250)
         self.history_list.itemDoubleClicked.connect(self.edit_match_history)
+        # Connect signal to clear other lists when selected
+        self.history_list.itemSelectionChanged.connect(self.on_history_list_selection_changed)
         right_section.addWidget(self.history_list, 1)
         
         self.history_count = QLabel("0 matches completed")
@@ -1839,6 +1863,18 @@ class SessionWindow(QMainWindow):
         # Trigger a refresh to update the display
         self.refresh_display()
     
+    def on_waiting_list_selection_changed(self):
+        """Handle selection change in waiting list"""
+        # If waiting list has selection, clear history list selection
+        if self.waiting_list.selectedItems():
+            self.history_list.clearSelection()
+
+    def on_history_list_selection_changed(self):
+        """Handle selection change in history list"""
+        # If history list has selection, clear waiting list selection
+        if self.history_list.selectedItems():
+            self.waiting_list.clearSelection()
+
     def animate_court_sliding(self, slides: List[Dict]):
         """Animate court changes"""
         self.update_timer.stop()
@@ -1962,8 +1998,23 @@ class SessionWindow(QMainWindow):
             
             # Update waiting players list and start wait timers
             waiting_ids = get_waiting_players(self.session)
-            self.waiting_list.clear()
-            for player_id in waiting_ids:
+            
+            # Map existing items by player_id
+            existing_items = {}
+            for i in range(self.waiting_list.count()):
+                item = self.waiting_list.item(i)
+                pid = item.data(Qt.ItemDataRole.UserRole)
+                existing_items[pid] = item
+            
+            # Identify items to remove
+            for pid in list(existing_items.keys()):
+                if pid not in waiting_ids:
+                    row = self.waiting_list.row(existing_items[pid])
+                    self.waiting_list.takeItem(row)
+                    del existing_items[pid]
+            
+            # Add or update items
+            for index, player_id in enumerate(waiting_ids):
                 player_name = get_player_name(self.session, player_id)
                 # Start wait timer for players on waitlist
                 if player_id in self.session.player_stats:
@@ -1992,15 +2043,48 @@ class SessionWindow(QMainWindow):
                         
                         item_text += f"  [{current_wait_str} / {total_wait_str}]"
                     
-                    self.waiting_list.addItem(item_text)
+                    if player_id in existing_items:
+                        # Update existing item
+                        item = existing_items[player_id]
+                        if item.text() != item_text:
+                            item.setText(item_text)
+                    else:
+                        # Add new item
+                        item = QListWidgetItem(item_text)
+                        item.setData(Qt.ItemDataRole.UserRole, player_id)
+                        self.waiting_list.insertItem(index, item)
                 else:
                     item_text = player_name
                     if self.show_rank:
                         from python.competitive_variety import get_player_ranking
                         rank, _ = get_player_ranking(self.session, player_id)
                         item_text += f" [{rank}]"
-                    self.waiting_list.addItem(item_text)
+                    
+                    if player_id in existing_items:
+                        item = existing_items[player_id]
+                        if item.text() != item_text:
+                            item.setText(item_text)
+                    else:
+                        item = QListWidgetItem(item_text)
+                        item.setData(Qt.ItemDataRole.UserRole, player_id)
+                        self.waiting_list.insertItem(index, item)
             
+            # Reorder items if needed (simple check: rebuild mapping and check order)
+            # Since we iterate waiting_ids in order, insertItem/takeItem handles most cases.
+            # But insertItem inserts *at* index. If item exists, we might need to move it?
+            # Ideally we want the list to match waiting_ids order.
+            # Let's do a pass to ensure order.
+            for i, player_id in enumerate(waiting_ids):
+                item = existing_items.get(player_id)
+                if item:
+                    current_row = self.waiting_list.row(item)
+                    if current_row != i:
+                        was_selected = item.isSelected()
+                        self.waiting_list.takeItem(current_row)
+                        self.waiting_list.insertItem(i, item)
+                        if was_selected:
+                            item.setSelected(True)
+
             self.waiting_count.setText(f"{len(waiting_ids)} player{'s' if len(waiting_ids) != 1 else ''} waiting")
             
             # Update queued matches list
@@ -2015,10 +2099,27 @@ class SessionWindow(QMainWindow):
             # Update match history list
             from python.session import get_completed_matches
             completed = get_completed_matches(self.session)
-            self.history_list.clear()
-            # Sort by end_time descending (most recent first), then add to list
+            # Sort by end_time descending
             sorted_completed = sorted(completed, key=lambda m: m.end_time or '', reverse=True)
-            for match in sorted_completed:
+            
+            # Intelligent update for history list
+            existing_history = {}
+            for i in range(self.history_list.count()):
+                item = self.history_list.item(i)
+                mid = item.data(Qt.ItemDataRole.UserRole)
+                existing_history[mid] = item
+            
+            completed_ids = [m.id for m in sorted_completed]
+            
+            # Remove stale items
+            for mid in list(existing_history.keys()):
+                if mid not in completed_ids:
+                    row = self.history_list.row(existing_history[mid])
+                    self.history_list.takeItem(row)
+                    del existing_history[mid]
+            
+            # Add/Update items
+            for index, match in enumerate(sorted_completed):
                 team1_names = [get_player_name(self.session, pid) for pid in match.team1]
                 team2_names = [get_player_name(self.session, pid) for pid in match.team2]
                 team1_str = ", ".join(team1_names)
@@ -2031,9 +2132,27 @@ class SessionWindow(QMainWindow):
                 else:
                     item_text = f"{team1_str}\nvs\n{team2_str}"
                 
-                item = QListWidgetItem(item_text)
-                item.setData(Qt.ItemDataRole.UserRole, match.id)
-                self.history_list.addItem(item)
+                if match.id in existing_history:
+                    item = existing_history[match.id]
+                    if item.text() != item_text:
+                        item.setText(item_text)
+                else:
+                    item = QListWidgetItem(item_text)
+                    item.setData(Qt.ItemDataRole.UserRole, match.id)
+                    self.history_list.insertItem(index, item)
+                    existing_history[match.id] = item # Add to tracking for reorder check
+            
+            # Ensure order
+            for i, match in enumerate(sorted_completed):
+                item = existing_history.get(match.id)
+                if item:
+                    current_row = self.history_list.row(item)
+                    if current_row != i:
+                        was_selected = item.isSelected()
+                        self.history_list.takeItem(current_row)
+                        self.history_list.insertItem(i, item)
+                        if was_selected:
+                            item.setSelected(True)
             
             self.history_count.setText(f"{len(completed)} match{'es' if len(completed) != 1 else ''} completed")
             
