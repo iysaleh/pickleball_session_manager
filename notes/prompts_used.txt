@@ -500,6 +500,14 @@ sequence item 0: expected str instance, NoneType found
 * BUG: If a court slide action happens, and a historic match is loaded, the slide action needs to be undone and both the court needs to be set to the original position.
 * Scratch this -- seems I was wrong: Bug: When loading a match session from the history, it seems like player variety parameters aren't reset/reloaded, preventing matches from being made that should be made after the loaded match is finished.
 
+* Instructions Button
+* Add an "Instructions" button on the active session window. When clicked, it opens an informational dialog with title "Instructions" and bullet points as follows: 
+-"Continuous flow mode, not rounds based. There are no timers or rally-scoring, finish your games normally."
+-"The computer will tell you where to go. When you finish your game, input your scores and confirm them. You will either be placed in a new game right away or be put on the waitlist and have to wait for another game to finish."
+-"When you finish a match on a deep court, and a game is still being played on a shallow court, wait for the point to finish and then have the shallow court slide to your deep court to finish uninterrupted."
+-"Red means wall, Blue is net".
+-"This is a competetive-variety matchmaking algorithm. The first 2 games are provisional and random, and then it will start to place people in matches according to current performance metrics (wins-losses, point differentials, previous opponents)"
+
 # Useful Commands:
 npx vitest run roundrobin.test.ts
 # Run local webserver

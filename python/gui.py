@@ -1228,6 +1228,11 @@ class SessionWindow(QMainWindow):
         export_btn.clicked.connect(self.export_session)
         button_layout.addWidget(export_btn)
         
+        instructions_btn = QPushButton("ℹ️ Instructions")
+        instructions_btn.setStyleSheet("QPushButton { background-color: #009688; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
+        instructions_btn.clicked.connect(self.show_instructions)
+        button_layout.addWidget(instructions_btn)
+        
         end_btn = QPushButton("End Session")
         end_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
         end_btn.clicked.connect(self.end_session)
@@ -2720,6 +2725,44 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error editing match:\n{str(e)}")
     
+    def show_instructions(self):
+        """Show instructions dialog"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Instructions")
+        dialog.setStyleSheet("QDialog { background-color: #2a2a2a; color: white; } QLabel { color: white; }")
+        
+        layout = QVBoxLayout()
+        
+        title = QLabel("Instructions")
+        title.setFont(QFont("Arial", 22, QFont.Weight.Bold))
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        
+        instructions_text = """
+        <ul>
+            <li><b>This is a continuous flow system</b>, there are no timers or rally-scoring, finish your games normally.</li>
+            <li>The computer will tell you where to go. When you finish your game, input your scores and confirm them. You will then either be placed in a new game right away or be put on the waitlist and have to wait for another game to finish.</li>
+            <li>When you finish a match on a deep court, and a game is still being played on a shallow court, wait for the point to finish and then have the shallow court slide to your deep court to finish uninterrupted.</li>
+            <li><span style="color: #ff9999;">Red means wall</span>, <span style="color: #99ccff;">Blue is net</span>.</li>
+            <li>This is a competetive-variety matchmaking algorithm. The first 2 games are provisional and random, and then it will start to place people in matches according to current performance metrics (wins-losses, point differentials, previous opponents). Everybody starts the session on equal footing.</li>
+        </ul>
+        """
+        
+        label = QLabel(instructions_text)
+        label.setWordWrap(True)
+        label.setTextFormat(Qt.TextFormat.RichText)
+        label.setStyleSheet("font-size: 20px; line-height: 1.4;")
+        layout.addWidget(label)
+        
+        close_btn = QPushButton("Close")
+        close_btn.setStyleSheet("QPushButton { background-color: #0d47a1; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
+        close_btn.clicked.connect(dialog.accept)
+        layout.addWidget(close_btn)
+        
+        dialog.setLayout(layout)
+        dialog.setMinimumWidth(600)
+        dialog.exec()
+
     def show_statistics(self):
         """Show detailed statistics for all players"""
         try:
