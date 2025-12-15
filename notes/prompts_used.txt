@@ -491,6 +491,9 @@ sequence item 0: expected str instance, NoneType found
 * Now if you select something in Match History, and then select something in the Waitlist, it automatically jumps back to the match history selection after the timer ticks. Also, make it so that if you select something, then click it again, it deselects the item.
 * Now when you select an item in either the Waitlist or Match History, it does not appear to have the blue highlight anymore, making it unclear to the user that the item is selected at all.
 * The clicking behavior for selection is very unreliable, sometimes it takes 4 clicks to select an item and have it highlighted.
+* Instead of using the waitlist size to determine default constraints, use the total players. If we have 13 or less players, set the default competetiveness to Casual. If we have 14 or more players, set the default competetiveness to Competetive.
+* Instead of using the waitlist size to determine default constraints, use the total players. If we have 13 or less players, set the default competetiveness to Casual. If we have 14 players, set the default competetiveness to semi-competetive. If we have 15 players, set it to competetive. If we have 16 or 17 players, set it to Casual.  If we have 18 or more players, set it to competetive.
+
 
 # Easy state reset
 * We need to make it easier to track state and go back in time if we choose. Every time a match finishes, store all the necessary state to be able to load the session at that state. If you double click a match in the match history, an "Edit Match Score" pops up -- Instead of just "Save" "Cancel" options, add an option, "Load" which when clicked will load the active session to exactly right before this match was finished. Be careful about your implementation here, make sure any sneaky variables or state that also need to be updated get updated.

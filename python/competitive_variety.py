@@ -1077,28 +1077,28 @@ def should_allow_court_mixing(
 
 def get_default_competitive_variety_settings(total_players: int, num_courts: int) -> Tuple[float, int, int]:
     """
-    Get default competitive variety settings based on waitlist size.
-    
-    Waitlist size = (total_players % 4) but accounting for court constraints.
-    Actual calculation: total_players - (num_courts * 4)
+    Get default competitive variety settings based on total players.
     
     Returns (roaming_range_percent, partner_repetition_limit, opponent_repetition_limit)
     
-    - 1 player in waitlist: Semi-Competitive (65% roaming, 3 partner, 2 opponent)
-    - 0, 2+ players in waitlist: Competitive (50% roaming, 3 partner, 2 opponent)
+    - 13 or less players: Casual (80% roaming)
+    - 14 players: Semi-Competitive (65% roaming)
+    - 15 players: Competitive (50% roaming)
+    - 16 or 17 players: Casual (80% roaming)
+    - 18 or more players: Competitive (50% roaming)
     """
-    # Calculate waitlist size
-    max_players_on_courts = num_courts * 4
-    waitlist_size = total_players - max_players_on_courts
-    
     # Default Variety is always Balanced
     variety_settings = VARIETY_PROFILES["balanced"]
     
-    # 1 Waitlist -> Semi-Competitive
-    if waitlist_size == 1:
+    if total_players <= 13:
+        roaming_percent = COMPETITIVENESS_PROFILES["casual"]
+    elif total_players == 14:
         roaming_percent = COMPETITIVENESS_PROFILES["semi-competitive"]
-    else:
-        # 0, 2+ (and negative) -> Competitive
+    elif total_players == 15:
+        roaming_percent = COMPETITIVENESS_PROFILES["competitive"]
+    elif total_players == 16 or total_players == 17:
+        roaming_percent = COMPETITIVENESS_PROFILES["casual"]
+    else: # 18 or more
         roaming_percent = COMPETITIVENESS_PROFILES["competitive"]
         
     return roaming_percent, variety_settings["partner_repetition_limit"], variety_settings["opponent_repetition_limit"]

@@ -9,9 +9,9 @@ from python.competitive_variety import (
     can_play_with_player
 )
 
-def test_default_settings_small_waitlist():
-    """Test that 1 player on waitlist defaults to semi-competitive (65%)"""
-    # 5 players, 1 court = 1 player on waitlist
+def test_default_settings_small_group_casual():
+    """Test that <= 13 players defaults to casual (80%)"""
+    # 5 players (<= 13)
     players = [Player(id=f"p{i}", name=f"Player {i}") for i in range(5)]
     config = SessionConfig(
         mode='competitive-variety',
@@ -21,71 +21,123 @@ def test_default_settings_small_waitlist():
     )
     session = create_session(config)
     
-    # Should default to semi-competitive (65% roaming)
+    assert session.competitive_variety_roaming_range_percent == 0.8, \
+        f"Expected 0.8, got {session.competitive_variety_roaming_range_percent}"
+    print("✓ Test 1 passed: 5 players defaults to casual (80%)")
+
+def test_default_settings_14_players_semi_competitive():
+    """Test that 14 players defaults to semi-competitive (65%)"""
+    players = [Player(id=f"p{i}", name=f"Player {i}") for i in range(14)]
+    config = SessionConfig(
+        mode='competitive-variety',
+        session_type='doubles',
+        players=players,
+        courts=3
+    )
+    session = create_session(config)
+    
     assert session.competitive_variety_roaming_range_percent == 0.65, \
         f"Expected 0.65, got {session.competitive_variety_roaming_range_percent}"
-    assert session.competitive_variety_partner_repetition_limit == 3
-    assert session.competitive_variety_opponent_repetition_limit == 2
-    print("✓ Test 1 passed: 5 players, 1 court defaults to semi-competitive (65%)")
+    print("✓ Test 2 passed: 14 players defaults to semi-competitive (65%)")
 
-def test_default_settings_large_waitlist():
-    """Test that 2+ players on waitlist defaults to competitive (50%)"""
-    # 10 players, 2 courts = 2 players on waitlist
-    players = [Player(id=f"p{i}", name=f"Player {i}") for i in range(10)]
+def test_default_settings_15_players_competitive():
+    """Test that 15 players defaults to competitive (50%)"""
+    players = [Player(id=f"p{i}", name=f"Player {i}") for i in range(15)]
     config = SessionConfig(
         mode='competitive-variety',
         session_type='doubles',
         players=players,
-        courts=2
+        courts=4
     )
     session = create_session(config)
     
-    # Should default to competitive (50% roaming)
     assert session.competitive_variety_roaming_range_percent == 0.5, \
         f"Expected 0.5, got {session.competitive_variety_roaming_range_percent}"
-    assert session.competitive_variety_partner_repetition_limit == 3
-    assert session.competitive_variety_opponent_repetition_limit == 2
-    print("✓ Test 2 passed: 10 players, 2 courts defaults to competitive")
+    print("✓ Test 3 passed: 15 players defaults to competitive (50%)")
 
-def test_default_settings_zero_waitlist():
-    """Test that exactly full courts defaults to competitive (50%)"""
-    # 8 players, 2 courts = 0 players on waitlist
-    players = [Player(id=f"p{i}", name=f"Player {i}") for i in range(8)]
-    config = SessionConfig(
+def test_default_settings_16_17_players_casual():
+    """Test that 16 or 17 players defaults to casual (80%)"""
+    players_16 = [Player(id=f"p{i}", name=f"Player {i}") for i in range(16)]
+    config_16 = SessionConfig(
         mode='competitive-variety',
         session_type='doubles',
-        players=players,
-        courts=2
+        players=players_16,
+        courts=4
     )
-    session = create_session(config)
-    
-    # Should default to competitive (50% roaming) when waitlist is 0
-    assert session.competitive_variety_roaming_range_percent == 0.5, \
-        f"Expected 0.5, got {session.competitive_variety_roaming_range_percent}"
-    print("✓ Test 3 passed: 8 players, 2 courts (0 waitlist) defaults to competitive (50%)")
+    session_16 = create_session(config_16)
+    assert session_16.competitive_variety_roaming_range_percent == 0.8, \
+        f"Expected 0.8, got {session_16.competitive_variety_roaming_range_percent}"
+    print("✓ Test 4a passed: 16 players defaults to casual (80%)")
 
-def test_get_default_settings_function():
-    """Test the get_default_competitive_variety_settings helper function"""
-    # 0 waitlist: competitive (50%)
-    roaming, partner, opponent = get_default_competitive_variety_settings(8, 2)
-    assert roaming == 0.5
-    assert partner == 3
-    assert opponent == 2
-    print("✓ Test 4a passed: 0 waitlist returns competitive (50%) settings")
+    players_17 = [Player(id=f"p{i}", name=f"Player {i}") for i in range(17)]
+    config_17 = SessionConfig(
+        mode='competitive-variety',
+        session_type='doubles',
+        players=players_17,
+        courts=4
+    )
+    session_17 = create_session(config_17)
+    assert session_17.competitive_variety_roaming_range_percent == 0.8, \
+        f"Expected 0.8, got {session_17.competitive_variety_roaming_range_percent}"
+    print("✓ Test 4b passed: 17 players defaults to casual (80%)")
+
+def test_default_settings_18_plus_players_competitive():
+    """Test that 18+ players defaults to competitive (50%)"""
+    players_18 = [Player(id=f"p{i}", name=f"Player {i}") for i in range(18)]
+    config_18 = SessionConfig(
+        mode='competitive-variety',
+        session_type='doubles',
+        players=players_18,
+        courts=4
+    )
+    session_18 = create_session(config_18)
+    assert session_18.competitive_variety_roaming_range_percent == 0.5, \
+        f"Expected 0.5, got {session_18.competitive_variety_roaming_range_percent}"
+    print("✓ Test 5a passed: 18 players defaults to competitive (50%)")
+
+    players_20 = [Player(id=f"p{i}", name=f"Player {i}") for i in range(20)]
+    config_20 = SessionConfig(
+        mode='competitive-variety',
+        session_type='doubles',
+        players=players_20,
+        courts=4
+    )
+    session_20 = create_session(config_20)
+    assert session_20.competitive_variety_roaming_range_percent == 0.5, \
+        f"Expected 0.5, got {session_20.competitive_variety_roaming_range_percent}"
+    print("✓ Test 5b passed: 20 players defaults to competitive (50%)")
+
+def test_get_default_settings_function_granular():
+    """Test the get_default_competitive_variety_settings helper function with granular player counts"""
+    # <= 13 players: casual (80%)
+    roaming, _, _ = get_default_competitive_variety_settings(13, 3)
+    assert roaming == 0.8
+    print("✓ Test 6a passed: 13 players returns casual (80%) settings")
     
-    # 1 waitlist: semi-competitive (65%)
-    roaming, partner, opponent = get_default_competitive_variety_settings(9, 2)
+    # 14 players: semi-competitive (65%)
+    roaming, _, _ = get_default_competitive_variety_settings(14, 3)
     assert roaming == 0.65
-    assert partner == 3
-    assert opponent == 2
-    print("✓ Test 4b passed: 1 waitlist returns semi-competitive (65%) settings")
+    print("✓ Test 6b passed: 14 players returns semi-competitive (65%) settings")
     
-    # 2+ waitlist: competitive (50%)
-    roaming, partner, opponent = get_default_competitive_variety_settings(10, 2)
+    # 15 players: competitive (50%)
+    roaming, _, _ = get_default_competitive_variety_settings(15, 3)
     assert roaming == 0.5
-    assert partner == 3
-    assert opponent == 2
-    print("✓ Test 4c passed: 2+ waitlist returns competitive (50%) settings")
+    print("✓ Test 6c passed: 15 players returns competitive (50%) settings")
+
+    # 16 players: casual (80%)
+    roaming, _, _ = get_default_competitive_variety_settings(16, 4)
+    assert roaming == 0.8
+    print("✓ Test 6d passed: 16 players returns casual (80%) settings")
+
+    # 17 players: casual (80%)
+    roaming, _, _ = get_default_competitive_variety_settings(17, 4)
+    assert roaming == 0.8
+    print("✓ Test 6e passed: 17 players returns casual (80%) settings")
+
+    # 18 players: competitive (50%)
+    roaming, _, _ = get_default_competitive_variety_settings(18, 4)
+    assert roaming == 0.5
+    print("✓ Test 6f passed: 18 players returns competitive (50%) settings")
 
 def test_roaming_range_adaptation():
     """Test that can_play_with_player respects the session-level roaming range"""
@@ -108,7 +160,7 @@ def test_roaming_range_adaptation():
     # With 16 players and 65% roaming, top player can play with ranks 1-11 (16 * 0.65 ≈ 10)
     # With 50% roaming, top player can play with ranks 1-8 (16 * 0.50 = 8)
     
-    print("✓ Test 5 passed: session respects roaming_range_percent setting")
+    print("✓ Test 7 passed: session respects roaming_range_percent setting")
 
 def test_repetition_limit_adaptation():
     """Test that partner and opponent repetition limits are respected"""
@@ -130,16 +182,18 @@ def test_repetition_limit_adaptation():
     assert session.competitive_variety_partner_repetition_limit == 1
     assert session.competitive_variety_opponent_repetition_limit == 1
     
-    print("✓ Test 6 passed: session respects partner/opponent repetition limits")
+    print("✓ Test 8 passed: session respects partner/opponent repetition limits")
 
 if __name__ == "__main__":
     print("Testing Competitive Variety Settings")
     print("=" * 50)
     
-    test_default_settings_small_waitlist()
-    test_default_settings_large_waitlist()
-    test_default_settings_zero_waitlist()
-    test_get_default_settings_function()
+    test_default_settings_small_group_casual()
+    test_default_settings_14_players_semi_competitive()
+    test_default_settings_15_players_competitive()
+    test_default_settings_16_17_players_casual()
+    test_default_settings_18_plus_players_competitive()
+    test_get_default_settings_function_granular()
     test_roaming_range_adaptation()
     test_repetition_limit_adaptation()
     
