@@ -346,18 +346,19 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
             if p1_locked_partner == player2:
                 return False
 
-    # Check bracket compatibility (Roaming 50% Rule) - only for 12+ players
+    # Check bracket compatibility (Roaming Range Rule) - only for 12+ players
     # Relaxed if allow_cross_bracket is True
     if not allow_cross_bracket and len(session.active_players) >= 12:
         if not is_provisional(session, player1) or not is_provisional(session, player2):
-            # Calculate rank difference limit
-            limit = int(len(session.active_players) * ROAMING_RANK_PERCENTAGE)
+            # Calculate rank difference limit using session's roaming range setting
+            roaming_percent = getattr(session, 'competitive_variety_roaming_range_percent', ROAMING_RANK_PERCENTAGE)
+            limit = int(len(session.active_players) * roaming_percent)
             
             # Get ranks
             rank1, _ = get_player_ranking(session, player1)
             rank2, _ = get_player_ranking(session, player2)
             
-            # Check roaming range
+            # Check roaming range (applies in both directions)
             if abs(rank1 - rank2) > limit:
                 return False
     

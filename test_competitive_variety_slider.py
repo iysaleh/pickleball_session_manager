@@ -70,7 +70,7 @@ def test_ultra_competitive_settings():
     print("✓ Test 2 passed: ultra-competitive settings applied correctly")
 
 def test_casual_settings():
-    """Test that casual settings allow maximum roaming (100%)"""
+    """Test that casual settings allow 80% roaming"""
     players = [Player(id=f"p{i}", name=f"Player {i}") for i in range(12)]
     config = SessionConfig(
         mode='competitive-variety',
@@ -81,13 +81,13 @@ def test_casual_settings():
     session = create_session(config)
     
     # Simulate casual settings
-    session.competitive_variety_roaming_range_percent = 1.0
+    session.competitive_variety_roaming_range_percent = 0.8
     
-    # With 100% roaming, all players should be able to play together
+    # With 80% roaming, most players should be able to play together
     # (at least roaming-wise; repetition constraints still apply)
-    assert session.competitive_variety_roaming_range_percent == 1.0
+    assert session.competitive_variety_roaming_range_percent == 0.8
     
-    print("✓ Test 3 passed: casual settings allow 100% roaming")
+    print("✓ Test 3 passed: casual settings allow 80% roaming")
 
 def test_slider_positions():
     """Test all 4 slider positions + custom"""
@@ -101,9 +101,9 @@ def test_slider_positions():
     session = create_session(config)
     
     # Position 0: Casual
-    session.competitive_variety_roaming_range_percent = 1.0
-    assert session.competitive_variety_roaming_range_percent == 1.0
-    print("  ✓ Slider position 0: Casual (100%)")
+    session.competitive_variety_roaming_range_percent = 0.8
+    assert session.competitive_variety_roaming_range_percent == 0.8
+    print("  ✓ Slider position 0: Casual (80%)")
     
     # Position 1: Semi-Competitive
     session.competitive_variety_roaming_range_percent = 0.65

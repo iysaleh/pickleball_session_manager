@@ -1300,7 +1300,7 @@ class SessionWindow(QMainWindow):
         """Update slider position based on current session settings"""
         roaming = self.session.competitive_variety_roaming_range_percent
         
-        if roaming == 1.0:
+        if roaming == 0.8:
             self.competitive_variety_slider.setValue(0)
             self.competitive_variety_slider.show()
             self.competitive_variety_value_label.setText("Casual")
@@ -1328,7 +1328,7 @@ class SessionWindow(QMainWindow):
             return
         
         settings_map = {
-            0: (1.0, "Casual"),           # 100% roaming
+            0: (0.8, "Casual"),           # 80% roaming
             1: (0.65, "Semi-Competitive"), # 65% roaming
             2: (0.5, "Competitive"),       # 50% roaming
             3: (0.35, "Ultra-Competitive"), # 35% roaming
