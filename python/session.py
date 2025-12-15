@@ -72,14 +72,8 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     
     # Set default competitive variety settings based on waitlist size
     if final_config.mode == 'competitive-variety':
-        from .competitive_variety import get_default_competitive_variety_settings
-        roaming_range, partner_limit, opponent_limit = get_default_competitive_variety_settings(
-            len(players_to_use),
-            config.courts
-        )
-        session.competitive_variety_roaming_range_percent = roaming_range
-        session.competitive_variety_partner_repetition_limit = partner_limit
-        session.competitive_variety_opponent_repetition_limit = opponent_limit
+        from .competitive_variety import update_session_competitive_variety_settings
+        update_session_competitive_variety_settings(session)
     
     return session
 
@@ -143,6 +137,11 @@ def add_player_to_session(session: Session, player: Player) -> Session:
             session.matches
         )
     
+    # Update competitive variety settings if needed
+    if session.config.mode == 'competitive-variety':
+        from .competitive_variety import update_session_competitive_variety_settings
+        update_session_competitive_variety_settings(session)
+        
     return session
 
 
@@ -158,6 +157,11 @@ def remove_player_from_session(session: Session, player_id: str) -> Session:
     
     session.active_players = active_players
     session.waiting_players = waiting_players
+    
+    # Update competitive variety settings if needed
+    if session.config.mode == 'competitive-variety':
+        from .competitive_variety import update_session_competitive_variety_settings
+        update_session_competitive_variety_settings(session)
     
     return session
 

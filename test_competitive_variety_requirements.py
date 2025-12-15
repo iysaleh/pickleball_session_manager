@@ -6,15 +6,15 @@ from python.session import create_session
 from python.competitive_variety import get_default_competitive_variety_settings
 
 def test_requirement_1_roaming_relaxation():
-    """Requirement 1: More relaxed roaming (80% Casual) with 0-1 players on waitlist"""
+    """Requirement 1: Relaxed roaming (65% Semi-Competitive) with 1 player on waitlist"""
     # 5 players, 1 court = 1 on waitlist
     players = [Player(id=f"p{i}", name=f"P{i}") for i in range(5)]
     config = SessionConfig(mode='competitive-variety', session_type='doubles', 
                           players=players, courts=1)
     session = create_session(config)
     
-    assert session.competitive_variety_roaming_range_percent == 0.8
-    print("✓ Req 1a: 0-1 waitlist defaults to 80% roaming (Casual)")
+    assert session.competitive_variety_roaming_range_percent == 0.65
+    print("✓ Req 1a: 1 waitlist defaults to 65% roaming (Semi-Competitive)")
     
     # 10 players, 2 courts = 2 on waitlist
     players = [Player(id=f"p{i}", name=f"P{i}") for i in range(10)]
@@ -80,10 +80,10 @@ def test_requirement_3_immediate_match_reevaluation():
 
 def test_requirement_4_default_based_on_waitlist():
     """Requirement 4: Default selection based on waitlist size"""
-    # Small waitlist (0-1) = Casual (80%)
+    # Waitlist 1 = Semi-Competitive (65%)
     roaming_small, _, _ = get_default_competitive_variety_settings(9, 2)
-    assert roaming_small == 0.8
-    print("✓ Req 4a: 0-1 waitlist = Casual (80%) default")
+    assert roaming_small == 0.65
+    print("✓ Req 4a: 1 waitlist = Semi-Competitive (65%) default")
     
     # Large waitlist (2+) = Competitive
     roaming_large, _, _ = get_default_competitive_variety_settings(10, 2)
@@ -111,8 +111,8 @@ def test_requirement_6_waitlist_calculation():
     """Requirement 6: Waitlist size = total_players - (courts * 4)"""
     # 8 players, 2 courts = 8 - 8 = 0 on waitlist
     roaming, _, _ = get_default_competitive_variety_settings(8, 2)
-    assert roaming == 0.8  # 0 is treated as 0-1, which is Casual (80%)
-    print("✓ Req 6a: 8 players, 2 courts = 0 waitlist = Casual (80%)")
+    assert roaming == 0.5  # 0 is Competitive (50%)
+    print("✓ Req 6a: 8 players, 2 courts = 0 waitlist = Competitive (50%)")
     
     # 12 players, 2 courts = 12 - 8 = 4 on waitlist
     roaming, _, _ = get_default_competitive_variety_settings(12, 2)

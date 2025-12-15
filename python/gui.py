@@ -1350,27 +1350,33 @@ class SessionWindow(QMainWindow):
         if not hasattr(self, 'waiting_list'):
             return
         
-        settings_map = {
-            0: (0.8, "Casual"),           # 80% roaming
-            1: (0.65, "Semi-Competitive"), # 65% roaming
-            2: (0.5, "Competitive"),       # 50% roaming
-            3: (0.35, "Ultra-Competitive"), # 35% roaming
+        from python.competitive_variety import COMPETITIVENESS_PROFILES
+        
+        # Map slider values to profile keys
+        # 0=Casual, 1=Semi-Comp, 2=Comp, 3=Ultra-Comp
+        slider_map = {
+            0: ("casual", "Casual"),
+            1: ("semi-competitive", "Semi-Competitive"),
+            2: ("competitive", "Competitive"),
+            3: ("ultra-competitive", "Ultra-Competitive")
         }
         
-        if value in settings_map:
-            roaming, label = settings_map[value]
-            
-            # Apply preset - only roaming range, not repetition limits
-            self.session.competitive_variety_roaming_range_percent = roaming
-            self.competitive_variety_value_label.setText(label)
-            
-            # Make sure slider is visible for preset settings
-            self.competitive_variety_slider.show()
-            
-            # Re-evaluate matches immediately
-            from python.queue_manager import populate_empty_courts
-            populate_empty_courts(self.session)
-            self.refresh_display()
+        if value in slider_map:
+            profile_key, label = slider_map[value]
+            if profile_key in COMPETITIVENESS_PROFILES:
+                roaming = COMPETITIVENESS_PROFILES[profile_key]
+                
+                # Apply preset - only roaming range
+                self.session.competitive_variety_roaming_range_percent = roaming
+                self.competitive_variety_value_label.setText(label)
+                
+                # Make sure slider is visible for preset settings
+                self.competitive_variety_slider.show()
+                
+                # Re-evaluate matches immediately
+                from python.queue_manager import populate_empty_courts
+                populate_empty_courts(self.session)
+                self.refresh_display()
 
     def init_variety_slider(self, parent_layout: QHBoxLayout):
         """Initialize the variety (repetition limits) slider widget"""
@@ -1426,18 +1432,24 @@ class SessionWindow(QMainWindow):
     
     def update_variety_slider_from_settings(self):
         """Update variety slider position based on current session settings"""
+        from python.competitive_variety import VARIETY_PROFILES
+        
         partner = self.session.competitive_variety_partner_repetition_limit
         opponent = self.session.competitive_variety_opponent_repetition_limit
         
-        if partner == 1 and opponent == 1:
+        min_p = VARIETY_PROFILES["min"]
+        bal_p = VARIETY_PROFILES["balanced"]
+        max_p = VARIETY_PROFILES["max"]
+        
+        if partner == min_p["partner_repetition_limit"] and opponent == min_p["opponent_repetition_limit"]:
             self.variety_slider.setValue(0)
             self.variety_slider.show()
             self.variety_value_label.setText("Min")
-        elif partner == 3 and opponent == 2:
+        elif partner == bal_p["partner_repetition_limit"] and opponent == bal_p["opponent_repetition_limit"]:
             self.variety_slider.setValue(1)
             self.variety_slider.show()
             self.variety_value_label.setText("Balanced")
-        elif partner == 4 and opponent == 3:
+        elif partner == max_p["partner_repetition_limit"] and opponent == max_p["opponent_repetition_limit"]:
             self.variety_slider.setValue(2)
             self.variety_slider.show()
             self.variety_value_label.setText("Max")
@@ -1452,27 +1464,32 @@ class SessionWindow(QMainWindow):
         if not hasattr(self, 'waiting_list'):
             return
         
-        settings_map = {
-            0: (1, 1, "Min"),           # Min variety
-            1: (3, 2, "Balanced"),      # Balanced variety (default)
-            2: (4, 3, "Max"),           # Max variety
+        from python.competitive_variety import VARIETY_PROFILES
+        
+        # Map slider values to profile keys
+        slider_map = {
+            0: ("min", "Min"),
+            1: ("balanced", "Balanced"),
+            2: ("max", "Max")
         }
         
-        if value in settings_map:
-            partner, opponent, label = settings_map[value]
-            
-            # Apply preset
-            self.session.competitive_variety_partner_repetition_limit = partner
-            self.session.competitive_variety_opponent_repetition_limit = opponent
-            self.variety_value_label.setText(label)
-            
-            # Make sure slider is visible for preset settings
-            self.variety_slider.show()
-            
-            # Re-evaluate matches immediately
-            from python.queue_manager import populate_empty_courts
-            populate_empty_courts(self.session)
-            self.refresh_display()
+        if value in slider_map:
+            profile_key, label = slider_map[value]
+            if profile_key in VARIETY_PROFILES:
+                settings = VARIETY_PROFILES[profile_key]
+                
+                # Apply preset
+                self.session.competitive_variety_partner_repetition_limit = settings["partner_repetition_limit"]
+                self.session.competitive_variety_opponent_repetition_limit = settings["opponent_repetition_limit"]
+                self.variety_value_label.setText(label)
+                
+                # Make sure slider is visible for preset settings
+                self.variety_slider.show()
+                
+                # Re-evaluate matches immediately
+                from python.queue_manager import populate_empty_courts
+                populate_empty_courts(self.session)
+                self.refresh_display()
     
     def show_variety_custom_dialog(self):
         """Show custom variety settings dialog"""
@@ -1559,12 +1576,20 @@ class SessionWindow(QMainWindow):
         self.reset_variety_to_defaults()
     
     def reset_variety_to_defaults(self):
-        """Reset variety slider to default (Balanced 3,2)"""
-        self.session.competitive_variety_partner_repetition_limit = 3
-        self.session.competitive_variety_opponent_repetition_limit = 2
-        self.variety_slider.setValue(1)
-        self.variety_slider.show()
-        self.variety_value_label.setText("Balanced")
+        """Reset variety slider to dynamic default based on waitlist size"""
+        from python.competitive_variety import get_default_competitive_variety_settings
+        
+        # Get defaults based on current players
+        _, partner, opponent = get_default_competitive_variety_settings(
+            len(self.session.active_players),
+            self.session.config.courts
+        )
+        
+        # Apply only variety limits
+        self.session.competitive_variety_partner_repetition_limit = partner
+        self.session.competitive_variety_opponent_repetition_limit = opponent
+        
+        self.update_variety_slider_from_settings()
         
         # Re-evaluate matches immediately
         from python.queue_manager import populate_empty_courts
@@ -1664,11 +1689,18 @@ class SessionWindow(QMainWindow):
         self.reset_competitive_variety_to_defaults()
     
     def reset_competitive_variety_to_defaults(self):
-        """Reset competitiveness slider to default (Semi-Competitive 65%)"""
-        self.session.competitive_variety_roaming_range_percent = 0.65
-        self.competitive_variety_slider.setValue(1)
-        self.competitive_variety_slider.show()
-        self.competitive_variety_value_label.setText("Semi-Competitive")
+        """Reset competitiveness slider to the dynamic default based on waitlist size"""
+        from python.competitive_variety import get_default_competitive_variety_settings
+        
+        # Get defaults based on current players
+        roaming, _, _ = get_default_competitive_variety_settings(
+            len(self.session.active_players),
+            self.session.config.courts
+        )
+        
+        # Apply only roaming
+        self.session.competitive_variety_roaming_range_percent = roaming
+        self.update_slider_from_settings()
         
         # Re-evaluate matches immediately
         from python.queue_manager import populate_empty_courts

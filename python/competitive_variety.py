@@ -21,6 +21,29 @@ OPPONENT_REPETITION_GAMES_REQUIRED = 2  # Must wait 2 games before playing again
 # Roaming Range for Matchmaking
 ROAMING_RANK_PERCENTAGE = 0.5  # Players can play with others within +/- 50% of total players range
 
+# Profiles for Competitive Variety Settings
+COMPETITIVENESS_PROFILES = {
+    "ultra-competitive": 0.35,
+    "competitive": 0.5,
+    "semi-competitive": 0.65,
+    "casual": 0.8
+}
+
+VARIETY_PROFILES = {
+    "min": {
+        "partner_repetition_limit": 1,
+        "opponent_repetition_limit": 1
+    },
+    "balanced": {
+        "partner_repetition_limit": 3,
+        "opponent_repetition_limit": 2
+    },
+    "max": {
+        "partner_repetition_limit": 4,
+        "opponent_repetition_limit": 3
+    }
+}
+
 
 def calculate_elo_rating(player_stats) -> float:
     """
@@ -1061,17 +1084,39 @@ def get_default_competitive_variety_settings(total_players: int, num_courts: int
     
     Returns (roaming_range_percent, partner_repetition_limit, opponent_repetition_limit)
     
-    - 0-1 players in waitlist: Casual (80% roaming, 3 partner, 2 opponent)
-    - 2+ players in waitlist: Competitive (50% roaming, 3 partner, 2 opponent)
+    - 1 player in waitlist: Semi-Competitive (65% roaming, 3 partner, 2 opponent)
+    - 0, 2+ players in waitlist: Competitive (50% roaming, 3 partner, 2 opponent)
     """
     # Calculate waitlist size
     max_players_on_courts = num_courts * 4
     waitlist_size = total_players - max_players_on_courts
     
-    # Default to competitive if 2 or more on waitlist, otherwise casual
-    if waitlist_size >= 2:
-        # Competitive setting
-        return 0.5, 3, 2
+    # Default Variety is always Balanced
+    variety_settings = VARIETY_PROFILES["balanced"]
+    
+    # 1 Waitlist -> Semi-Competitive
+    if waitlist_size == 1:
+        roaming_percent = COMPETITIVENESS_PROFILES["semi-competitive"]
     else:
-        # Casual setting (0-1 players on waitlist)
-        return 0.8, 3, 2
+        # 0, 2+ (and negative) -> Competitive
+        roaming_percent = COMPETITIVENESS_PROFILES["competitive"]
+        
+    return roaming_percent, variety_settings["partner_repetition_limit"], variety_settings["opponent_repetition_limit"]
+
+
+def update_session_competitive_variety_settings(session: Session) -> None:
+    """
+    Update the session's competitive variety settings based on the current number of active players.
+    This should be called when players are added or removed.
+    """
+    if session.config.mode != 'competitive-variety':
+        return
+        
+    roaming, partner, opponent = get_default_competitive_variety_settings(
+        len(session.active_players),
+        session.config.courts
+    )
+    
+    session.competitive_variety_roaming_range_percent = roaming
+    session.competitive_variety_partner_repetition_limit = partner
+    session.competitive_variety_opponent_repetition_limit = opponent

@@ -484,6 +484,13 @@ sequence item 0: expected str instance, NoneType found
 * Remember, the roaming rank range applies in both directions! If you're rank #2 in a 16 player game with a 25% roaming range, you can play with 25% above, and 25% below you!
 * Matches are still being scheduled while violating the roaming range -- something isn't working. 
 * Changing the competetiveness slider is not filling empty courts. Also, update the "Casual" competetiveness setting to be 80% roaming range.
+* Refactor the competetiveness and variety logic to be profiles, make it easy to adjust and change which profile we use depending on different conditions (EG, like we do now depending on the waitlist size) --- reset it so that if we have 0, 2, 3, or 4+ on the waitlist, we default to competetive mode. If we have 1 on the waitlist, we deafult to semi-competetive.
+* partner_repetition_limit and opponent_repetition_limit are part of the variety constraints and need to be separate profile objects from competetiveness constraints.
+* If you click someones name on the waitlist or a match in the match history, after the timer ticks 1 second, the selection clears... This is tedious, make it so that the selected element persists past the timer ticks in the active session page.
+* You can now have an item selected in both the Waitlist and Match History at the same time, you should only ever be able to select a single item in any pane.
+* Now if you select something in Match History, and then select something in the Waitlist, it automatically jumps back to the match history selection after the timer ticks. Also, make it so that if you select something, then click it again, it deselects the item.
+* Now when you select an item in either the Waitlist or Match History, it does not appear to have the blue highlight anymore, making it unclear to the user that the item is selected at all.
+* The clicking behavior for selection is very unreliable, sometimes it takes 4 clicks to select an item and have it highlighted.
 
 # Easy state reset
 * We need to make it easier to track state and go back in time if we choose. Every time a match finishes, store all the necessary state to be able to load the session at that state. If you double click a match in the match history, an "Edit Match Score" pops up -- Instead of just "Save" "Cancel" options, add an option, "Load" which when clicked will load the active session to exactly right before this match was finished. Be careful about your implementation here, make sure any sneaky variables or state that also need to be updated get updated.
