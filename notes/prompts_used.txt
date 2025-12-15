@@ -441,7 +441,7 @@ This is great. Some improvements if you please:
 * If you add a partnership, you should not be able to select either of the two players in the partnership to create another lock.
 
 
-Forfeit Feature:
+#Forfeit Feature:
 * If you forfeit a match, the same exact players get immediately scheduled on the same court with the same configuration. That's not what should happen, instead that matchup should be skipped and   │
 │   not played until other matches have passed.                                                                                                                                                           │
 │   * If you add or remove a player, the same 2 people who were just on a team together are often placed in another game being on the same team together -- see @pickleball_session_20251126_113424.txt   │
@@ -459,6 +459,31 @@ TypeError: sequence item 0: expected str instance, NoneType found
 REFRESH ERROR: Error in refresh_display:
 sequence item 0: expected str instance, NoneType found
 
+
+# Dynamic competetiveness feature:
+*We need to be more relaxed depending on waitlist size!!!! If the waitlist has 0 or 1 players on it, we need the roaming range bracked requirement to be more relaxed -- IE 65% instead of 50%... If 2, 3, 4 or more are on the waitlist, we need to be more strict!!!
+** Implement a UI slider for competetive variety matchmaking on the active session UI to control the competetiveness. It should be located to the left of the "toggle voice announcements" button. There should be 4 positions for it -- Casual, Semi-Competitive, Competetive, Ultra-Competetive, Custom. When casual, is set, roaming range percent = 100. When semi-competetive is set, roaming range percent is set to 65. When Competetive is set, roaming range is set to 50, when ultra-competetive is set, roaming range is set to 35 and opponent and partnership repetition limits are both set to 1. When custom is clicked, a dialog pops up letting the user set the roaming range, partnership, and opponent repetition parameters. -- 
+** When the slider is moved, the competetive variety matchmaking algorithm should immediately re-evaluate if it can make any new matches given the condition changes, and use those changed conditions going forward.
+** By default when creating a session, if there are 2,3,4 or more people on the waitlist, default to the competetive setting. If there are 0 or 1 people on the waitlist, default to semi-competetive. You know the waitlist size by doing the math: total-players modulo 4, and also taking into account the number of active courts (EG if there are 4 courts, and 24 players, the waitlist is 8 because you can only occupy 16 players at a time due to the number of court constraints). 
+* Update custom so that it's not a position on the slider, rather if you double click the "Competitiveness" Label, the dialog to set custom settings pops up. If a user confirms custom settings, the blue slider circle should just disappear.
+* Add a "Show Rank" button to the right of the "Show Time Waited" button and styled the same. When pressed, the player rank appears in parenthesis to the right of the player name, EG: "Peter Parker [14]" "Iris West [2]"
+* Update "Show Rank" to also add the ranks on the active courts when toggled.
+* It appears that there is a bug where moving the competetiveness slider does not reevaluate whether a current match can be made... Verify that that code is actually in place.
+* Add a slider for "Variety" that controls the opponent and partnership repetition constraints. It should have the levels "min" "balanced" "max", at "min", the partnership and opponent constraints are set to 1,1. At Balanced, we get what we have now, 3,2. and at Max, we get 4,3. This should also support clicking the "Variety" label to set a custom value for this parameter, similar to clicking the "Competetiveness" label. Make sure to re-evaluate the court situation and whether we can make a new court once the variety slider is moved.
+* Remove the fact that setting competetiveness to "Ultra-Competetive" changes the partnership and opponent repetition parameters, it should only edit the roaming range percentage.
+* In custom variety settings dialog, let me set the partnership and opponent parameters to 0 (right now it only lets me set it to 1).
+* I set custom variety to 0-0, and mode to casual -- which should immediately make a court if there are 4 players available, and no court was made. Clearly The court evaluation is not happening when competetive or variety sliders are moved. They are only happening when a match finishes. 
+* Editing the custom "Competetiveness" dialog still has variety settings, but we've moved that logic to it's own variety slider. Update the dialog to only have the roaming range option (and also update us to set it to whatever percent of the current player pool gives us 4 players (EG if 16 players, 25% is 4 players). 
+* Add a reset button to the custom dialog that allows us to bring back the old sliders and resets them to the default.
+* The custom Variety dialog also needs a similar "Reset to Default" feature.
+* Update the custom variety dialog to set the minimum roaming percentage to the smallest percent of the current player pool that gives us 4 players -- for example, if it's 16 players, 25% gets us 4 players. If it's 18 players, it's 23% (make sure you round up!)
+* Roaming range can still go to 0% when there 16 players, the minimum should be 25%!
+
+# Easy state reset
+* We need to make it easier to track state and go back in time if we choose. Every time a match finishes, store all the necessary state to be able to load the session at that state. If you double click a match in the match history, an "Edit Match Score" pops up -- Instead of just "Save" "Cancel" options, add an option, "Load" which when clicked will load the active session to exactly right before this match was finished. Be careful about your implementation here, make sure any sneaky variables or state that also need to be updated get updated.
+
+# TODO 
+* BUG: If a court slide action happens, and a historic match is loaded, the slide action needs to be undone and the court needs to be set to the original position.
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts
@@ -504,4 +529,17 @@ Storage:
      - Windows: C:\Users\<username>\.pickleball\
      - macOS: /Users/<username>/.pickleball/
      - Linux: /home/<username>/.pickleball/
+
+# TODO 
+
+*Make sure first 2 provisional matches are ACTUALLY RANDOM -- not just using the list!
+*Add Rounds Mode
+*Fix bug where going from 15 to 16 people never utilizes the 4th court!
+*With no waitlisted players (or 1 waitlisted player), we need to be more lax about making courts (like it is now). --- TBD 
+*Add a clickable button with instructions (so I can just read them, instead of remembering!)
+*Add NxM grid support for setup
+*Add ability to disable broken courts 
+*Add Team Competetive Variety Mode
+*Add Team Support for people that want to play together for Regular Competetive Variety (BE CAREFUL NOT TO BREAK THE ALGO!!!)
+*Add singles support
 

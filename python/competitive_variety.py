@@ -95,9 +95,11 @@ def get_roaming_rank_range(session: Session, player_id: str) -> Tuple[int, int]:
     
     For competitive variety mode:
     - Each player can play with others in a range based on their rank
-    - Range: player_rank to (player_rank + 50% of total active players)
+    - Range: player_rank to (player_rank + roaming_percent% of total active players)
     - Example: 20 players, player ranked #2: can play with ranks 2-12 (2 + 10 = 12)
     - Example: 20 players, player ranked #14: can play with ranks 14-24 (capped at 20)
+    
+    Uses session-level competitive_variety_roaming_range_percent setting.
     
     Returns (min_rank, max_rank) inclusive.
     Only applies when 12+ players.
@@ -109,7 +111,8 @@ def get_roaming_rank_range(session: Session, player_id: str) -> Tuple[int, int]:
         return 1, total_players
     
     player_rank, _ = get_player_ranking(session, player_id)
-    roaming_distance = int(total_players * ROAMING_RANK_PERCENTAGE)
+    roaming_percent = session.competitive_variety_roaming_range_percent
+    roaming_distance = int(total_players * roaming_percent)
     
     # Roaming window goes from player_rank to (player_rank + roaming_distance)
     min_rank = player_rank
@@ -366,9 +369,10 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
     # If they played together/against in the last X matches globally, forbid it.
     
     if len(session.active_players) >= 8:
-        # Check Partner Repetition (Last 3 Global Games)
+        # Check Partner Repetition (Last N Global Games - using session setting)
         if role == 'partner':
-            matches_to_check = completed_matches[-PARTNER_REPETITION_GAMES_REQUIRED:] if PARTNER_REPETITION_GAMES_REQUIRED > 0 else []
+            partner_limit = session.competitive_variety_partner_repetition_limit
+            matches_to_check = completed_matches[-partner_limit:] if partner_limit > 0 else []
             for m in matches_to_check:
                 p1_t1 = player1 in m.team1
                 p1_t2 = player1 in m.team2
@@ -378,9 +382,10 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
                 if (p1_t1 and p2_t1) or (p1_t2 and p2_t2):
                     return False
 
-        # Check Opponent Repetition (Last 3 Global Games)
+        # Check Opponent Repetition (Last N Global Games - using session setting)
         elif role == 'opponent':
-            matches_to_check = completed_matches[-OPPONENT_REPETITION_GAMES_REQUIRED:] if OPPONENT_REPETITION_GAMES_REQUIRED > 0 else []
+            opponent_limit = session.competitive_variety_opponent_repetition_limit
+            matches_to_check = completed_matches[-opponent_limit:] if opponent_limit > 0 else []
             for m in matches_to_check:
                 p1_t1 = player1 in m.team1
                 p1_t2 = player1 in m.team2
@@ -445,7 +450,8 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
             
             # Apply constraint
             if len(session.active_players) >= 8:
-                 if intervening_games < PARTNER_REPETITION_GAMES_REQUIRED:
+                 partner_limit = session.competitive_variety_partner_repetition_limit
+                 if intervening_games < partner_limit:
                      return False
             elif intervening_games < 1: # Basic back-to-back check for small groups
                  return False
@@ -454,7 +460,8 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
             intervening_games = current_personal_game_count - last_played_against_idx - 1
             
             if len(session.active_players) >= 8:
-                 if intervening_games < OPPONENT_REPETITION_GAMES_REQUIRED:
+                 opponent_limit = session.competitive_variety_opponent_repetition_limit
+                 if intervening_games < opponent_limit:
                      return False
             elif intervening_games < 1:
                  return False
@@ -1021,3 +1028,28 @@ def should_allow_court_mixing(
         return False
     
     return True
+
+
+def get_default_competitive_variety_settings(total_players: int, num_courts: int) -> Tuple[float, int, int]:
+    """
+    Get default competitive variety settings based on waitlist size.
+    
+    Waitlist size = (total_players % 4) but accounting for court constraints.
+    Actual calculation: total_players - (num_courts * 4)
+    
+    Returns (roaming_range_percent, partner_repetition_limit, opponent_repetition_limit)
+    
+    - 0-1 players in waitlist: Semi-Competitive (65% roaming, 3 partner, 2 opponent)
+    - 2+ players in waitlist: Competitive (50% roaming, 3 partner, 2 opponent)
+    """
+    # Calculate waitlist size
+    max_players_on_courts = num_courts * 4
+    waitlist_size = total_players - max_players_on_courts
+    
+    # Default to competitive if 2 or more on waitlist, otherwise semi-competitive
+    if waitlist_size >= 2:
+        # Competitive setting
+        return 0.5, 3, 2
+    else:
+        # Semi-Competitive setting (0-1 players on waitlist)
+        return 0.65, 3, 2

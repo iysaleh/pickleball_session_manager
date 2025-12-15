@@ -138,6 +138,9 @@ def serialize_session(session) -> Dict:
         "active_players": list(session.active_players),
         "match_queue": queue_data,
         "match_history_snapshots": snapshots_data,
+        "competitive_variety_roaming_range_percent": session.competitive_variety_roaming_range_percent,
+        "competitive_variety_partner_repetition_limit": session.competitive_variety_partner_repetition_limit,
+        "competitive_variety_opponent_repetition_limit": session.competitive_variety_opponent_repetition_limit,
         "saved_at": datetime.now().isoformat()
     }
 
@@ -337,6 +340,14 @@ def deserialize_session(data: Dict):
         match_queue=match_queue,
         match_history_snapshots=match_history_snapshots
     )
+    
+    # Load competitive variety settings if available
+    if "competitive_variety_roaming_range_percent" in data:
+        session.competitive_variety_roaming_range_percent = data["competitive_variety_roaming_range_percent"]
+    if "competitive_variety_partner_repetition_limit" in data:
+        session.competitive_variety_partner_repetition_limit = data["competitive_variety_partner_repetition_limit"]
+    if "competitive_variety_opponent_repetition_limit" in data:
+        session.competitive_variety_opponent_repetition_limit = data["competitive_variety_opponent_repetition_limit"]
     
     return session
 

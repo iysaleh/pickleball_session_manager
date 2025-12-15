@@ -147,6 +147,10 @@ class Session:
     courts_mixed_history: Set[tuple] = field(default_factory=set)  # Set of (court_a, court_b) tuples that have mixed
     # Match history snapshots for loading previous states
     match_history_snapshots: List['MatchSnapshot'] = field(default_factory=list)
+    # Competitive Variety Settings
+    competitive_variety_roaming_range_percent: float = 0.5  # Roaming range as percentage (0.35-1.0)
+    competitive_variety_partner_repetition_limit: int = 3  # Games to wait before playing with same partner
+    competitive_variety_opponent_repetition_limit: int = 2  # Games to wait before playing against same opponent
 
 
 @dataclass

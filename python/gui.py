@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLineEdit, QSpinBox, QComboBox, QLabel, QListWidget,
     QListWidgetItem, QDialog, QTabWidget, QTableWidget, QTableWidgetItem,
     QMessageBox, QInputDialog, QSpinBox, QGroupBox, QCheckBox, QFrame, QScrollArea,
-    QGridLayout, QSpacerItem, QSizePolicy
+    QGridLayout, QSpacerItem, QSizePolicy, QSlider, QDialogButtonBox
 )
 from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup
 from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen, QPixmap
@@ -28,6 +28,34 @@ from python.session import (
     get_active_matches, get_completed_matches, evaluate_and_create_matches,
     get_active_player_names
 )
+
+
+class CompetitivenessLabel(QLabel):
+    """Custom label for competitiveness that handles double-click for custom dialog"""
+    
+    def __init__(self, parent_window=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.parent_window = parent_window
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+    
+    def mouseDoubleClickEvent(self, event):
+        """Handle double-click to open custom settings dialog"""
+        if self.parent_window and hasattr(self.parent_window, 'show_competitive_variety_custom_dialog'):
+            self.parent_window.show_competitive_variety_custom_dialog()
+
+
+class VarietyLabel(QLabel):
+    """Custom label for variety that handles double-click for custom dialog"""
+    
+    def __init__(self, parent_window=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.parent_window = parent_window
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+    
+    def mouseDoubleClickEvent(self, event):
+        """Handle double-click to open custom settings dialog"""
+        if self.parent_window and hasattr(self.parent_window, 'show_variety_custom_dialog'):
+            self.parent_window.show_variety_custom_dialog()
 
 
 class ClickableLabel(QLabel):
@@ -583,11 +611,12 @@ class SetupDialog(QDialog):
 class CourtDisplayWidget(QWidget):
     """Visual display of a court with team rectangles"""
     
-    def __init__(self, court_number: int, session: Session, parent=None):
+    def __init__(self, court_number: int, session: Session, parent=None, show_rank: bool = False):
         super().__init__(parent)
         self.court_number = court_number
         self.session = session
         self.current_match: Optional[Match] = None
+        self.show_rank = show_rank
         self.default_title = f"Court {self.court_number}"
         self.custom_title = None
         self.timer = QTimer()
@@ -726,6 +755,14 @@ class CourtDisplayWidget(QWidget):
         # Get player names
         team1_names = [get_player_name(self.session, pid) for pid in match.team1]
         team2_names = [get_player_name(self.session, pid) for pid in match.team2]
+        
+        # Add ranks if toggle is on
+        if self.show_rank:
+            from python.competitive_variety import get_player_ranking
+            team1_names = [f"{name} [{get_player_ranking(self.session, pid)[0]}]" 
+                          for name, pid in zip(team1_names, match.team1)]
+            team2_names = [f"{name} [{get_player_ranking(self.session, pid)[0]}]" 
+                          for name, pid in zip(team2_names, match.team2)]
         
         self.team1_label.setText("\n".join(team1_names))
         self.team2_label.setText("\n".join(team2_names))
@@ -949,6 +986,8 @@ class SessionWindow(QMainWindow):
             self.parent_window = parent_window
             self.court_widgets: Dict[int, CourtDisplayWidget] = {}
             self.sound_enabled = False
+            self.show_wait_times = False
+            self.show_rank = False
             self.last_known_matches: Dict[int, str] = {}
             self.announcement_queue: List[str] = []
             self.is_announcing = False
@@ -998,13 +1037,19 @@ class SessionWindow(QMainWindow):
         # Courts section
         courts_section = QVBoxLayout()
         
-        # Courts header with sound toggle
+        # Courts header with competitive variety slider and sound toggle
         courts_header = QHBoxLayout()
         
         courts_label = QLabel("Active Courts")
         courts_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         courts_label.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 8px; border-radius: 3px; }")
         courts_header.addWidget(courts_label, 1)
+        
+        # Competitive Variety Slider (only for competitive-variety mode)
+        if self.session.config.mode == 'competitive-variety':
+            self.init_competitive_variety_slider(courts_header)
+            # Add variety slider after competitiveness slider
+            self.init_variety_slider(courts_header)
         
         self.sound_toggle_btn = QPushButton("🔇")
         self.sound_toggle_btn.setCheckable(True)
@@ -1038,7 +1083,7 @@ class SessionWindow(QMainWindow):
         courts_layout.setSpacing(10)
         
         for court_num in range(1, self.session.config.courts + 1):
-            widget = CourtDisplayWidget(court_num, self.session)
+            widget = CourtDisplayWidget(court_num, self.session, show_rank=self.show_rank)
             self.court_widgets[court_num] = widget
             row = (court_num - 1) // 2
             col = (court_num - 1) % 2
@@ -1073,6 +1118,15 @@ class SessionWindow(QMainWindow):
         self.toggle_wait_times_btn.clicked.connect(self.toggle_wait_times_display)
         self.show_wait_times = False
         waiting_header.addWidget(self.toggle_wait_times_btn)
+        
+        # Toggle button for rank display
+        self.toggle_rank_btn = QPushButton("Show Rank")
+        self.toggle_rank_btn.setMaximumWidth(120)
+        self.toggle_rank_btn.setStyleSheet("QPushButton { background-color: #4a4a4a; color: white; font-weight: bold; padding: 5px; border-radius: 3px; font-size: 10px; } QPushButton:hover { background-color: #5a5a5a; }")
+        self.toggle_rank_btn.clicked.connect(self.toggle_rank_display)
+        self.show_rank = False
+        waiting_header.addWidget(self.toggle_rank_btn)
+        
         waiting_header.addStretch()
         
         right_section.addLayout(waiting_header)
@@ -1188,6 +1242,424 @@ class SessionWindow(QMainWindow):
             self.sound_toggle_btn.setText("🔊")
         else:
             self.sound_toggle_btn.setText("🔇")
+
+    def init_competitive_variety_slider(self, parent_layout: QHBoxLayout):
+        """Initialize the competitive variety slider widget"""
+        slider_container = QHBoxLayout()
+        
+        # Slider label - double click for custom settings
+        self.competitiveness_label = CompetitivenessLabel(parent_window=self)
+        self.competitiveness_label.setText("Competitiveness:")
+        self.competitiveness_label.setStyleSheet("QLabel { color: white; font-size: 10px; font-weight: bold; }")
+        self.competitiveness_label.setMaximumWidth(80)
+        self.competitiveness_label.setToolTip("Double-click for custom settings")
+        slider_container.addWidget(self.competitiveness_label)
+        
+        # Create slider with 4 positions: 0=Casual, 1=Semi-Comp, 2=Comp, 3=Ultra-Comp
+        # Custom is accessed by double-clicking the label
+        self.competitive_variety_slider = QSlider(Qt.Orientation.Horizontal)
+        self.competitive_variety_slider.setMinimum(0)
+        self.competitive_variety_slider.setMaximum(3)
+        self.competitive_variety_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.competitive_variety_slider.setTickInterval(1)
+        self.competitive_variety_slider.setMaximumWidth(200)
+        self.competitive_variety_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                background-color: #3a3a3a;
+                height: 8px;
+                border-radius: 4px;
+            }
+            QSlider::handle:horizontal {
+                background-color: #2196F3;
+                width: 16px;
+                margin: -4px 0px;
+                border-radius: 8px;
+            }
+            QSlider::handle:horizontal:hover {
+                background-color: #42A5F5;
+            }
+        """)
+        slider_container.addWidget(self.competitive_variety_slider)
+        
+        # Value label
+        self.competitive_variety_value_label = QLabel("Semi-Competitive")
+        self.competitive_variety_value_label.setStyleSheet("QLabel { color: white; font-size: 10px; font-weight: bold; }")
+        self.competitive_variety_value_label.setMinimumWidth(90)
+        slider_container.addWidget(self.competitive_variety_value_label)
+        
+        # Set initial slider position based on current settings (before connecting signals)
+        self.update_slider_from_settings()
+        
+        # Connect signals AFTER setting initial value to avoid triggering during init
+        self.competitive_variety_slider.sliderMoved.connect(self.on_competitive_variety_slider_moved)
+        self.competitive_variety_slider.valueChanged.connect(self.on_competitive_variety_slider_moved)
+        
+        parent_layout.addLayout(slider_container, 0)
+
+    def update_slider_from_settings(self):
+        """Update slider position based on current session settings"""
+        roaming = self.session.competitive_variety_roaming_range_percent
+        
+        if roaming == 1.0:
+            self.competitive_variety_slider.setValue(0)
+            self.competitive_variety_slider.show()
+            self.competitive_variety_value_label.setText("Casual")
+        elif roaming == 0.65:
+            self.competitive_variety_slider.setValue(1)
+            self.competitive_variety_slider.show()
+            self.competitive_variety_value_label.setText("Semi-Competitive")
+        elif roaming == 0.5:
+            self.competitive_variety_slider.setValue(2)
+            self.competitive_variety_slider.show()
+            self.competitive_variety_value_label.setText("Competitive")
+        elif roaming == 0.35:
+            self.competitive_variety_slider.setValue(3)
+            self.competitive_variety_slider.show()
+            self.competitive_variety_value_label.setText("Ultra-Competitive")
+        else:
+            # Custom settings - hide the slider
+            self.competitive_variety_slider.hide()
+            self.competitive_variety_value_label.setText("Custom")
+
+    def on_competitive_variety_slider_moved(self, value):
+        """Handle competitive variety slider movement"""
+        # Only process if we have a waiting_list (i.e., init is complete)
+        if not hasattr(self, 'waiting_list'):
+            return
+        
+        settings_map = {
+            0: (1.0, "Casual"),           # 100% roaming
+            1: (0.65, "Semi-Competitive"), # 65% roaming
+            2: (0.5, "Competitive"),       # 50% roaming
+            3: (0.35, "Ultra-Competitive"), # 35% roaming
+        }
+        
+        if value in settings_map:
+            roaming, label = settings_map[value]
+            
+            # Apply preset - only roaming range, not repetition limits
+            self.session.competitive_variety_roaming_range_percent = roaming
+            self.competitive_variety_value_label.setText(label)
+            
+            # Make sure slider is visible for preset settings
+            self.competitive_variety_slider.show()
+            
+            # Re-evaluate matches immediately
+            from python.queue_manager import populate_empty_courts
+            populate_empty_courts(self.session)
+            self.refresh_display()
+
+    def init_variety_slider(self, parent_layout: QHBoxLayout):
+        """Initialize the variety (repetition limits) slider widget"""
+        slider_container = QHBoxLayout()
+        
+        # Slider label - double click for custom settings
+        self.variety_label = VarietyLabel(parent_window=self)
+        self.variety_label.setText("Variety:")
+        self.variety_label.setStyleSheet("QLabel { color: white; font-size: 10px; font-weight: bold; }")
+        self.variety_label.setMaximumWidth(60)
+        self.variety_label.setToolTip("Double-click for custom settings")
+        slider_container.addWidget(self.variety_label)
+        
+        # Create slider with 3 positions: 0=Min, 1=Balanced, 2=Max
+        self.variety_slider = QSlider(Qt.Orientation.Horizontal)
+        self.variety_slider.setMinimum(0)
+        self.variety_slider.setMaximum(2)
+        self.variety_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.variety_slider.setTickInterval(1)
+        self.variety_slider.setMaximumWidth(150)
+        self.variety_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                background-color: #3a3a3a;
+                height: 8px;
+                border-radius: 4px;
+            }
+            QSlider::handle:horizontal {
+                background-color: #FF9800;
+                width: 16px;
+                margin: -4px 0px;
+                border-radius: 8px;
+            }
+            QSlider::handle:horizontal:hover {
+                background-color: #FFB74D;
+            }
+        """)
+        slider_container.addWidget(self.variety_slider)
+        
+        # Value label
+        self.variety_value_label = QLabel("Balanced")
+        self.variety_value_label.setStyleSheet("QLabel { color: white; font-size: 10px; font-weight: bold; }")
+        self.variety_value_label.setMinimumWidth(60)
+        slider_container.addWidget(self.variety_value_label)
+        
+        # Set initial slider position based on current settings
+        self.update_variety_slider_from_settings()
+        
+        # Connect signals AFTER setting initial value
+        self.variety_slider.sliderMoved.connect(self.on_variety_slider_moved)
+        self.variety_slider.valueChanged.connect(self.on_variety_slider_moved)
+        
+        parent_layout.addLayout(slider_container, 0)
+    
+    def update_variety_slider_from_settings(self):
+        """Update variety slider position based on current session settings"""
+        partner = self.session.competitive_variety_partner_repetition_limit
+        opponent = self.session.competitive_variety_opponent_repetition_limit
+        
+        if partner == 1 and opponent == 1:
+            self.variety_slider.setValue(0)
+            self.variety_slider.show()
+            self.variety_value_label.setText("Min")
+        elif partner == 3 and opponent == 2:
+            self.variety_slider.setValue(1)
+            self.variety_slider.show()
+            self.variety_value_label.setText("Balanced")
+        elif partner == 4 and opponent == 3:
+            self.variety_slider.setValue(2)
+            self.variety_slider.show()
+            self.variety_value_label.setText("Max")
+        else:
+            # Custom settings - hide the slider
+            self.variety_slider.hide()
+            self.variety_value_label.setText("Custom")
+    
+    def on_variety_slider_moved(self, value):
+        """Handle variety slider movement"""
+        # Only process if we have a waiting_list (i.e., init is complete)
+        if not hasattr(self, 'waiting_list'):
+            return
+        
+        settings_map = {
+            0: (1, 1, "Min"),           # Min variety
+            1: (3, 2, "Balanced"),      # Balanced variety (default)
+            2: (4, 3, "Max"),           # Max variety
+        }
+        
+        if value in settings_map:
+            partner, opponent, label = settings_map[value]
+            
+            # Apply preset
+            self.session.competitive_variety_partner_repetition_limit = partner
+            self.session.competitive_variety_opponent_repetition_limit = opponent
+            self.variety_value_label.setText(label)
+            
+            # Make sure slider is visible for preset settings
+            self.variety_slider.show()
+            
+            # Re-evaluate matches immediately
+            from python.queue_manager import populate_empty_courts
+            populate_empty_courts(self.session)
+            self.refresh_display()
+    
+    def show_variety_custom_dialog(self):
+        """Show custom variety settings dialog"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Custom Variety Settings")
+        dialog.setStyleSheet("""
+            QDialog { background-color: #2a2a2a; color: white; }
+            QLabel { color: white; }
+            QSpinBox { background-color: #3a3a3a; color: white; }
+            QPushButton { background-color: #555555; color: white; padding: 5px; border-radius: 3px; }
+            QPushButton:hover { background-color: #666666; }
+        """)
+        
+        layout = QVBoxLayout()
+        
+        # Partner Repetition Limit
+        partner_layout = QHBoxLayout()
+        partner_label = QLabel("Partner Repetition Wait (games):")
+        partner_label.setMinimumWidth(200)
+        partner_layout.addWidget(partner_label)
+        
+        partner_spin = QSpinBox()
+        partner_spin.setMinimum(0)
+        partner_spin.setMaximum(5)
+        partner_spin.setValue(self.session.competitive_variety_partner_repetition_limit)
+        partner_layout.addWidget(partner_spin)
+        partner_layout.addStretch()
+        
+        layout.addLayout(partner_layout)
+        
+        # Opponent Repetition Limit
+        opponent_layout = QHBoxLayout()
+        opponent_label = QLabel("Opponent Repetition Wait (games):")
+        opponent_label.setMinimumWidth(200)
+        opponent_layout.addWidget(opponent_label)
+        
+        opponent_spin = QSpinBox()
+        opponent_spin.setMinimum(0)
+        opponent_spin.setMaximum(5)
+        opponent_spin.setValue(self.session.competitive_variety_opponent_repetition_limit)
+        opponent_layout.addWidget(opponent_spin)
+        opponent_layout.addStretch()
+        
+        layout.addLayout(opponent_layout)
+        
+        # Buttons
+        reset_btn = QPushButton("Reset to Default")
+        reset_btn.setStyleSheet("""
+            QPushButton { background-color: #FF6B6B; color: white; padding: 5px; border-radius: 3px; }
+            QPushButton:hover { background-color: #FF8888; }
+        """)
+        ok_btn = QPushButton("OK")
+        cancel_btn = QPushButton("Cancel")
+        
+        button_box = QDialogButtonBox()
+        button_box.addButton(reset_btn, QDialogButtonBox.ButtonRole.ResetRole)
+        button_box.addButton(ok_btn, QDialogButtonBox.ButtonRole.AcceptRole)
+        button_box.addButton(cancel_btn, QDialogButtonBox.ButtonRole.RejectRole)
+        
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        reset_btn.clicked.connect(lambda: self.handle_variety_reset(dialog))
+        
+        layout.addWidget(button_box)
+        dialog.setLayout(layout)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Apply custom settings (variety only, NOT roaming)
+            self.session.competitive_variety_partner_repetition_limit = partner_spin.value()
+            self.session.competitive_variety_opponent_repetition_limit = opponent_spin.value()
+            
+            # Hide the slider for custom settings
+            self.variety_slider.hide()
+            self.variety_value_label.setText("Custom")
+            
+            # Re-evaluate matches immediately
+            from python.queue_manager import populate_empty_courts
+            populate_empty_courts(self.session)
+            self.refresh_display()
+    
+    def handle_variety_reset(self, dialog):
+        """Handle reset button in variety dialog"""
+        dialog.reject()  # Close the dialog
+        self.reset_variety_to_defaults()
+    
+    def reset_variety_to_defaults(self):
+        """Reset variety slider to default (Balanced 3,2)"""
+        self.session.competitive_variety_partner_repetition_limit = 3
+        self.session.competitive_variety_opponent_repetition_limit = 2
+        self.variety_slider.setValue(1)
+        self.variety_slider.show()
+        self.variety_value_label.setText("Balanced")
+        
+        # Re-evaluate matches immediately
+        from python.queue_manager import populate_empty_courts
+        populate_empty_courts(self.session)
+        self.refresh_display()
+
+
+    def show_competitive_variety_custom_dialog(self):
+        """Show custom competitive variety settings dialog (roaming range only)"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Custom Competitiveness Settings")
+        dialog.setStyleSheet("""
+            QDialog { background-color: #2a2a2a; color: white; }
+            QLabel { color: white; }
+            QSlider { background-color: #3a3a3a; }
+            QPushButton { background-color: #555555; color: white; padding: 5px; border-radius: 3px; }
+            QPushButton:hover { background-color: #666666; }
+        """)
+        
+        layout = QVBoxLayout()
+        
+        # Calculate minimum roaming percentage (4 players / total players, rounded up)
+        import math
+        total_players = len(self.session.active_players)
+        min_roaming_percent = math.ceil(4 / max(total_players, 1) * 100)
+        
+        # Info label showing minimum roaming
+        info_label = QLabel(f"Min roaming: {min_roaming_percent}% for 4 players")
+        info_label.setStyleSheet("QLabel { color: #aaaaaa; font-size: 9px; }")
+        layout.addWidget(info_label)
+        
+        # Roaming Range Slider
+        roaming_layout = QHBoxLayout()
+        roaming_label = QLabel("Roaming Range %:")
+        roaming_label.setMinimumWidth(150)
+        roaming_layout.addWidget(roaming_label)
+        
+        roaming_slider = QSlider(Qt.Orientation.Horizontal)
+        roaming_slider.setMinimum(min_roaming_percent)
+        roaming_slider.setMaximum(100)
+        
+        # Ensure the current value respects the minimum
+        current_roaming = int(self.session.competitive_variety_roaming_range_percent * 100)
+        current_roaming = max(current_roaming, min_roaming_percent)
+        
+        roaming_slider.setValue(current_roaming)
+        roaming_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        roaming_slider.setTickInterval(5)
+        roaming_layout.addWidget(roaming_slider)
+        
+        roaming_value_label = QLabel(str(roaming_slider.value()))
+        roaming_value_label.setMinimumWidth(40)
+        roaming_layout.addWidget(roaming_value_label)
+        
+        roaming_slider.valueChanged.connect(lambda v: roaming_value_label.setText(str(v)))
+        
+        layout.addLayout(roaming_layout)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        reset_btn = QPushButton("Reset to Default")
+        reset_btn.setStyleSheet("""
+            QPushButton { background-color: #FF6B6B; color: white; padding: 5px; border-radius: 3px; }
+            QPushButton:hover { background-color: #FF8888; }
+        """)
+        ok_btn = QPushButton("OK")
+        cancel_btn = QPushButton("Cancel")
+        
+        button_box = QDialogButtonBox()
+        button_box.addButton(reset_btn, QDialogButtonBox.ButtonRole.ResetRole)
+        button_box.addButton(ok_btn, QDialogButtonBox.ButtonRole.AcceptRole)
+        button_box.addButton(cancel_btn, QDialogButtonBox.ButtonRole.RejectRole)
+        
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        reset_btn.clicked.connect(lambda: self.handle_competitiveness_reset(dialog))
+        
+        layout.addWidget(button_box)
+        dialog.setLayout(layout)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Apply custom settings (roaming only)
+            self.session.competitive_variety_roaming_range_percent = roaming_slider.value() / 100.0
+            
+            # Hide the slider for custom settings
+            self.competitive_variety_slider.hide()
+            self.competitive_variety_value_label.setText("Custom")
+            
+            # Re-evaluate matches immediately
+            from python.queue_manager import populate_empty_courts
+            populate_empty_courts(self.session)
+            self.refresh_display()
+    
+    def handle_competitiveness_reset(self, dialog):
+        """Handle reset button in competitiveness dialog"""
+        dialog.reject()  # Close the dialog
+        self.reset_competitive_variety_to_defaults()
+    
+    def reset_competitive_variety_to_defaults(self):
+        """Reset competitiveness slider to default (Semi-Competitive 65%)"""
+        self.session.competitive_variety_roaming_range_percent = 0.65
+        self.competitive_variety_slider.setValue(1)
+        self.competitive_variety_slider.show()
+        self.competitive_variety_value_label.setText("Semi-Competitive")
+        
+        # Re-evaluate matches immediately
+        from python.queue_manager import populate_empty_courts
+        populate_empty_courts(self.session)
+        self.refresh_display()
+
+    def re_evaluate_competitive_variety_matches(self):
+        """Re-evaluate and create new matches based on competitive variety settings"""
+        try:
+            # Use the evaluate_and_create_matches function from session module
+            evaluate_and_create_matches(self.session)
+            self.refresh_display()
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Error re-evaluating matches:\n{str(e)}")
 
     def announce_all_courts(self):
         """Announce all currently active courts"""
@@ -1353,6 +1825,21 @@ class SessionWindow(QMainWindow):
         # Trigger a refresh to update the display
         self.refresh_display()
     
+    def toggle_rank_display(self):
+        """Toggle the display of player ranks in the waitlist and active courts"""
+        self.show_rank = not self.show_rank
+        if self.show_rank:
+            self.toggle_rank_btn.setText("Hide Rank")
+        else:
+            self.toggle_rank_btn.setText("Show Rank")
+        
+        # Update court displays with new rank setting
+        for court_widget in self.court_widgets.values():
+            court_widget.show_rank = self.show_rank
+        
+        # Trigger a refresh to update the display
+        self.refresh_display()
+    
     def animate_court_sliding(self, slides: List[Dict]):
         """Animate court changes"""
         self.update_timer.stop()
@@ -1482,6 +1969,15 @@ class SessionWindow(QMainWindow):
                 # Start wait timer for players on waitlist
                 if player_id in self.session.player_stats:
                     start_player_wait_timer(self.session.player_stats[player_id])
+                    # Build the display text
+                    item_text = player_name
+                    
+                    # Add rank if toggle is on
+                    if self.show_rank:
+                        from python.competitive_variety import get_player_ranking
+                        rank, _ = get_player_ranking(self.session, player_id)
+                        item_text += f" [{rank}]"
+                    
                     # Get current wait time and format it only if toggle is on
                     if self.show_wait_times:
                         from python.utils import get_current_wait_time, format_duration
@@ -1495,12 +1991,16 @@ class SessionWindow(QMainWindow):
                         total_wait = stats.total_wait_time + current_wait
                         total_wait_str = format_duration(total_wait)
                         
-                        item_text = f"{player_name}  [{current_wait_str} / {total_wait_str}]"
-                    else:
-                        item_text = player_name
+                        item_text += f"  [{current_wait_str} / {total_wait_str}]"
+                    
+                    self.waiting_list.addItem(item_text)
                 else:
                     item_text = player_name
-                self.waiting_list.addItem(item_text)
+                    if self.show_rank:
+                        from python.competitive_variety import get_player_ranking
+                        rank, _ = get_player_ranking(self.session, player_id)
+                        item_text += f" [{rank}]"
+                    self.waiting_list.addItem(item_text)
             
             self.waiting_count.setText(f"{len(waiting_ids)} player{'s' if len(waiting_ids) != 1 else ''} waiting")
             

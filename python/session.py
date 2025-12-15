@@ -58,7 +58,7 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     if final_config.mode == 'competitive-variety':
         waiting_players = [p.id for p in players_to_use]
     
-    return Session(
+    session = Session(
         id=generate_id(),
         config=final_config,
         matches=[],
@@ -69,6 +69,19 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
         max_queue_size=max_queue_size,
         advanced_config=advanced_config
     )
+    
+    # Set default competitive variety settings based on waitlist size
+    if final_config.mode == 'competitive-variety':
+        from .competitive_variety import get_default_competitive_variety_settings
+        roaming_range, partner_limit, opponent_limit = get_default_competitive_variety_settings(
+            len(players_to_use),
+            config.courts
+        )
+        session.competitive_variety_roaming_range_percent = roaming_range
+        session.competitive_variety_partner_repetition_limit = partner_limit
+        session.competitive_variety_opponent_repetition_limit = opponent_limit
+    
+    return session
 
 
 def add_player_to_session(session: Session, player: Player) -> Session:
@@ -503,10 +516,19 @@ def evaluate_and_create_matches(session: Session) -> Session:
     """
     Evaluate current session state and create new matches.
     This should be called whenever state changes to potentially start new games.
+    For competitive-variety mode, re-populates courts based on current settings.
     """
     
-    # This is a placeholder - actual implementation will differ by game mode
-    # For now, just return the session
+    if session.config.mode == 'competitive-variety':
+        from python.queue_manager import populate_empty_courts
+        populate_empty_courts(session)
+    elif session.config.mode == 'round-robin':
+        from python.queue_manager import populate_empty_courts
+        populate_empty_courts(session)
+    elif session.config.mode == 'king-of-court':
+        from python.queue_manager import populate_empty_courts
+        populate_empty_courts(session)
+    
     return session
 
 
