@@ -349,18 +349,17 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
     # Check bracket compatibility (Roaming Range Rule) - only for 12+ players
     # Relaxed if allow_cross_bracket is True
     if not allow_cross_bracket and len(session.active_players) >= 12:
-        if not is_provisional(session, player1) or not is_provisional(session, player2):
-            # Calculate rank difference limit using session's roaming range setting
-            roaming_percent = getattr(session, 'competitive_variety_roaming_range_percent', ROAMING_RANK_PERCENTAGE)
-            limit = int(len(session.active_players) * roaming_percent)
-            
-            # Get ranks
-            rank1, _ = get_player_ranking(session, player1)
-            rank2, _ = get_player_ranking(session, player2)
-            
-            # Check roaming range (applies in both directions)
-            if abs(rank1 - rank2) > limit:
-                return False
+        # Calculate rank difference limit using session's roaming range setting
+        roaming_percent = getattr(session, 'competitive_variety_roaming_range_percent', ROAMING_RANK_PERCENTAGE)
+        limit = int(len(session.active_players) * roaming_percent)
+        
+        # Get ranks
+        rank1, _ = get_player_ranking(session, player1)
+        rank2, _ = get_player_ranking(session, player2)
+        
+        # Check roaming range (applies in both directions)
+        if abs(rank1 - rank2) > limit:
+            return False
     
     # ---------------------------------------------------------
     # Repetition Constraints (Robust Two-Phase Check)
@@ -1062,17 +1061,17 @@ def get_default_competitive_variety_settings(total_players: int, num_courts: int
     
     Returns (roaming_range_percent, partner_repetition_limit, opponent_repetition_limit)
     
-    - 0-1 players in waitlist: Semi-Competitive (65% roaming, 3 partner, 2 opponent)
+    - 0-1 players in waitlist: Casual (80% roaming, 3 partner, 2 opponent)
     - 2+ players in waitlist: Competitive (50% roaming, 3 partner, 2 opponent)
     """
     # Calculate waitlist size
     max_players_on_courts = num_courts * 4
     waitlist_size = total_players - max_players_on_courts
     
-    # Default to competitive if 2 or more on waitlist, otherwise semi-competitive
+    # Default to competitive if 2 or more on waitlist, otherwise casual
     if waitlist_size >= 2:
         # Competitive setting
         return 0.5, 3, 2
     else:
-        # Semi-Competitive setting (0-1 players on waitlist)
-        return 0.65, 3, 2
+        # Casual setting (0-1 players on waitlist)
+        return 0.8, 3, 2

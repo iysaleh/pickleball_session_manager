@@ -130,7 +130,7 @@ def test_slider_positions():
     print("✓ Test 4 passed: all 4 slider positions + custom work correctly")
 
 def test_relaxed_constraints_with_small_waitlist():
-    """Test that with 0-1 players on waitlist, we're more relaxed (65%)"""
+    """Test that with 0-1 players on waitlist, we're more relaxed (80% Casual)"""
     # Create 9 players with 2 courts = 1 player waitlist
     players = [Player(id=f"p{i}", name=f"Player {i}") for i in range(9)]
     config = SessionConfig(
@@ -141,9 +141,9 @@ def test_relaxed_constraints_with_small_waitlist():
     )
     session = create_session(config)
     
-    # Should default to 65% (semi-competitive)
-    assert session.competitive_variety_roaming_range_percent == 0.65
-    print("✓ Test 5 passed: small waitlist defaults to relaxed 65% roaming")
+    # Should default to 80% (Casual)
+    assert session.competitive_variety_roaming_range_percent == 0.8
+    print("✓ Test 5 passed: small waitlist defaults to relaxed 80% roaming (Casual)")
 
 def test_strict_constraints_with_large_waitlist():
     """Test that with 2+ players on waitlist, we're stricter (50%)"""

@@ -1124,7 +1124,6 @@ class SessionWindow(QMainWindow):
         self.toggle_rank_btn.setMaximumWidth(120)
         self.toggle_rank_btn.setStyleSheet("QPushButton { background-color: #4a4a4a; color: white; font-weight: bold; padding: 5px; border-radius: 3px; font-size: 10px; } QPushButton:hover { background-color: #5a5a5a; }")
         self.toggle_rank_btn.clicked.connect(self.toggle_rank_display)
-        self.show_rank = False
         waiting_header.addWidget(self.toggle_rank_btn)
         
         waiting_header.addStretch()
