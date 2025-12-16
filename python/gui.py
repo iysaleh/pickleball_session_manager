@@ -2941,6 +2941,57 @@ class SessionWindow(QMainWindow):
                 QMessageBox.warning(self, "Not Enough Players", "Need at least 4 players in the waitlist")
                 return
             
+            # Determine if singles or doubles
+            is_doubles = self.session.config.session_type == 'doubles'
+            num_per_team = 2 if is_doubles else 1
+
+            # Auto-select best match based on wait time and balance
+            best_team1 = []
+            best_team2 = []
+            
+            try:
+                # Sort waiting players by games_waited (primary) and games_played (secondary - less is better)
+                # prioritizing those who have waited the most
+                def get_wait_priority(pid):
+                    stats = self.session.player_stats.get(pid)
+                    if not stats:
+                        return (0, 0)
+                    return (stats.games_waited, -stats.games_played)
+                
+                sorted_waiting = sorted(waiting_ids, key=get_wait_priority, reverse=True)
+                
+                num_needed = num_per_team * 2
+                
+                if len(sorted_waiting) >= num_needed:
+                    candidates = sorted_waiting[:num_needed]
+                    
+                    if not is_doubles:
+                        # Singles: just take top 2
+                        best_team1 = [candidates[0]]
+                        best_team2 = [candidates[1]]
+                    else:
+                        # Doubles: find best balanced combination among top 4
+                        from python.competitive_variety import score_potential_match
+                        
+                        best_score = -float('inf')
+                        p0 = candidates[0]
+                        others = candidates[1:]
+                        
+                        # Try pairing p0 with each other player
+                        for i, p_partner in enumerate(others):
+                            team1 = [p0, p_partner]
+                            team2 = [p for p in others if p != p_partner]
+                            
+                            # Score match
+                            score = score_potential_match(self.session, team1, team2)
+                            
+                            if score > best_score:
+                                best_score = score
+                                best_team1 = team1
+                                best_team2 = team2
+            except Exception as e:
+                print(f"Error calculating auto-suggestions: {e}")
+            
             # Create dialog
             dialog = QDialog(self)
             dialog.setWindowTitle("Make Court")
@@ -2958,10 +3009,6 @@ class SessionWindow(QMainWindow):
             court_combo.setData = lambda idx, role, val: None  # Make it selectable
             court_layout.addWidget(court_combo)
             layout.addLayout(court_layout)
-            
-            # Determine if singles or doubles
-            is_doubles = self.session.config.session_type == 'doubles'
-            num_per_team = 2 if is_doubles else 1
             
             # Create player combo function
             def create_player_combo(exclude_ids=None):
@@ -3060,7 +3107,16 @@ class SessionWindow(QMainWindow):
                 
                 combo = create_player_combo()
                 team_combos['team1'].append(combo)
-                position_dict[('team1', i)] = None  # Initialize with None
+                
+                # Set default if available
+                initial_player = None
+                if best_team1 and i < len(best_team1):
+                     initial_player = best_team1[i]
+                     idx = combo.findData(initial_player)
+                     if idx >= 0:
+                         combo.setCurrentIndex(idx)
+                
+                position_dict[('team1', i)] = initial_player
                 combo.currentIndexChanged.connect(on_combo_changed)
                 
                 team1_layout.addWidget(combo)
@@ -3082,7 +3138,16 @@ class SessionWindow(QMainWindow):
                 
                 combo = create_player_combo()
                 team_combos['team2'].append(combo)
-                position_dict[('team2', i)] = None  # Initialize with None
+                
+                # Set default if available
+                initial_player = None
+                if best_team2 and i < len(best_team2):
+                     initial_player = best_team2[i]
+                     idx = combo.findData(initial_player)
+                     if idx >= 0:
+                         combo.setCurrentIndex(idx)
+                
+                position_dict[('team2', i)] = initial_player
                 combo.currentIndexChanged.connect(on_combo_changed)
                 
                 team2_layout.addWidget(combo)
