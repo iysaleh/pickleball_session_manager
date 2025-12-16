@@ -130,10 +130,6 @@ def get_roaming_rank_range(session: Session, player_id: str) -> Tuple[int, int]:
     """
     total_players = len(session.active_players)
     
-    if total_players < 12:
-        # No roaming range restriction for small groups
-        return 1, total_players
-    
     player_rank, _ = get_player_ranking(session, player_id)
     roaming_percent = session.competitive_variety_roaming_range_percent
     
@@ -190,7 +186,7 @@ def can_all_players_play_together(session: Session, player_ids: List[str]) -> bo
     
     Returns True if all players can play together, False otherwise.
     """
-    if len(session.active_players) < 12 or session.config.mode != 'competitive-variety':
+    if session.config.mode != 'competitive-variety':
         return True
     
     # Check that all players are within roaming range of each other
@@ -215,88 +211,7 @@ def can_all_players_play_together(session: Session, player_ids: List[str]) -> bo
     return True
 
 
-def can_play_with_player(session: Session, player1: str, player2: str, role: str) -> bool:
-    """
-    Check if two players can play together in the given role.
-    role = 'partner' or 'opponent'
-    
-    Hard constraints:
-    - Banned pairs cannot be partners
-    - Locked teams MUST be partners (and cannot be opponents)
-    - If partners: must wait PARTNER_REPETITION_GAMES_REQUIRED games (2 games minimum gap)
-    - If opponents: must wait OPPONENT_REPETITION_GAMES_REQUIRED games (1 game minimum gap)
-    - Must respect 50% matchmaking bracket for non-provisional players
-    - Only applies when 12+ players (otherwise fewer constraints)
-    """
-    # 0. Check Locked Teams & Banned Pairs
-    # Check Banned Pairs (only applies to partners)
-    if role == 'partner' and session.config.banned_pairs:
-        for banned in session.config.banned_pairs:
-            if player1 in banned and player2 in banned:
-                return False
 
-    # Check Locked Teams
-    if session.config.locked_teams:
-        p1_locked_partner = None
-        for team in session.config.locked_teams:
-            if player1 in team:
-                # Find the partner(s)
-                for member in team:
-                    if member != player1:
-                        p1_locked_partner = member
-                        break
-                break
-        
-        p2_locked_partner = None
-        for team in session.config.locked_teams:
-            if player2 in team:
-                for member in team:
-                    if member != player2:
-                        p2_locked_partner = member
-                        break
-                break
-        
-        if role == 'partner':
-            # If p1 is locked to someone else, cannot partner with p2
-            if p1_locked_partner and p1_locked_partner != player2:
-                return False
-            # If p2 is locked to someone else, cannot partner with p1
-            if p2_locked_partner and p2_locked_partner != player1:
-                return False
-            # If they are locked to each other, they CAN (and must) play together
-            # This overrides partner repetition constraints
-            if p1_locked_partner == player2:
-                return True
-        
-        elif role == 'opponent':
-            # If they are locked to each other, they CANNOT be opponents
-            if p1_locked_partner == player2:
-                return False
-
-    # Check bracket compatibility (50% rule) - only for 12+ players
-    if len(session.active_players) >= 12:
-        if not is_provisional(session, player1) or not is_provisional(session, player2):
-            min1, max1 = get_allowed_matchmaking_bracket(session, player1)
-            min2, max2 = get_allowed_matchmaking_bracket(session, player2)
-            
-            # Check if brackets overlap
-            if max1 < min2 or max2 < min1:
-                return False
-    
-    # Check roaming range compatibility (moving window rule) - only for 12+ players
-    if len(session.active_players) >= 12 and session.config.mode == 'competitive-variety':
-        if not is_provisional(session, player1) or not is_provisional(session, player2):
-            rank1, _ = get_player_ranking(session, player1)
-            rank2, _ = get_player_ranking(session, player2)
-            min1, max1 = get_roaming_rank_range(session, player1)
-            min2, max2 = get_roaming_rank_range(session, player2)
-            
-            # Both players must be within each other's roaming range
-            if rank2 < min1 or rank2 > max1:
-                return False
-            if rank1 < min2 or rank1 > max2:
-                return False
-    
 def _get_last_played_info(session: Session, player_id: str) -> Tuple[Optional[Match], int]:
     """
     Get the last completed match a player played in, and its global game number.
@@ -369,9 +284,9 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
             if p1_locked_partner == player2:
                 return False
 
-    # Check bracket compatibility (Roaming Range Rule) - only for 12+ players
+    # Check bracket compatibility (Roaming Range Rule)
     # Relaxed if allow_cross_bracket is True
-    if not allow_cross_bracket and len(session.active_players) >= 12:
+    if not allow_cross_bracket:
         # Calculate rank difference limit using session's roaming range setting
         roaming_percent = getattr(session, 'competitive_variety_roaming_range_percent', ROAMING_RANK_PERCENTAGE)
         limit = int(len(session.active_players) * roaming_percent)
