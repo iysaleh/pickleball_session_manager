@@ -33,6 +33,7 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
         courts=config.courts,
         banned_pairs=config.banned_pairs,
         locked_teams=config.locked_teams,
+        first_bye_players=config.first_bye_players,
         court_sliding_mode=config.court_sliding_mode,
         randomize_player_order=config.randomize_player_order,
         advanced_config=config.advanced_config

@@ -520,6 +520,34 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
     if not empty_courts:
         return
     
+    # Handle first bye players: exclude them ONLY on the true first round
+    # A match is "completed" once a winner is determined
+    # The first round is specifically: no matches have been completed yet
+    first_bye_players_set = set()
+    if session.config.first_bye_players:
+        # Count completed matches (matches where a winner was decided)
+        completed_matches = [m for m in session.matches if m.status == 'completed']
+        
+        # If we're in the first round (no matches completed yet):
+        # Exclude bye players to guarantee them a waiting spot
+        if not completed_matches:
+            # Check if applying the bye makes sense (will leave people waiting)
+            active_count = len(session.active_players)
+            players_in_active_matches = set()
+            for match in session.matches:
+                if match.status in ['in-progress', 'waiting']:
+                    players_in_active_matches.update(match.team1 + match.team2)
+            
+            waiting_count = active_count - len(players_in_active_matches)
+            courts_being_filled = len(empty_courts)
+            players_these_courts_need = courts_being_filled * 4
+            
+            # Only enforce bye if there will be people waiting after filling these courts
+            # Example: 18 players, 3 in-progress courts (12 players), 1 empty court (needs 4)
+            # Waiting: 18 - 12 = 6. After filling: 6 - 4 = 2 still waiting. YES, apply bye.
+            if waiting_count > players_these_courts_need:
+                first_bye_players_set = set(session.config.first_bye_players)
+    
     # Get players currently in active matches
     players_in_matches = set()
     for match in session.matches:
@@ -578,7 +606,7 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
         
         # If no queue match assigned, try to generate one from available players
         if not assigned:
-            available_players = [p for p in session.active_players if p not in players_in_matches]
+            available_players = [p for p in session.active_players if p not in players_in_matches and p not in first_bye_players_set]
             
             if len(available_players) >= 4:
                 # Try to find any 4 players that can form valid teams

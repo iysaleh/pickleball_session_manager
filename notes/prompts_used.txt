@@ -508,6 +508,15 @@ sequence item 0: expected str instance, NoneType found
 -"Red means wall, Blue is net".
 -"This is a competetive-variety matchmaking algorithm. The first 2 games are provisional and random, and then it will start to place people in matches according to current performance metrics (wins-losses, point differentials, previous opponents)"
 
+# First bye
+* Sometimes when you start a new session, some people need the first bye -- assuming there are people that are going to be on the waitlist, they will be skipped when creating the first matches and guaranteed to not be in the first game. Add a "Manage Byes" button to the Session Setup dialog which pops up a new dialog that lets a user add players to a list to be the first bye. Note that this only works if there are actually people that will be waiting at the start.
+* Carrie and Ibraheem were the first bye, the first match finished, and they weren't immediately used to make a court, but they should have been. There's a bug where the first bye logic waits for 2 games to finish before 1st bye players are scheduled for a match, that isn't the right behavior. First bye players should be scheduled for a game as soon as the first match finishes.
+* When creating a new session with previous players, have the first bye players saved.
+* In session setup, when there are more byes than there should be (for example, if there is 1 court, 6 players, there should only be 2 first byes max), do not let the session be made, have a warning dialog preventing the session from starting until the user removes a player from the first bye list and has a valid number of byes less than or equal to the maximum number of allowed byes specified.
+* look at @pickleball_session_20251217_122724.txt , the first game ended, and the first byes are still waiting, per the algorithm, the first byes should be scheduled if it was working properly.
+* When starting a new session with previous players, the restored first byes look like "player_14_1766003207.921782" --- that's not right. The new session with previous players first byes should properly add the players from the new session with the same name as before (probably by doing string matching based on the name).
+* Look at @pickleball_session_20251217_123120.txt , the same bug as before exists --  the first game ended, and the first byes are still waiting, per the algorithm, the first byes should be scheduled if it was working properly. Think hard and deep about why this bug is happening, and come up with a comprehensive solution that is simple to understand and is coded intelligently and human readably.
+* The "Too many courts for N players" validation is unnecessary. It's OK to have more courts than needed for the number of players we have.
 # Useful Commands:
 npx vitest run roundrobin.test.ts
 # Run local webserver

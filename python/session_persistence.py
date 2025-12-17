@@ -19,8 +19,8 @@ def ensure_session_dir():
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def save_player_history(player_names: List[str]):
-    """Save the list of player names to history"""
+def save_player_history(player_names: List[str], first_bye_players: List[str] = None):
+    """Save the list of player names and first bye players to history"""
     ensure_session_dir()
     
     # Remove duplicates while preserving order
@@ -33,6 +33,7 @@ def save_player_history(player_names: List[str]):
     
     history_data = {
         "players": unique_players,
+        "first_bye_players": first_bye_players or [],
         "last_updated": datetime.now().isoformat()
     }
     
@@ -54,6 +55,20 @@ def load_player_history() -> List[str]:
             return data.get("players", [])
     except Exception as e:
         print(f"Error loading player history: {e}")
+        return []
+
+
+def load_first_bye_players() -> List[str]:
+    """Load the list of first bye player names from history"""
+    if not PLAYER_HISTORY_FILE.exists():
+        return []
+    
+    try:
+        with open(PLAYER_HISTORY_FILE, 'r') as f:
+            data = json.load(f)
+            return data.get("first_bye_players", [])
+    except Exception as e:
+        print(f"Error loading first bye players: {e}")
         return []
 
 
@@ -130,6 +145,7 @@ def serialize_session(session) -> Dict:
             "courts": session.config.courts,
             "banned_pairs": session.config.banned_pairs,
             "locked_teams": session.config.locked_teams,
+            "first_bye_players": session.config.first_bye_players,
             "randomize_player_order": session.config.randomize_player_order
         },
         "matches": matches_data,
@@ -138,6 +154,7 @@ def serialize_session(session) -> Dict:
         "active_players": list(session.active_players),
         "match_queue": queue_data,
         "match_history_snapshots": snapshots_data,
+        "first_bye_used": session.first_bye_used,
         "competitive_variety_roaming_range_percent": session.competitive_variety_roaming_range_percent,
         "competitive_variety_partner_repetition_limit": session.competitive_variety_partner_repetition_limit,
         "competitive_variety_opponent_repetition_limit": session.competitive_variety_opponent_repetition_limit,
@@ -159,6 +176,7 @@ def deserialize_session(data: Dict):
         courts=data["config"]["courts"],
         banned_pairs=data["config"]["banned_pairs"],
         locked_teams=data["config"]["locked_teams"],
+        first_bye_players=data["config"].get("first_bye_players", []),
         randomize_player_order=data["config"]["randomize_player_order"]
     )
     
@@ -240,6 +258,7 @@ def deserialize_session(data: Dict):
         courts=data["config"]["courts"],
         banned_pairs=data["config"]["banned_pairs"],
         locked_teams=data["config"]["locked_teams"],
+        first_bye_players=data["config"].get("first_bye_players", []),
         randomize_player_order=data["config"]["randomize_player_order"]
     )
     
@@ -341,6 +360,10 @@ def deserialize_session(data: Dict):
         match_history_snapshots=match_history_snapshots
     )
     
+    # Load first bye state if available
+    if "first_bye_used" in data:
+        session.first_bye_used = data["first_bye_used"]
+    
     # Load competitive variety settings if available
     if "competitive_variety_roaming_range_percent" in data:
         session.competitive_variety_roaming_range_percent = data["competitive_variety_roaming_range_percent"]
@@ -362,9 +385,15 @@ def save_session(session) -> bool:
         with open(LAST_SESSION_FILE, 'w') as f:
             json.dump(session_data, f, indent=2)
         
-        # Also update player history
+        # Also update player history with first bye players (convert IDs to names)
         player_names = [p.name for p in session.config.players if p.id in session.active_players]
-        save_player_history(player_names)
+        bye_player_names = []
+        for bye_id in session.config.first_bye_players:
+            for player in session.config.players:
+                if player.id == bye_id:
+                    bye_player_names.append(player.name)
+                    break
+        save_player_history(player_names, bye_player_names)
         
         return True
     except Exception as e:

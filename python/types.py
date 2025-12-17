@@ -117,6 +117,7 @@ class SessionConfig:
     courts: int
     banned_pairs: List[tuple] = field(default_factory=list)  # List of (player_id, player_id) tuples
     locked_teams: Optional[List[List[str]]] = None  # List of teams (each team is list of player IDs)
+    first_bye_players: List[str] = field(default_factory=list)  # List of player IDs to sit out first match
     court_sliding_mode: Literal['None', 'Right to Left', 'Left to Right'] = 'Right to Left'
     randomize_player_order: bool = False
     advanced_config: Optional[AdvancedConfig] = None
@@ -151,6 +152,8 @@ class Session:
     competitive_variety_roaming_range_percent: float = 0.5  # Roaming range as percentage (0.35-1.0)
     competitive_variety_partner_repetition_limit: int = 3  # Games to wait before playing with same partner
     competitive_variety_opponent_repetition_limit: int = 2  # Games to wait before playing against same opponent
+    # First bye players (to sit out the first match)
+    first_bye_used: bool = False  # Flag indicating if first bye players have been applied
 
 
 @dataclass

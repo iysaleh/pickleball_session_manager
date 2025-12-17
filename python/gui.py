@@ -423,16 +423,142 @@ class ManageLocksDialog(QDialog):
             self.refresh_bans()
 
 
+class ManageByesDialog(QDialog):
+    """Dialog for managing first bye players"""
+    
+    def __init__(self, players: List[Player], first_bye_players: List[str], parent=None):
+        super().__init__(parent)
+        self.players = players
+        self.first_bye_players = first_bye_players
+        self.init_ui()
+    
+    def init_ui(self):
+        layout = QVBoxLayout()
+        
+        info_label = QLabel("Select players to sit out the first match:")
+        info_label.setStyleSheet("QLabel { color: #ccc; font-style: italic; }")
+        layout.addWidget(info_label)
+        
+        self.bye_list = QListWidget()
+        self.refresh_bye_list()
+        layout.addWidget(self.bye_list)
+        
+        btn_layout = QHBoxLayout()
+        add_btn = QPushButton("Add Player to Bye")
+        add_btn.clicked.connect(self.add_bye_player)
+        remove_btn = QPushButton("Remove from Bye")
+        remove_btn.clicked.connect(self.remove_bye_player)
+        clear_btn = QPushButton("Clear All")
+        clear_btn.clicked.connect(self.clear_all_byes)
+        
+        btn_layout.addWidget(add_btn)
+        btn_layout.addWidget(remove_btn)
+        btn_layout.addWidget(clear_btn)
+        layout.addLayout(btn_layout)
+        
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn)
+        
+        self.setLayout(layout)
+        self.setWindowTitle("Manage First Bye Players")
+        self.resize(400, 300)
+        
+        # Style
+        self.setStyleSheet("""
+            QDialog { background-color: #2a2a2a; color: white; }
+            QLabel { color: white; background-color: #2a2a2a; }
+            QListWidget { background-color: #3a3a3a; border: 1px solid #555; }
+            QListWidget::item:selected { background-color: #2196F3; }
+            QPushButton { background-color: #0d47a1; color: white; padding: 5px; border-radius: 3px; }
+            QPushButton:hover { background-color: #1565c0; }
+        """)
+    
+    def refresh_bye_list(self):
+        self.bye_list.clear()
+        for player_id in self.first_bye_players:
+            player_name = self.get_player_name(player_id)
+            item = QListWidgetItem(player_name)
+            item.setData(Qt.ItemDataRole.UserRole, player_id)
+            self.bye_list.addItem(item)
+    
+    def get_player_name(self, player_id):
+        for p in self.players:
+            if p.id == player_id:
+                return p.name
+        return player_id
+    
+    def add_bye_player(self):
+        # Get list of players not already in bye list
+        bye_player_ids = set(self.first_bye_players)
+        available_players = [p for p in self.players if p.id not in bye_player_ids]
+        
+        if not available_players:
+            QMessageBox.warning(self, "Info", "All players are already in the bye list")
+            return
+        
+        # Create combo dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add Player to Bye")
+        layout = QVBoxLayout()
+        
+        combo = QComboBox()
+        combo.addItem("(Select a player)", None)
+        for p in sorted(available_players, key=lambda x: x.name):
+            combo.addItem(p.name, p.id)
+        
+        layout.addWidget(QLabel("Select player:"))
+        layout.addWidget(combo)
+        
+        btn = QPushButton("Add")
+        layout.addWidget(btn)
+        
+        def on_add():
+            player_id = combo.currentData()
+            if player_id is None:
+                QMessageBox.warning(dialog, "Error", "Please select a player")
+                return
+            
+            if player_id not in self.first_bye_players:
+                self.first_bye_players.append(player_id)
+                self.refresh_bye_list()
+            dialog.accept()
+        
+        btn.clicked.connect(on_add)
+        dialog.setLayout(layout)
+        dialog.exec()
+    
+    def remove_bye_player(self):
+        row = self.bye_list.currentRow()
+        if row >= 0:
+            player_id = self.first_bye_players[row]
+            del self.first_bye_players[row]
+            self.refresh_bye_list()
+    
+    def clear_all_byes(self):
+        reply = QMessageBox.question(self, "Confirm", "Clear all bye players?")
+        if reply == QMessageBox.StandardButton.Yes:
+            self.first_bye_players.clear()
+            self.refresh_bye_list()
+
+
 class SetupDialog(QDialog):
     """Dialog for session setup"""
     
-    def __init__(self, parent=None, previous_players=None):
+    def __init__(self, parent=None, previous_players=None, previous_first_byes=None):
         super().__init__(parent)
         self.session: Optional[Session] = None
         self.previous_players = previous_players or []
+        self.previous_first_byes = previous_first_byes or []  # Store names temporarily
         self.banned_pairs = []
         self.locked_teams = []
+        self.first_bye_players = []
         self.init_ui()
+        
+        # Populate first bye players from previous session if provided
+        # After init_ui() has created the players, map bye names to their IDs
+        if self.previous_first_byes:
+            self._map_previous_byes_to_ids()
     
     def init_ui(self):
         layout = QVBoxLayout()
@@ -486,6 +612,11 @@ class SetupDialog(QDialog):
         manage_btn = QPushButton("🤝 Manage Partnerships & Bans")
         manage_btn.clicked.connect(self.manage_locks)
         layout.addWidget(manage_btn)
+        
+        # Manage Byes Button
+        byes_btn = QPushButton("📋 Manage Byes")
+        byes_btn.clicked.connect(self.manage_byes)
+        layout.addWidget(byes_btn)
         
         # Add previous players if available
         if self.previous_players:
@@ -561,12 +692,29 @@ class SetupDialog(QDialog):
         self.setWindowTitle("Session Setup")
         self.resize(600, 500)
     
+    def _map_previous_byes_to_ids(self):
+        """Map previously saved bye player names to current session IDs"""
+        players = self.player_widget.get_players()
+        for bye_name in self.previous_first_byes:
+            for player in players:
+                if player.name == bye_name:
+                    self.first_bye_players.append(player.id)
+                    break
+    
     def manage_locks(self):
         players = self.player_widget.get_players()
         if not players:
              QMessageBox.warning(self, "Error", "Add players first")
              return
         dialog = ManageLocksDialog(players, self.banned_pairs, self.locked_teams, self)
+        dialog.exec()
+    
+    def manage_byes(self):
+        players = self.player_widget.get_players()
+        if not players:
+             QMessageBox.warning(self, "Error", "Add players first")
+             return
+        dialog = ManageByesDialog(players, self.first_bye_players, self)
         dialog.exec()
 
     def add_test_players(self):
@@ -597,6 +745,23 @@ class SetupDialog(QDialog):
                 QMessageBox.warning(self, "Error", "At least 2 players are required")
                 return
             
+            # Validate first bye players count
+            # Max byes = (total_players - courts * 4)
+            courts = self.courts_spin.value()
+            players_needed = courts * 4
+            max_byes = len(players) - players_needed
+            
+            # Only validate bye count if it would result in negative waiting players
+            # (more bye players than available waiting spots)
+            if len(self.first_bye_players) > max_byes and max_byes >= 0:
+                QMessageBox.warning(
+                    self, 
+                    "Too Many Bye Players", 
+                    f"With {len(players)} players and {courts} courts, maximum {max_byes} players can have a first bye.\n\n"
+                    f"You have {len(self.first_bye_players)} selected. Please remove {len(self.first_bye_players) - max_byes} player(s) from the bye list."
+                )
+                return
+            
             mode_text = self.mode_combo.currentText()
             if mode_text == "Round Robin":
                 mode: GameMode = 'round-robin'
@@ -612,14 +777,28 @@ class SetupDialog(QDialog):
                 mode=mode,
                 session_type=session_type,
                 players=players,
-                courts=self.courts_spin.value(),
+                courts=courts,
                 banned_pairs=self.banned_pairs,
                 locked_teams=self.locked_teams,
+                first_bye_players=self.first_bye_players,
                 court_sliding_mode=self.sliding_combo.currentText(),
                 randomize_player_order=False
             )
             
             self.session = create_session(config)
+            
+            # Save player history and first bye players (convert IDs to names)
+            player_names = [p.name for p in players]
+            bye_player_names = []
+            for bye_id in self.first_bye_players:
+                for p in players:
+                    if p.id == bye_id:
+                        bye_player_names.append(p.name)
+                        break
+            
+            from python.session_persistence import save_player_history
+            save_player_history(player_names, bye_player_names)
+            
             self.accept()
         except Exception as e:
             error_msg = f"Error creating session:\n{str(e)}\n\nType: {type(e).__name__}"
@@ -3638,15 +3817,16 @@ class MainWindow(QMainWindow):
     def new_session_with_previous_players(self):
         """Create a new session with players from previous sessions"""
         try:
-            from python.session_persistence import load_player_history
+            from python.session_persistence import load_player_history, load_first_bye_players
             
             player_history = load_player_history()
+            first_bye_history = load_first_bye_players()
             
             if not player_history:
                 QMessageBox.warning(self, "Error", "No player history available")
                 return
             
-            setup = SetupDialog(self, previous_players=player_history)
+            setup = SetupDialog(self, previous_players=player_history, previous_first_byes=first_bye_history)
             if setup.exec() == QDialog.DialogCode.Accepted:
                 self.session = setup.session
                 try:
