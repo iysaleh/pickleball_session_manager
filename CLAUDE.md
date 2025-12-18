@@ -70,8 +70,8 @@ This module implements an ELO-based skill-balanced matchmaking system with hard 
   1. Try queued matches first (respects waitlist)
   2. Generate new matches from available players
 - Prioritizes locked teams
-- Uses combination search with two passes: strict bracketing, then relaxed
-- Takes top 12-16 candidates sorted by wait time/priority
+- Uses sophisticated wait time priority system for candidate selection
+- Takes top 12-16 candidates using `get_priority_aware_candidates()` from wait_priority module
 
 **_can_form_valid_teams(session, players, allow_cross_bracket=False) → bool**
 - Helper: checks if 4 players can form ANY valid team configuration
@@ -104,14 +104,88 @@ This module implements an ELO-based skill-balanced matchmaking system with hard 
    - Line 335-336: locked partners return True immediately, skipping repetition checks
    - This is intentional - locked teams are exempt
 
-5. **COMBINATION SEARCH LIMITS**: 
+5. **WAIT PRIORITY INTEGRATION**: 
+   - Uses sophisticated wait time priority system (python/wait_priority.py)
+   - Candidates selected via `get_priority_aware_candidates()` which prioritizes actual wait time
    - Limited to 12-16 top-priority candidates to prevent O(n^4) slowness
-   - Candidates sorted by wait time first, then ELO
-   - Does NOT sort primary candidate list by ELO (preserves priority ordering)
+   - Maintains backward compatibility with legacy `games_waited` counter
+
+## WAIT TIME PRIORITY SYSTEM (python/wait_priority.py)
+
+### Core Purpose
+Implements sophisticated wait time priority logic that considers actual accumulated wait time rather than simple game counts. Ensures players who have waited significantly longer are prioritized for match placement while avoiding micro-optimization for small time differences.
+
+### Key Features
+
+**Time-Based Priority Calculation**
+- Uses `total_wait_time` + `current_wait_seconds` for accurate priority
+- Replaces legacy `games_waited` as primary priority metric
+- Maintains `games_waited` as fallback/tiebreaker for backward compatibility
+
+**Dynamic Threshold System**
+- MINIMUM_PRIORITY_GAP_SECONDS = 120 (2 minutes) - differences smaller than this are ignored
+- SIGNIFICANT_WAIT_THRESHOLD_SECONDS = 900 (12 minutes) - players become "significant waiters" 
+- EXTREME_WAIT_THRESHOLD_SECONDS = 1800 (20 minutes) - players become "extreme waiters"
+- Only prioritizes wait differences when they exceed meaningful thresholds
+
+**Priority Tiers**
+- Tier 0 (Extreme): 20+ minutes total wait - highest priority (⚠️ indicator)
+- Tier 1 (Significant): 12-20 minutes total wait - high priority (⏰ indicator)  
+- Tier 2 (Normal): < 12 minutes total wait - standard priority
+
+### Critical Functions
+
+**calculate_wait_priority_info(session, player_id) → WaitPriorityInfo**
+- Central calculation point for all wait priority data
+- Returns comprehensive priority information including tier assignment
+- Combines historical `total_wait_time` + current session wait time
+
+**get_priority_aware_candidates(session, available_players, max_candidates=16) → List[str]**
+- Intelligent candidate selection for match generation
+- Prioritizes extreme waiters first, then significant, then normal
+- Used by competitive variety algorithm for player selection
+
+**sort_players_by_wait_priority(session, player_ids, reverse=True) → List[str]**
+- Flexible sorting with time-based priority
+- Primary key: Priority tier (0=extreme > 1=significant > 2=normal)
+- Secondary key: Total wait time within tier
+- Tertiary key: Legacy `games_waited` counter (backward compatibility)
+
+**should_prioritize_wait_differences(wait_infos) → bool**
+- Implements threshold logic to determine when wait differences matter
+- Returns False if all players within 2-minute range (avoids micro-optimization)
+- Returns True if any extreme/significant waiters or large gaps exist
+
+### Integration Points
+
+**Competitive Variety Algorithm**
+- `populate_empty_courts_competitive_variety()` uses `get_priority_aware_candidates()`
+- Maintains all existing constraints (ELO brackets, repetition rules, etc.)
+- Preserves match quality while prioritizing wait time
+
+**GUI System** 
+- Waitlist display shows priority indicators (⚠️ extreme, ⏰ significant)
+- Manual match creation uses `sort_players_by_wait_priority()`
+- Time formatting via `format_wait_time_display()` (e.g., "15m 30s", "1h 20m")
+
+**Session Management**
+- Legacy `games_waited` counter still incremented for backward compatibility
+- Wait timers (`start_player_wait_timer`, `stop_player_wait_timer`) accumulate to `total_wait_time`
+- Seamless integration with existing persistence and serialization
+
+### Threshold Logic Examples
+
+- **15 players within 2 minutes**: Algorithm treats equally, no micro-optimization
+- **13 players within 2 minutes + 2 players at 12+ minutes**: Prioritizes the 2 long waiters
+- **Players with 20+ minute waits**: Get extreme priority with visual indicators
 
 ### Testing & Validation
 Run fuzzing tests with: `make run_fuzz_tests`
+Wait priority specific tests: `make test_wait_priority test_wait_priority_integration`
+
 Critical test files:
 - test_competitive_variety_fuzzing.py: fuzz tests with random player counts/constraints
 - test_enhanced_mixing.py: validates variety enforcement
 - test_roaming_range_enforcement.py: roaming range specific tests
+- test_wait_priority_system.py: comprehensive wait priority system validation
+- test_wait_priority_integration.py: integration testing with existing systems
