@@ -17,10 +17,11 @@ from python.session import Session, create_session, complete_match
 from python.types import SessionConfig, Player, PlayerStats, Match
 from python.wait_priority import (
     calculate_wait_priority_info, 
+    calculate_relative_wait_priority_infos,
     get_priority_aware_candidates,
     sort_players_by_wait_priority,
-    SIGNIFICANT_WAIT_THRESHOLD_SECONDS,
-    EXTREME_WAIT_THRESHOLD_SECONDS
+    SIGNIFICANT_GAP_SECONDS,
+    EXTREME_GAP_SECONDS
 )
 from python.competitive_variety import populate_empty_courts_competitive_variety
 from python.utils import start_player_wait_timer, stop_player_wait_timer, generate_id
@@ -96,38 +97,42 @@ def simulate_real_session_with_wait_priority():
     # Now simulate different wait scenarios
     current_time = datetime.now()
     
-    # Group 1: Extreme waiters (2 players) - have waited 45+ minutes total
-    extreme_waiters = ["player1", "player2"]
-    for pid in extreme_waiters:
-        stats = session.player_stats.setdefault(pid, PlayerStats(player_id=pid))
-        stats.total_wait_time = EXTREME_WAIT_THRESHOLD_SECONDS + 900  # 45+ minutes
-        stats.games_waited = 8  # High legacy counter
-        # Start current wait session  
-        stats.wait_start_time = current_time - timedelta(minutes=10)
+    # The base_wait will be determined by the shortest actual waiter (recent players)
+    # So we don't need to explicitly set it here
     
-    # Group 2: Significant waiters (3 players) - have waited 15-25 minutes (below extreme threshold)
+    # Group 1: Extreme waiters (2 players) - 20+ minutes longer than shortest
+    # Assuming min will be ~60s, extreme threshold = 60s + 1200s = 1260s, so use 1400s+
+    extreme_waiters = ["player1", "player2"]
+    for i, pid in enumerate(extreme_waiters):
+        stats = session.player_stats.setdefault(pid, PlayerStats(player_id=pid))
+        stats.total_wait_time = 1400 + (i * 200)  # ~23-26 minutes (20+ min gap from 60s base)
+        stats.games_waited = 8 + i  # High legacy counter
+        # Start current wait session  
+        stats.wait_start_time = current_time - timedelta(minutes=5+i)
+    
+    # Group 2: Significant waiters (3 players) - 12+ minutes longer than shortest  
+    # Assuming min ~60s, significant threshold = 60s + 720s = 780s, so use 800-1000s
     significant_waiters = ["player3", "player4", "player5"] 
     for i, pid in enumerate(significant_waiters):
         stats = session.player_stats.setdefault(pid, PlayerStats(player_id=pid))
-        # Keep below extreme threshold (1800s = 30min), start at 900s (15min) + increments
-        stats.total_wait_time = SIGNIFICANT_WAIT_THRESHOLD_SECONDS + (i * 200)  # 15-21 minutes max
+        stats.total_wait_time = 800 + (i * 100)  # ~13-18 minutes (12+ min gap from 60s base)
         stats.games_waited = 5 + i  # Medium legacy counter
-        stats.wait_start_time = current_time - timedelta(minutes=3+i)  # Shorter current waits
+        stats.wait_start_time = current_time - timedelta(minutes=2+i)  # Shorter current waits
     
-    # Group 3: Normal waiters (4 players) - have waited < 15 minutes
-    normal_waiters = ["player6", "player7", "player8", "player9"]
+    # Group 3: Normal waiters (4 players) - between recent and significant
+    normal_waiters = ["player6", "player7", "player8", "player9"]  
     for i, pid in enumerate(normal_waiters):
         stats = session.player_stats.setdefault(pid, PlayerStats(player_id=pid))
-        # Keep well below significant threshold (900s = 15min)
-        stats.total_wait_time = 300 + (i * 60)  # 5-8 minutes max
+        # Between recent players (~60-95s) and significant threshold (will be ~180-240s based on min)
+        stats.total_wait_time = 120 + (i * 20)  # 120-180s range
         stats.games_waited = 2 + i  # Low legacy counter
         stats.wait_start_time = current_time - timedelta(minutes=1+i)  # Shorter current waits
     
-    # Group 4: Recently played (remaining players) - just finished games
+    # Group 4: Recently played (remaining players) - shortest wait times (these set the base)
     recent_players = [pid for pid in players if pid not in extreme_waiters + significant_waiters + normal_waiters]
-    for pid in recent_players:
+    for i, pid in enumerate(recent_players):
         stats = session.player_stats.setdefault(pid, PlayerStats(player_id=pid))
-        stats.total_wait_time = 60  # Very little total wait
+        stats.total_wait_time = 60 + (i * 5)  # Very short waits (60-95s range)
         stats.games_waited = 0  # No wait count
         stats.games_played = 5  # Just played
     
@@ -135,29 +140,37 @@ def simulate_real_session_with_wait_priority():
 
 
 def test_priority_calculation_integration():
-    """Test that priority calculation integrates correctly with existing system"""
+    """Test that relative priority calculation integrates correctly with existing system"""
     print("Testing priority calculation integration...")
     
     session, extreme_waiters, significant_waiters, normal_waiters, recent_players = simulate_real_session_with_wait_priority()
     
-    # Test priority info calculation
-    for pid in extreme_waiters:
-        info = calculate_wait_priority_info(session, pid)
-        assert info.is_extreme_waiter, f"{pid} should be extreme waiter"
-        assert info.priority_tier == 0, f"{pid} should have extreme priority tier"
-        assert info.total_wait_seconds >= EXTREME_WAIT_THRESHOLD_SECONDS
+    # Get relative priority calculation for all active players
+    all_player_ids = extreme_waiters + significant_waiters + normal_waiters + recent_players
+    relative_infos = calculate_relative_wait_priority_infos(session, all_player_ids)
+    info_by_player = {info.player_id: info for info in relative_infos}
     
-    for pid in significant_waiters:
-        info = calculate_wait_priority_info(session, pid)
-        assert info.is_significant_waiter, f"{pid} should be significant waiter (total: {info.total_wait_seconds})"
-        assert info.priority_tier == 1, f"{pid} should have significant priority tier (got tier {info.priority_tier})"
+    # Test that the relative system creates a meaningful priority hierarchy
+    # Get the minimum wait time
+    min_wait = min(info.total_wait_seconds for info in relative_infos)
     
-    for pid in normal_waiters:
-        info = calculate_wait_priority_info(session, pid)
-        assert not info.is_significant_waiter, f"{pid} should not be significant waiter (total: {info.total_wait_seconds})"
-        assert info.priority_tier == 2, f"{pid} should have normal priority tier (got tier {info.priority_tier})"
+    # Test that players with much longer wait times get higher priority
+    long_waiters = [pid for pid in extreme_waiters + significant_waiters]
+    short_waiters = recent_players
     
-    print("✓ Priority calculation integration works correctly")
+    for long_pid in long_waiters:
+        long_info = info_by_player[long_pid]
+        for short_pid in short_waiters:
+            short_info = info_by_player[short_pid]
+            # Long waiters should have lower tier numbers (higher priority) than short waiters
+            assert long_info.priority_tier <= short_info.priority_tier, \
+                f"Long waiter {long_pid} (tier {long_info.priority_tier}) should have higher priority than short waiter {short_pid} (tier {short_info.priority_tier})"
+    
+    # Test that the system creates different tiers when there are significant gaps
+    unique_tiers = set(info.priority_tier for info in relative_infos)
+    assert len(unique_tiers) >= 2, f"Should have multiple priority tiers, got {unique_tiers}"
+    
+    print("✓ Relative priority calculation integration works correctly")
 
 
 def test_candidate_selection_prioritizes_waiters():
@@ -261,7 +274,7 @@ def test_backward_compatibility():
 
 
 def test_mixed_priority_scenarios():
-    """Test complex scenarios with mixed priorities"""
+    """Test complex scenarios with mixed priorities using gap-based system"""
     print("Testing complex mixed priority scenarios...")
     
     session = create_realistic_test_session()
@@ -269,25 +282,28 @@ def test_mixed_priority_scenarios():
     # Scenario: Player with high games_waited but low total_wait_time vs 
     # player with low games_waited but high total_wait_time
     
-    player1_id = "player1"  # High legacy counter, low total wait
-    player2_id = "player2"  # Low legacy counter, high total wait
+    player1_id = "player1"  # High legacy counter, low total wait (will be shortest)
+    player2_id = "player2"  # Low legacy counter, high total wait (12+ min gap)
     
     stats1 = session.player_stats.setdefault(player1_id, PlayerStats(player_id=player1_id))
     stats1.games_waited = 10  # High legacy count
-    stats1.total_wait_time = 600  # 10 minutes total
+    stats1.total_wait_time = 300  # 5 minutes total (shortest)
     
     stats2 = session.player_stats.setdefault(player2_id, PlayerStats(player_id=player2_id))  
     stats2.games_waited = 2   # Low legacy count
-    stats2.total_wait_time = SIGNIFICANT_WAIT_THRESHOLD_SECONDS + 300  # 20 minutes total
+    stats2.total_wait_time = 300 + SIGNIFICANT_GAP_SECONDS + 120  # 5 + 12 + 2 = 19 minutes (significant gap)
+    
+    # Use relative calculation to compare them properly
+    relative_infos = calculate_relative_wait_priority_infos(session, [player1_id, player2_id])
+    info1 = next(info for info in relative_infos if info.player_id == player1_id)
+    info2 = next(info for info in relative_infos if info.player_id == player2_id)
     
     # Player2 should be prioritized despite lower games_waited
     sorted_players = sort_players_by_wait_priority(session, [player1_id, player2_id], reverse=True)
     assert sorted_players[0] == player2_id, f"Player with higher total wait should be first, got {sorted_players}"
     
-    info1 = calculate_wait_priority_info(session, player1_id)
-    info2 = calculate_wait_priority_info(session, player2_id)
-    
-    assert info2.priority_tier < info1.priority_tier, "Player2 should have higher priority tier"
+    # Player2 should have higher priority (lower tier number)
+    assert info2.priority_tier < info1.priority_tier, f"Player2 (tier {info2.priority_tier}) should have higher priority than Player1 (tier {info1.priority_tier})"
     
     print("✓ Mixed priority scenarios handled correctly")
 

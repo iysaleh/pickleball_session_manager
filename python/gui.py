@@ -2258,21 +2258,37 @@ class SessionWindow(QMainWindow):
                         from python.utils import get_current_wait_time, format_duration
                         stats = self.session.player_stats[player_id]
                         
-                        # Use new wait priority system for display
-                        from python.wait_priority import calculate_wait_priority_info, format_wait_time_display
+                        # Use relative wait priority system for display
+                        from python.wait_priority import calculate_relative_wait_priority_infos, format_wait_time_display
                         
-                        priority_info = calculate_wait_priority_info(self.session, player_id)
-                        current_wait_str = format_duration(priority_info.current_wait_seconds)
-                        total_wait_str = format_wait_time_display(priority_info.total_wait_seconds)
+                        # Get all waiting player IDs for relative calculation
+                        all_waiting_ids = [item.data(Qt.ItemDataRole.UserRole) for item in existing_items.values()]
+                        all_waiting_ids = [pid for pid in all_waiting_ids if pid] + [player_id]
+                        all_waiting_ids = list(set(all_waiting_ids))  # Remove duplicates
                         
-                        # Show priority indicator for significant waiters
-                        priority_indicator = ""
-                        if priority_info.is_extreme_waiter:
-                            priority_indicator = " ⚠️"  # Warning for extreme wait
-                        elif priority_info.is_significant_waiter:
-                            priority_indicator = " ⏰"  # Clock for significant wait
+                        # Calculate relative priorities for all waiting players
+                        relative_infos = calculate_relative_wait_priority_infos(self.session, all_waiting_ids)
+                        player_info = next((info for info in relative_infos if info.player_id == player_id), None)
                         
-                        item_text += f"  [{current_wait_str} / {total_wait_str}]{priority_indicator}"
+                        if player_info:
+                            current_wait_str = format_duration(player_info.current_wait_seconds)
+                            total_wait_str = format_wait_time_display(player_info.total_wait_seconds)
+                            
+                            # Show priority indicator based on relative tier
+                            priority_indicator = ""
+                            if player_info.priority_tier == 0:  # extreme
+                                priority_indicator = " ⚠️"  # Warning for extreme relative wait
+                            elif player_info.priority_tier == 1:  # significant
+                                priority_indicator = " ⏰"  # Clock for significant relative wait
+                            
+                            item_text += f"  [{current_wait_str} / {total_wait_str}]{priority_indicator}"
+                        else:
+                            # Fallback for edge cases
+                            stats = self.session.player_stats[player_id]
+                            current_wait = get_current_wait_time(stats)
+                            current_wait_str = format_duration(current_wait)
+                            total_wait_str = format_wait_time_display(stats.total_wait_time + current_wait)
+                            item_text += f"  [{current_wait_str} / {total_wait_str}]"
                     
                     if player_id in existing_items:
                         # Update existing item

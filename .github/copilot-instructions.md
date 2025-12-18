@@ -122,16 +122,17 @@ Implements sophisticated wait time priority logic that considers actual accumula
 - Replaces legacy `games_waited` as primary priority metric
 - Maintains `games_waited` as fallback/tiebreaker for backward compatibility
 
-**Dynamic Threshold System**
+**Gap-Based Threshold System**
 - MINIMUM_PRIORITY_GAP_SECONDS = 120 (2 minutes) - differences smaller than this are ignored
-- SIGNIFICANT_WAIT_THRESHOLD_SECONDS = 900 (12 minutes) - players become "significant waiters" 
-- EXTREME_WAIT_THRESHOLD_SECONDS = 1800 (20 minutes) - players become "extreme waiters"
-- Only prioritizes wait differences when they exceed meaningful thresholds
+- SIGNIFICANT_GAP_SECONDS = 720 (12 minutes) - players who waited 12+ minutes longer than shortest waiter become "significant"
+- EXTREME_GAP_SECONDS = 1200 (20 minutes) - players who waited 20+ minutes longer than shortest waiter become "extreme"
+- Thresholds are calculated as fixed time gaps from the shortest waiter, not absolute times
+- Only prioritizes wait differences when they exceed meaningful fixed gaps
 
 **Priority Tiers**
-- Tier 0 (Extreme): 20+ minutes total wait - highest priority (⚠️ indicator)
-- Tier 1 (Significant): 12-20 minutes total wait - high priority (⏰ indicator)  
-- Tier 2 (Normal): < 12 minutes total wait - standard priority
+- Tier 0 (Extreme): 20+ minutes longer than shortest waiter - highest priority (⚠️ indicator)
+- Tier 1 (Significant): 12-20 minutes longer than shortest waiter - high priority (⏰ indicator)  
+- Tier 2 (Normal): < 12 minutes longer than shortest waiter - standard priority
 
 ### Critical Functions
 
@@ -175,9 +176,10 @@ Implements sophisticated wait time priority logic that considers actual accumula
 
 ### Threshold Logic Examples
 
-- **15 players within 2 minutes**: Algorithm treats equally, no micro-optimization
-- **13 players within 2 minutes + 2 players at 12+ minutes**: Prioritizes the 2 long waiters
-- **Players with 20+ minute waits**: Get extreme priority with visual indicators
+- **15 players all waited 2-4 minutes**: Algorithm treats equally, no micro-optimization (gaps < 12 min)
+- **13 players waited 2-4 minutes + 2 players waited 16+ minutes**: Prioritizes the 2 long waiters (12+ min gap)
+- **Players who waited 20+ minutes longer than shortest**: Get extreme priority with visual indicators
+- **Context-aware gaps**: If shortest wait is 1 minute, 21+ minutes = extreme. If shortest is 10 minutes, 30+ minutes = extreme
 
 ### Testing & Validation
 Run fuzzing tests with: `make run_fuzz_tests`

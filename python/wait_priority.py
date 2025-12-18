@@ -19,8 +19,8 @@ from .utils import get_current_wait_time
 
 # Configuration constants for wait priority thresholds
 MINIMUM_PRIORITY_GAP_SECONDS = 120  # 2 minutes - minimum gap to matter
-SIGNIFICANT_WAIT_THRESHOLD_SECONDS = 720  # 12 minutes - when wait becomes "significant"
-EXTREME_WAIT_THRESHOLD_SECONDS = 1200  # 20 minutes - when wait becomes "extreme"
+SIGNIFICANT_GAP_SECONDS = 720  # 12 minutes - gap above shortest waiter for significant priority
+EXTREME_GAP_SECONDS = 1200  # 20 minutes - gap above shortest waiter for extreme priority
 
 @dataclass
 class WaitPriorityInfo:
@@ -33,13 +33,13 @@ class WaitPriorityInfo:
     
     @property
     def is_extreme_waiter(self) -> bool:
-        """True if player has waited extremely long"""
-        return self.total_wait_seconds >= EXTREME_WAIT_THRESHOLD_SECONDS
+        """True if player has waited extremely long (based on priority tier)"""
+        return self.priority_tier == 0
     
     @property
     def is_significant_waiter(self) -> bool:
-        """True if player has waited significantly long"""
-        return self.total_wait_seconds >= SIGNIFICANT_WAIT_THRESHOLD_SECONDS
+        """True if player has waited significantly long (based on priority tier)"""
+        return self.priority_tier <= 1  # Both extreme (0) and significant (1) are "significant"
     
     def priority_gap_from(self, other: 'WaitPriorityInfo') -> int:
         """Calculate priority gap in seconds from another player"""
@@ -49,6 +49,9 @@ class WaitPriorityInfo:
 def calculate_wait_priority_info(session: Session, player_id: str) -> WaitPriorityInfo:
     """
     Calculate comprehensive wait priority information for a player.
+    
+    Note: This calculates individual player info. For relative priority tiers,
+    use calculate_relative_wait_priority_infos() which considers all players.
     
     Args:
         session: The current session
@@ -64,20 +67,16 @@ def calculate_wait_priority_info(session: Session, player_id: str) -> WaitPriori
             player_id=player_id,
             total_wait_seconds=0,
             current_wait_seconds=0,
-            priority_tier=2,  # normal
+            priority_tier=2,  # normal (will be recalculated in relative context)
             games_waited=0
         )
     
     current_wait = get_current_wait_time(stats)
     total_wait = stats.total_wait_time + current_wait
     
-    # Determine priority tier based on total wait time
-    if total_wait >= EXTREME_WAIT_THRESHOLD_SECONDS:
-        tier = 0  # extreme priority
-    elif total_wait >= SIGNIFICANT_WAIT_THRESHOLD_SECONDS:
-        tier = 1  # significant priority  
-    else:
-        tier = 2  # normal priority
+    # Initial tier assignment (will be refined by relative calculation)
+    # Start with normal priority - will be recalculated in relative context
+    tier = 2  # normal priority (default)
     
     return WaitPriorityInfo(
         player_id=player_id,
@@ -88,9 +87,60 @@ def calculate_wait_priority_info(session: Session, player_id: str) -> WaitPriori
     )
 
 
+def calculate_relative_wait_priority_infos(session: Session, player_ids: List[str]) -> List[WaitPriorityInfo]:
+    """
+    Calculate wait priority information with relative tier assignment.
+    
+    This function implements the core logic: priority tiers are determined by comparing
+    each player's wait time to the shortest waiter, not by absolute thresholds.
+    
+    Args:
+        session: The current session
+        player_ids: List of player IDs to analyze
+        
+    Returns:
+        List of WaitPriorityInfo with relative priority tiers assigned
+    """
+    if not player_ids:
+        return []
+    
+    # Get initial priority info for all players
+    infos = [calculate_wait_priority_info(session, pid) for pid in player_ids]
+    
+    # Find the minimum wait time
+    wait_times = [info.total_wait_seconds for info in infos]
+    min_wait = min(wait_times)
+    max_wait = max(wait_times)
+    
+    # If everyone has very similar wait times (< 2 min gap), treat all as normal priority
+    if (max_wait - min_wait) < MINIMUM_PRIORITY_GAP_SECONDS:
+        for info in infos:
+            info.priority_tier = 2  # all normal
+        return infos
+    
+    # Calculate relative thresholds based on shortest waiter
+    # Use the minimum wait time as base (no artificial minimum to preserve relative nature)
+    base_wait = min_wait
+    
+    # Calculate thresholds based on fixed time gaps from shortest waiter
+    significant_threshold = base_wait + SIGNIFICANT_GAP_SECONDS
+    extreme_threshold = base_wait + EXTREME_GAP_SECONDS
+    
+    # Assign relative priority tiers
+    for info in infos:
+        if info.total_wait_seconds >= extreme_threshold:
+            info.priority_tier = 0  # extreme priority
+        elif info.total_wait_seconds >= significant_threshold:
+            info.priority_tier = 1  # significant priority
+        else:
+            info.priority_tier = 2  # normal priority
+    
+    return infos
+
+
 def get_wait_priority_groups(session: Session, player_ids: List[str]) -> Dict[int, List[str]]:
     """
-    Group players by wait priority tier.
+    Group players by relative wait priority tier.
     
     Args:
         session: The current session
@@ -101,9 +151,11 @@ def get_wait_priority_groups(session: Session, player_ids: List[str]) -> Dict[in
     """
     groups = {0: [], 1: [], 2: []}
     
-    for player_id in player_ids:
-        priority_info = calculate_wait_priority_info(session, player_id)
-        groups[priority_info.priority_tier].append(player_id)
+    # Use relative priority calculation
+    priority_infos = calculate_relative_wait_priority_infos(session, player_ids)
+    
+    for info in priority_infos:
+        groups[info.priority_tier].append(info.player_id)
     
     return groups
 
@@ -142,9 +194,9 @@ def should_prioritize_wait_differences(wait_infos: List[WaitPriorityInfo]) -> bo
 def sort_players_by_wait_priority(session: Session, player_ids: List[str], 
                                 reverse: bool = True) -> List[str]:
     """
-    Sort players by wait priority using the sophisticated wait time algorithm.
+    Sort players by wait priority using relative thresholds.
     
-    Primary sort key: Priority tier (0=extreme > 1=significant > 2=normal)
+    Primary sort key: Relative priority tier (0=extreme > 1=significant > 2=normal)
     Secondary sort key: Total wait time within tier
     Tertiary sort key: Games waited (legacy fallback)
     
@@ -156,7 +208,8 @@ def sort_players_by_wait_priority(session: Session, player_ids: List[str],
     Returns:
         List of player IDs sorted by wait priority
     """
-    priority_infos = [calculate_wait_priority_info(session, pid) for pid in player_ids]
+    # Use relative priority calculation
+    priority_infos = calculate_relative_wait_priority_infos(session, player_ids)
     
     # Sort by (priority_tier, -total_wait_seconds, -games_waited)
     # Lower tier number = higher priority, higher wait time = higher priority
@@ -176,11 +229,10 @@ def sort_players_by_wait_priority(session: Session, player_ids: List[str],
 def get_priority_aware_candidates(session: Session, available_players: List[str], 
                                 max_candidates: int = 16) -> List[str]:
     """
-    Select match candidates with wait time priority awareness.
+    Select match candidates with relative wait time priority awareness.
     
-    This function implements the core logic for selecting which players should
-    be considered for matches, prioritizing those who have waited longest while
-    maintaining reasonable candidate pool sizes for match generation.
+    This function implements the core logic: priority is determined by comparing
+    wait times relative to the shortest waiter, not absolute thresholds.
     
     Args:
         session: The current session
@@ -193,10 +245,10 @@ def get_priority_aware_candidates(session: Session, available_players: List[str]
     if len(available_players) <= max_candidates:
         return sort_players_by_wait_priority(session, available_players, reverse=True)
     
-    # Get wait priority information for all players
-    priority_infos = [calculate_wait_priority_info(session, pid) for pid in available_players]
+    # Get relative wait priority information for all players
+    priority_infos = calculate_relative_wait_priority_infos(session, available_players)
     
-    # Group by priority tiers
+    # Group by relative priority tiers
     groups = {0: [], 1: [], 2: []}
     for info in priority_infos:
         groups[info.priority_tier].append(info)
@@ -205,14 +257,14 @@ def get_priority_aware_candidates(session: Session, available_players: List[str]
     candidates = []
     remaining_slots = max_candidates
     
-    # Take all extreme waiters first
+    # Take all extreme waiters first (those who waited much longer than shortest)
     if groups[0] and remaining_slots > 0:
         extreme_sorted = sorted(groups[0], key=lambda x: -x.total_wait_seconds)
         take_count = min(len(extreme_sorted), remaining_slots)
         candidates.extend([info.player_id for info in extreme_sorted[:take_count]])
         remaining_slots -= take_count
     
-    # Then significant waiters
+    # Then significant waiters (those who waited moderately longer than shortest)
     if groups[1] and remaining_slots > 0:
         significant_sorted = sorted(groups[1], key=lambda x: -x.total_wait_seconds)
         take_count = min(len(significant_sorted), remaining_slots)
