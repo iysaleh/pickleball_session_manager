@@ -2256,7 +2256,6 @@ class SessionWindow(QMainWindow):
                     # Get current wait time and format it only if toggle is on
                     if self.show_wait_times:
                         from python.utils import get_current_wait_time, format_duration
-                        stats = self.session.player_stats[player_id]
                         
                         # Use relative wait priority system for display
                         from python.wait_priority import calculate_relative_wait_priority_infos, format_wait_time_display

@@ -151,8 +151,6 @@ def test_priority_calculation_integration():
     info_by_player = {info.player_id: info for info in relative_infos}
     
     # Test that the relative system creates a meaningful priority hierarchy
-    # Get the minimum wait time
-    min_wait = min(info.total_wait_seconds for info in relative_infos)
     
     # Test that players with much longer wait times get higher priority
     long_waiters = [pid for pid in extreme_waiters + significant_waiters]

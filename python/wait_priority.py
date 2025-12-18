@@ -3,7 +3,7 @@ Wait Time Priority System for Pickleball Session Manager
 
 This module implements sophisticated wait time priority logic that considers:
 1. Total accumulated wait time (historical + current session)
-2. Dynamic thresholds to determine when wait time differences matter
+2. Gap-based thresholds to determine when wait time differences matter
 3. Extensible priority calculation framework
 
 The system ensures players who have waited significantly longer are prioritized
@@ -223,7 +223,7 @@ def sort_players_by_wait_priority(session: Session, player_ids: List[str],
     )
     
     result = [info.player_id for info in priority_infos]
-    return result if not reverse else result
+    return result if reverse else result[::-1]
 
 
 def get_priority_aware_candidates(session: Session, available_players: List[str], 
