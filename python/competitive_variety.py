@@ -1038,7 +1038,7 @@ def get_default_competitive_variety_settings(total_players: int, num_courts: int
     
     - 13 or less players: Casual (80% roaming)
     - 14 players: Semi-Competitive (65% roaming)
-    - 15 players: Competitive (50% roaming)
+    - 15 players: Semi-Competitive (65% roaming)
     - 16 players: Semi-Competitive (65% roaming)
     - 17 players: Casual (80% roaming)
     - 18 players: Semi-Competitive (65% roaming)
@@ -1052,7 +1052,7 @@ def get_default_competitive_variety_settings(total_players: int, num_courts: int
     elif total_players == 14:
         roaming_percent = COMPETITIVENESS_PROFILES["semi-competitive"]
     elif total_players == 15:
-        roaming_percent = COMPETITIVENESS_PROFILES["competitive"]
+        roaming_percent = COMPETITIVENESS_PROFILES["semi-competitive"]
     elif total_players == 16:
         roaming_percent = COMPETITIVENESS_PROFILES["semi-competitive"]
     elif total_players == 17:
