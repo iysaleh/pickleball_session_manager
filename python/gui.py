@@ -746,13 +746,20 @@ class SetupDialog(QDialog):
                 return
             
             # Validate first bye players count
-            # Max byes = (total_players - courts * 4)
+            # Calculate actual waiting players based on optimal court usage
             courts = self.courts_spin.value()
-            players_needed = courts * 4
-            max_byes = len(players) - players_needed
+            total_court_capacity = courts * 4
             
-            # Only validate bye count if it would result in negative waiting players
-            # (more bye players than available waiting spots)
+            if len(players) >= total_court_capacity:
+                # More players than court capacity: some will wait
+                max_byes = len(players) - total_court_capacity
+            else:
+                # Fewer players than court capacity: fill what we can optimally  
+                courts_we_can_fill = len(players) // 4
+                players_on_courts = courts_we_can_fill * 4
+                max_byes = len(players) - players_on_courts
+            
+            # Only validate bye count if we have bye players and they exceed available waiting spots
             if len(self.first_bye_players) > max_byes and max_byes >= 0:
                 QMessageBox.warning(
                     self, 

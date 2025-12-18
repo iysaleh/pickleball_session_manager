@@ -517,6 +517,9 @@ sequence item 0: expected str instance, NoneType found
 * When starting a new session with previous players, the restored first byes look like "player_14_1766003207.921782" --- that's not right. The new session with previous players first byes should properly add the players from the new session with the same name as before (probably by doing string matching based on the name).
 * Look at @pickleball_session_20251217_123120.txt , the same bug as before exists --  the first game ended, and the first byes are still waiting, per the algorithm, the first byes should be scheduled if it was working properly. Think hard and deep about why this bug is happening, and come up with a comprehensive solution that is simple to understand and is coded intelligently and human readably.
 * The "Too many courts for N players" validation is unnecessary. It's OK to have more courts than needed for the number of players we have.
+* [Bug] When I created a 15 player match on 4 courts and added 2 players to the first byes list, only 1 of those two players was actually on the first bye!!! Figure out what caused this and fix it. Be precise in your fix, and assume the role of a staff level export developer
+* You have made it so that you can have more byes than would be on the waitlist --- in a 15 player 4 court scenario, there should only be allowed 3 byes. Restore the warning message that prevents more byes than are waiting.
+
 # Useful Commands:
 npx vitest run roundrobin.test.ts
 # Run local webserver

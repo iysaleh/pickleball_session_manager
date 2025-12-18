@@ -542,10 +542,13 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
             courts_being_filled = len(empty_courts)
             players_these_courts_need = courts_being_filled * 4
             
-            # Only enforce bye if there will be people waiting after filling these courts
-            # Example: 18 players, 3 in-progress courts (12 players), 1 empty court (needs 4)
-            # Waiting: 18 - 12 = 6. After filling: 6 - 4 = 2 still waiting. YES, apply bye.
-            if waiting_count > players_these_courts_need:
+            # Apply bye unless total players exactly fills all courts
+            # Logic: if total players == courts * 4, then use everyone (no bye)
+            # Otherwise, apply bye to guarantee bye players sit out first round
+            total_court_capacity = courts_being_filled * 4
+            
+            # Apply bye unless we have exact fit for all courts
+            if waiting_count != total_court_capacity:
                 first_bye_players_set = set(session.config.first_bye_players)
     
     # Get players currently in active matches
