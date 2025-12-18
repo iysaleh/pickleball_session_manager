@@ -410,7 +410,8 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
             if partner_id != player_id:
                 stats.partners_played[partner_id] = stats.partners_played.get(partner_id, 0) + 1
     
-    # Increment games_waited for all other active players
+    # Increment games_waited for all other active players (legacy counter)
+    # The actual wait time priority system uses total_wait_time + current wait
     for player_id in session.active_players:
         if player_id not in players_in_match:
             if player_id in session.player_stats:

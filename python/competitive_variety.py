@@ -7,6 +7,7 @@ from datetime import datetime
 from .types import Player, QueuedMatch, Session, Match
 import math
 from itertools import combinations
+from .wait_priority import get_priority_aware_candidates, should_prioritize_wait_differences
 
 # Constants for ELO system
 BASE_RATING = 1500
@@ -706,41 +707,21 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                              pass
 
                 if not best_team1:
-                    # Filter available players by priority (Wait Time / Last Played)
-                    # Sort by:
-                    # 1. Last Game Index (Ascending) - None/-1 comes first (never played)
-                    # 2. Games Played (Ascending) - Tie breaker for never played
+                    # Use sophisticated wait time priority system to select candidates
+                    # This considers actual wait time, not just game counts
                     
-                    player_priority = []
-                    for p in available_players:
-                        _, last_idx = _get_last_played_info(session, p)
-                        games_played = session.player_stats.get(p, 
-                            type('', (), {'games_played': 0})()).games_played if p in session.player_stats else 0
-                        player_priority.append((p, last_idx, games_played))
+                    # Calculate optimal number of candidates for matching
+                    # Need enough for ELO mixing flexibility while prioritizing waiters
+                    base_candidates = max(12, len(available_players) // 2)
+                    max_candidates = min(16, max(12, base_candidates))
                     
-                    # Sort: -1 first, then small indices.
-                    player_priority.sort(key=lambda x: (x[1], x[2]))
+                    # Get priority-aware candidates using the new wait time system
+                    candidates_for_matching = get_priority_aware_candidates(
+                        session, available_players, max_candidates
+                    )
                     
-                    # Take top candidates (enough to form a few matches, but filter out recent players if possible)
-                    # If we need 4 players, taking top 12 gives good ELO mixing flexibility 
-                    # while ensuring people who just played (high index) are excluded if others exist.
-                    
-                    # Logic: If we have many waiters, exclude the ones who just played.
-                    num_candidates = max(12, len(available_players) // 2)
-                    # Cap at 16 to prevent slowness, but ensure at least 12 if possible
-                    num_candidates = min(16, max(12, num_candidates))
-                    
-                    # If we have distinct groups (waiters vs just played), we want to strictly pick waiters.
-                    # The sort `(last_idx, games_played)` puts `(-1, 0)` at top, and `(10, 10)` at bottom.
-                    # So picking top N will naturally exclude bottom.
-                    
-                    # Candidates sorted by PRIORITY (Wait Time)
-                    candidates_for_matching = [x[0] for x in player_priority[:num_candidates]]
-                    
-                    # We do NOT sort by ELO here, because we want to prioritize Waiters.
-                    # combinations() will pick the first 4 candidates (highest priority) first.
-                    
-                    # Limit combination search to top 12 of the filtered list to keep it fast
+                    # Limit combination search to maintain performance
+                    # The candidates are already sorted by wait priority
                     search_limit = min(12, len(candidates_for_matching))
                     
                     # Only one pass: Strict Bracketing (allow_cross_bracket=False)
