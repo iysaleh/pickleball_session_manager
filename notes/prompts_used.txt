@@ -526,6 +526,15 @@ sequence item 0: expected str instance, NoneType found
 # Time Waited Rework
 * We need to rework the times_waited logic -- the counter is not a good enough measure of keeping track of who has waited a long period of time. Instead, we need to look at the total time actually waited for each player and prioritize making match configurations that result in players that have waited the most already not waiting more. We need a threshold at which point the algorithm is not picky to make people wait -- EG, if 15 players are all within 2 minutes of waiting, the algorithm should not care about who waits... But if 13 players are all within 2 minutes of the same total time waited, but 2 other players are within 15 minutes, then make sure those 2 other players that have already waited a lot longer are not put on the waitlist and are prioritized in getting the next available match. This is an extremely complex rework that may have ramifications not described here, be smart in how you will go about this rework and consider other parts of the code where this may effect things. Be precise in your rework, and assume the role of a staff level export developer. Create code that is extensible and maintanable, with logical structure.
 * Please verify that the thresholds are based on the time someone waited against the time that the person that waited the least has waited.
+* The relative thresholds need to be based on hard time specifications, not gaps like 3x/5x. It needs to be something like a 12 minute gap between the least waited person should mean a waitlisted person should have priority, and a 20 minute gap means extreme priority.
+* Here are the github copilot AI reviewed suggestions for this time waited rework, decide if they are correct and should be implemented. The full feature patch for this is in @timeWaitedRework.patch :
+===
+* In @python/wait_priority.py ; The reverse parameter is not being used correctly. Line 226 returns result if not reverse else result, which always returns the same value regardless of the reverse parameter. This should be result if not reverse else result[::-1] or the logic needs to be corrected to actually reverse the list when reverse is True.
+* In @python/wait_priority.py ; The documentation mentions "Dynamic thresholds" but the implementation actually uses fixed time gaps (120s, 720s, 1200s) from the shortest waiter, not dynamic thresholds. Consider updating the documentation to say "Relative thresholds based on fixed time gaps" or "Gap-based thresholds" to more accurately describe the implementation.
+* In @test_wait_priority_integration.py ; Variable min_wait is not used.
+* In @python/gui.py ; This assignment to 'stats' is unnecessary as it is redefined before this value is used.
+
+
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts
