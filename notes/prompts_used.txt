@@ -520,6 +520,9 @@ sequence item 0: expected str instance, NoneType found
 * [Bug] When I created a 15 player match on 4 courts and added 2 players to the first byes list, only 1 of those two players was actually on the first bye!!! Figure out what caused this and fix it. Be precise in your fix, and assume the role of a staff level export developer
 * You have made it so that you can have more byes than would be on the waitlist --- in a 15 player 4 court scenario, there should only be allowed 3 byes. Restore the warning message that prevents more byes than are waiting.
 
+# Matchmaking bug
+* [Bug] Look at @pickleball_session_20251217_173236.txt -- with competetiveness set to Casual, it made the match Ibraheem/Carol vs Alisha/Kimberly... Having thos players is fine, but it's not balanced at all. It should have been Ibraheem/Alisha vs Carol/Kimberly if it was going to make any match with those players. Investigate why matches that are made aren't being balanced. Be precise in your fix, and assume the role of a staff level export developer.
+
 # Useful Commands:
 npx vitest run roundrobin.test.ts
 # Run local webserver

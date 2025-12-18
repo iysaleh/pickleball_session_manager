@@ -422,13 +422,13 @@ def score_potential_match(session: Session, team1: List[str], team2: List[str]) 
     """
     score = 0.0
     
-    # Calculate team ratings
+    # Calculate team ratings (total, not average, for better balance)
     team1_rating = sum(calculate_elo_rating(session.player_stats.get(p, 
                        type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
-                       for p in team1) / len(team1)
+                       for p in team1)
     team2_rating = sum(calculate_elo_rating(session.player_stats.get(p, 
                        type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
-                       for p in team2) / len(team2)
+                       for p in team2)
     
     # Penalize unbalanced teams (large skill difference)
     rating_diff = abs(team1_rating - team2_rating)
@@ -747,12 +747,16 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                     allow_cross = False
                     for combo in combinations(candidates_for_matching[:search_limit], 4):
                         if _can_form_valid_teams(session, list(combo), allow_cross_bracket=allow_cross):
-                            # Found a valid combination - use first config that works
+                            # Evaluate all valid team configurations and pick the most balanced
                             configs = [
                                 ([combo[0], combo[1]], [combo[2], combo[3]]),
                                 ([combo[0], combo[2]], [combo[1], combo[3]]),
                                 ([combo[0], combo[3]], [combo[1], combo[2]]),
                             ]
+                            
+                            best_score = float('-inf')
+                            best_config = None
+                            
                             for team1, team2 in configs:
                                 if (can_play_with_player(session, team1[0], team1[1], 'partner', allow_cross) and
                                     can_play_with_player(session, team2[0], team2[1], 'partner', allow_cross)):
@@ -765,11 +769,16 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                                                 break
                                         if not valid:
                                             break
+                                    
                                     if valid:
-                                        best_team1 = list(team1)
-                                        best_team2 = list(team2)
-                                        break
-                            if best_team1:
+                                        # Score this configuration for balance and variety
+                                        score = score_potential_match(session, team1, team2)
+                                        if score > best_score:
+                                            best_score = score
+                                            best_config = (list(team1), list(team2))
+                            
+                            if best_config:
+                                best_team1, best_team2 = best_config
                                 break
                 
                 if best_team1 and best_team2:
