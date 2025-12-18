@@ -114,6 +114,12 @@ run_test_export_stats:
 run_match_history_snapshots:
 	python3 test_match_history_snapshots.py
 
+test_wait_priority:
+	python3 test_wait_priority_system.py
+
+test_wait_priority_integration:
+	python3 test_wait_priority_integration.py
+
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete

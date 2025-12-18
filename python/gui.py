@@ -2258,15 +2258,21 @@ class SessionWindow(QMainWindow):
                         from python.utils import get_current_wait_time, format_duration
                         stats = self.session.player_stats[player_id]
                         
-                        # Current wait time (since last match)
-                        current_wait = get_current_wait_time(stats)
-                        current_wait_str = format_duration(current_wait)
+                        # Use new wait priority system for display
+                        from python.wait_priority import calculate_wait_priority_info, format_wait_time_display
                         
-                        # Total accumulated wait time
-                        total_wait = stats.total_wait_time + current_wait
-                        total_wait_str = format_duration(total_wait)
+                        priority_info = calculate_wait_priority_info(self.session, player_id)
+                        current_wait_str = format_duration(priority_info.current_wait_seconds)
+                        total_wait_str = format_wait_time_display(priority_info.total_wait_seconds)
                         
-                        item_text += f"  [{current_wait_str} / {total_wait_str}]"
+                        # Show priority indicator for significant waiters
+                        priority_indicator = ""
+                        if priority_info.is_extreme_waiter:
+                            priority_indicator = " ⚠️"  # Warning for extreme wait
+                        elif priority_info.is_significant_waiter:
+                            priority_indicator = " ⏰"  # Clock for significant wait
+                        
+                        item_text += f"  [{current_wait_str} / {total_wait_str}]{priority_indicator}"
                     
                     if player_id in existing_items:
                         # Update existing item
@@ -3136,15 +3142,10 @@ class SessionWindow(QMainWindow):
             best_team2 = []
             
             try:
-                # Sort waiting players by games_waited (primary) and games_played (secondary - less is better)
-                # prioritizing those who have waited the most
-                def get_wait_priority(pid):
-                    stats = self.session.player_stats.get(pid)
-                    if not stats:
-                        return (0, 0)
-                    return (stats.games_waited, -stats.games_played)
+                # Sort waiting players using sophisticated wait time priority system
+                from python.wait_priority import sort_players_by_wait_priority
                 
-                sorted_waiting = sorted(waiting_ids, key=get_wait_priority, reverse=True)
+                sorted_waiting = sort_players_by_wait_priority(self.session, waiting_ids, reverse=True)
                 
                 num_needed = num_per_team * 2
                 
