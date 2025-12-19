@@ -86,9 +86,9 @@ def get_player_ranking(session: Session, player_id: str) -> Tuple[int, float]:
     Returns (rank, rating) where rank is 1-based (1 = best).
     Ranks all active players by rating.
     """
-    # Calculate ratings for all active players
+    # Calculate ratings for all active players (sorted for determinism)
     ratings = []
-    for pid in session.active_players:
+    for pid in sorted(session.active_players):
         if pid in session.player_stats:
             rating = calculate_elo_rating(session.player_stats[pid])
         else:
@@ -610,7 +610,7 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
         
         # If no queue match assigned, try to generate one from available players
         if not assigned:
-            available_players = [p for p in session.active_players if p not in players_in_matches and p not in first_bye_players_set]
+            available_players = [p for p in sorted(session.active_players) if p not in players_in_matches and p not in first_bye_players_set]
             
             if len(available_players) >= 4:
                 # Try to find any 4 players that can form valid teams
@@ -965,7 +965,7 @@ def get_available_players_for_mixing(
     current_court_players = session.court_players.get(court_number, [])
     
     # Get candidates
-    candidates = [p for p in session.active_players if p not in players_in_matches]
+    candidates = [p for p in sorted(session.active_players) if p not in players_in_matches]
     
     # Prefer players who haven't played yet
     never_played = [p for p in candidates if p not in session.player_stats or session.player_stats[p].games_played == 0]

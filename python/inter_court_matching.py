@@ -324,7 +324,7 @@ def populate_with_inter_court_mixing(session: Session) -> None:
         if match.status in ['in-progress', 'waiting']:
             players_in_matches.update(match.team1 + match.team2)
     
-    available_players = [p for p in session.active_players if p not in players_in_matches]
+    available_players = [p for p in sorted(session.active_players) if p not in players_in_matches]
     waitlist = get_waiting_players(session)
     
     # CRITICAL: Check if we should wait before mixing with small waitlist

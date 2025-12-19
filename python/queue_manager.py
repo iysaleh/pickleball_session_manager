@@ -315,7 +315,7 @@ def get_waiting_players(session: Session) -> List[str]:
             players_in_matches.update(match.team2)
     
     waiting = []
-    for player_id in session.active_players:
+    for player_id in sorted(session.active_players):
         if player_id not in players_in_matches:
             waiting.append(player_id)
     
