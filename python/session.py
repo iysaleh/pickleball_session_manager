@@ -538,26 +538,44 @@ def evaluate_and_create_matches(session: Session) -> Session:
     return session
 
 
-def create_manual_match(session: Session, court_number: int, team1_ids: List[str], team2_ids: List[str]) -> bool:
+def create_manual_match(session: Session, court_number: int, team1_ids: List[str], team2_ids: List[str]) -> Dict:
     """
     Manually create a match on a court, replacing any existing match.
     Used for 'Make Court' and 'Edit Court' features.
     
-    Returns True if successful, False otherwise.
+    Returns a dictionary with:
+    - 'success': True if match was created, False otherwise
+    - 'balance_analysis': Dictionary with balance information (always included)
+    - 'error': Error message if success is False
     """
     # Validate players
     all_player_ids = set(team1_ids + team2_ids)
     for player_id in all_player_ids:
         if player_id not in session.active_players:
-            return False
+            return {
+                'success': False,
+                'error': f'Player {player_id} is not active in this session',
+                'balance_analysis': None
+            }
     
     # Check for duplicate players
     if len(all_player_ids) != len(team1_ids) + len(team2_ids):
-        return False
+        return {
+            'success': False,
+            'error': 'Duplicate players detected in teams',
+            'balance_analysis': None
+        }
     
     # Check court number validity
     if court_number < 1 or court_number > session.config.courts:
-        return False
+        return {
+            'success': False,
+            'error': f'Invalid court number {court_number}',
+            'balance_analysis': None
+        }
+    
+    # Analyze match balance before creating
+    balance_analysis = analyze_match_balance(session, team1_ids, team2_ids)
     
     # Remove any existing match on this court
     for match in session.matches[:]:
@@ -576,7 +594,12 @@ def create_manual_match(session: Session, court_number: int, team1_ids: List[str
     )
     
     session.matches.append(match)
-    return True
+    
+    return {
+        'success': True,
+        'balance_analysis': balance_analysis,
+        'error': None
+    }
 
 
 def update_match_teams(session: Session, match_id: str, team1_ids: List[str], team2_ids: List[str]) -> bool:
@@ -609,3 +632,137 @@ def update_match_teams(session: Session, match_id: str, team1_ids: List[str], te
     match.team2 = team2_ids
     
     return True
+
+
+def analyze_match_balance(session: Session, team1_ids: List[str], team2_ids: List[str]) -> Dict:
+    """
+    Analyze the balance of a proposed match and suggest alternatives if available.
+    
+    Returns a dictionary with:
+    - 'rating_difference': The ELO difference between teams
+    - 'balance_quality': 'excellent', 'good', 'fair', 'poor', 'terrible' 
+    - 'is_imbalanced': True if difference > 300 points
+    - 'alternative_configs': List of better team configurations if available
+    - 'constraints_violated': List of any constraint violations
+    """
+    from .competitive_variety import calculate_elo_rating, score_potential_match, can_play_with_player
+    
+    # Calculate team ratings
+    team1_rating = 0
+    team2_rating = 0
+    
+    for player_id in team1_ids:
+        if player_id in session.player_stats:
+            team1_rating += calculate_elo_rating(session.player_stats[player_id])
+        else:
+            team1_rating += 1500  # Base rating for new players
+    
+    for player_id in team2_ids:
+        if player_id in session.player_stats:
+            team2_rating += calculate_elo_rating(session.player_stats[player_id])
+        else:
+            team2_rating += 1500  # Base rating for new players
+    
+    rating_diff = abs(team1_rating - team2_rating)
+    
+    # Determine balance quality
+    if rating_diff < 50:
+        balance_quality = 'excellent'
+    elif rating_diff < 150:
+        balance_quality = 'good' 
+    elif rating_diff < 300:
+        balance_quality = 'fair'
+    elif rating_diff < 500:
+        balance_quality = 'poor'
+    else:
+        balance_quality = 'terrible'
+    
+    # Check constraints if in competitive variety mode
+    constraints_violated = []
+    if session.config.mode == 'competitive-variety':
+        # Check partner constraints
+        if len(team1_ids) == 2:
+            if not can_play_with_player(session, team1_ids[0], team1_ids[1], 'partner'):
+                constraints_violated.append(f"Team1 partners {team1_ids[0]} and {team1_ids[1]} played together too recently")
+        
+        if len(team2_ids) == 2:
+            if not can_play_with_player(session, team2_ids[0], team2_ids[1], 'partner'):
+                constraints_violated.append(f"Team2 partners {team2_ids[0]} and {team2_ids[1]} played together too recently")
+        
+        # Check opponent constraints
+        for p1 in team1_ids:
+            for p2 in team2_ids:
+                if not can_play_with_player(session, p1, p2, 'opponent'):
+                    constraints_violated.append(f"Opponents {p1} and {p2} played against each other too recently")
+    
+    # Find alternative configurations if current one is imbalanced
+    alternative_configs = []
+    if rating_diff > 300 and len(team1_ids) == 2 and len(team2_ids) == 2:
+        all_players = team1_ids + team2_ids
+        
+        # Try other configurations
+        configs = [
+            ([all_players[0], all_players[2]], [all_players[1], all_players[3]]),
+            ([all_players[0], all_players[3]], [all_players[1], all_players[2]])
+        ]
+        
+        for alt_team1, alt_team2 in configs:
+            # Calculate alternative rating difference
+            alt_team1_rating = 0
+            alt_team2_rating = 0
+            
+            for player_id in alt_team1:
+                if player_id in session.player_stats:
+                    alt_team1_rating += calculate_elo_rating(session.player_stats[player_id])
+                else:
+                    alt_team1_rating += 1500
+            
+            for player_id in alt_team2:
+                if player_id in session.player_stats:
+                    alt_team2_rating += calculate_elo_rating(session.player_stats[player_id])
+                else:
+                    alt_team2_rating += 1500
+            
+            alt_rating_diff = abs(alt_team1_rating - alt_team2_rating)
+            
+            # If this alternative is significantly better, include it
+            if alt_rating_diff < rating_diff * 0.7:  # At least 30% better
+                # Check if alternative violates constraints
+                alt_valid = True
+                alt_constraints = []
+                
+                if session.config.mode == 'competitive-variety':
+                    if not can_play_with_player(session, alt_team1[0], alt_team1[1], 'partner'):
+                        alt_valid = False
+                        alt_constraints.append("Partner constraint violated")
+                    
+                    if not can_play_with_player(session, alt_team2[0], alt_team2[1], 'partner'):
+                        alt_valid = False
+                        alt_constraints.append("Partner constraint violated")
+                    
+                    for p1 in alt_team1:
+                        for p2 in alt_team2:
+                            if not can_play_with_player(session, p1, p2, 'opponent'):
+                                alt_valid = False
+                                alt_constraints.append("Opponent constraint violated")
+                                break
+                        if not alt_valid:
+                            break
+                
+                alternative_configs.append({
+                    'team1': alt_team1,
+                    'team2': alt_team2,
+                    'rating_difference': alt_rating_diff,
+                    'valid': alt_valid,
+                    'constraints': alt_constraints
+                })
+    
+    return {
+        'team1_rating': team1_rating,
+        'team2_rating': team2_rating,
+        'rating_difference': rating_diff,
+        'balance_quality': balance_quality,
+        'is_imbalanced': rating_diff > 300,
+        'alternative_configs': alternative_configs,
+        'constraints_violated': constraints_violated
+    }
