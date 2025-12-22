@@ -1012,12 +1012,28 @@ class CourtDisplayWidget(QWidget):
         self.timer_display.setText(f"{minutes:02d}:{seconds:02d}")
     
     def _auto_size_team_fonts(self):
-        """Auto-size fonts for team labels to fill available space"""
+        """Auto-size fonts for team labels to fit within available space without expanding court size"""
+        # Don't expand the court - instead optimize fonts to fit within current space
         self._auto_size_label_font(self.team1_label)
         self._auto_size_label_font(self.team2_label)
     
+    def _calculate_available_label_width(self):
+        """Calculate the available width for each team label within current court constraints"""
+        # Get current court width
+        court_width = self.width()
+        if court_width <= 0:
+            return 100  # Fallback minimum
+        
+        # Account for: margins (20px), net (4px), padding and borders (40px total)
+        available_total_width = court_width - 64
+        
+        # Each team label gets half the remaining space
+        label_width = max(50, available_total_width // 2)
+        
+        return label_width
+    
     def _auto_size_label_font(self, label):
-        """Auto-size font for a single label to fill its available space"""
+        """Auto-size font for a single label to fit within constrained available space"""
         from PyQt6.QtGui import QFontMetrics
         from PyQt6.QtCore import QRect
         
@@ -1032,26 +1048,31 @@ class CourtDisplayWidget(QWidget):
         if not text.strip():
             return
         
+        # Use the actual available space from the layout
         # Account for padding (we have 10px padding in stylesheet)
         padding = 20  # 10px on each side
         target_width = max(1, available_rect.width() - padding)
         target_height = max(1, available_rect.height() - padding)
         
-        # Start with a reasonable font size and adjust
+        # Start with a reasonable font size and adjust downward to fit
         min_font_size = 8
         max_font_size = 72
         best_font_size = min_font_size
         
-        # Binary search for the optimal font size
+        # Find the largest font that fits within the constrained space
         for font_size in range(min_font_size, max_font_size + 1):
             font = QFont("Arial", font_size, QFont.Weight.Bold)
             metrics = QFontMetrics(font)
+            
+            # Check if text fits within the available space with word wrapping
             text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height), 
                                            Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, text)
             
-            if text_rect.width() <= target_width and text_rect.height() <= target_height:
+            # Accept the font size if it fits both width and height constraints
+            if (text_rect.width() <= target_width and text_rect.height() <= target_height):
                 best_font_size = font_size
             else:
+                # If this font size doesn't fit, stop here - previous size was the largest that fit
                 break
         
         # Apply the best font size found

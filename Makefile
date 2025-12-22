@@ -177,6 +177,15 @@ test_waitlist_auto_sizing_validation:
 test_comprehensive_auto_sizing:
 	python3 test_comprehensive_auto_sizing.py
 
+test_horizontal_scrollbar_fix:
+	python3 test_horizontal_scrollbar_fix.py
+
+test_complete_auto_sizing_system:
+	python3 test_complete_auto_sizing_system.py
+
+test_court_space_constraints:
+	python3 test_court_space_constraints.py
+
 test_court_name_persistence:
 	python3 test_court_name_persistence.py
 

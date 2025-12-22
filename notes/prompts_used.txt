@@ -549,6 +549,9 @@ sequence item 0: expected str instance, NoneType found
 * Right now, the courts render on the active courts page as a giant green box, with a division line, and then the side box, and then the team box within the side box and the names drawn within the team box. That is wasted space. Remove the inner team box and just have the side box, and then expand the names to auto fill the entire side box.
 ** Good, but the names are still not taking up the entire box, is it possible to auto size the text to fill the entire box on the screen?
 * When a user renames a court name, and then ends the session and starts a brand new one, they need to rename the court name every time. Persist court names between sessions so long as the number of courts is the same.
+* We have added auto scaling for the name sizes on the Active Courts windows, Now we need to auto scale the name sizes on the waitlist.
+* For the auto scaling court sizes, if the name causes the scroll bar in the court window to appear, it can bug out and twich repeatedly between having a scroll bar and not. We want the courts to dynamically resize so the scroll bar doesn't have to appear. Please fix this. The problem is the horizontal scroll bar due to name lengths, not the vertical scroll bar.
+* Now the courts are taking up way more space and the scroll bar always appears unless I'm full screen. That's not right. The courts need to fit dynamically on the existing space.
 
 # Adaptive Balance
 * Even after many games, we still get a lot of imbalanced matches -- a lot of the time it's because of the variety constraints. Analyze the competetive variety matchmaking algorithm. How can we adjust it as the session goes on to get more balanced matches?
