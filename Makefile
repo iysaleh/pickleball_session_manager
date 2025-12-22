@@ -174,6 +174,12 @@ test_court_name_persistence:
 test_court_integration:
 	python3 test_court_integration.py
 
+test_adaptive_matchmaking:
+	python3 test_adaptive_matchmaking.py
+
+test_dynamic_thresholds:
+	python3 test_dynamic_thresholds.py
+
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete

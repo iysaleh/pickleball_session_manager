@@ -550,6 +550,10 @@ sequence item 0: expected str instance, NoneType found
 ** Good, but the names are still not taking up the entire box, is it possible to auto size the text to fill the entire box on the screen?
 * When a user renames a court name, and then ends the session and starts a brand new one, they need to rename the court name every time. Persist court names between sessions so long as the number of courts is the same.
 
+* Even after many games, we still get a lot of imbalanced matches -- a lot of the time it's because of the variety constraints. Analyze the competetive variety matchmaking algorithm. How can we adjust it as the session goes on to get more balanced matches?
+* By relaxing Roaming Range, you're lowering the quality of the games. That's bad. We want more balanced matches at higher levels.
+* We never want to relax the partnership and opponent constraints to 0 -- at max they should go down to 1.
+* The problem is completed matches before relaxation happens is hardcoded to 15, 30, etc... It needs to be dynamic based on the number of players and the number of games they have played. We have 2 provisional matches, then all players should play 2 more (on average) before we start relaxing to the first mid level. Then 2 more again before we relax to the late level.
 
 =======================
 Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carroll: 11 beat Robert Dillon, SKyler

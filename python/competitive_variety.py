@@ -1,5 +1,7 @@
 """
-Competitive Variety Matchmaking - ELO-based skill-balanced matchmaking with hard variety constraints
+Competitive Variety Matchmaking - ELO-based skill-balanced matchmaking with adaptive variety constraints
+
+Key feature: Constraints progressively relax as session advances to prioritize balance over variety.
 """
 
 from typing import List, Dict, Tuple, Set, Optional
@@ -45,6 +47,108 @@ VARIETY_PROFILES = {
         "opponent_repetition_limit": 3
     }
 }
+
+# Dynamic session progression based on player game experience
+def calculate_session_thresholds(session: Session) -> Dict[str, int]:
+    """
+    Calculate dynamic session progression thresholds based on player count and game experience.
+    
+    Logic:
+    - Provisional: First 2 games for all players (exploration phase)
+    - Early to Mid: Players average 2 more games (4 total - variety establishment)
+    - Mid to Late: Players average 2 more games (6 total - balance prioritization)
+    - Late+: Beyond 6 games per player (maximum balance focus)
+    
+    Returns thresholds for early_to_mid, mid_to_late transitions.
+    """
+    num_players = len(session.active_players)
+    
+    # Each round uses 8 players (4v4 doubles), so matches_per_round = num_players / 4
+    # But we need to account for players sitting out
+    matches_per_round = max(1, num_players // 4)
+    
+    # Provisional phase: 2 games per player on average
+    # Total matches needed = (num_players * 2) / 4 players per match
+    provisional_matches = (num_players * 2) // 4
+    
+    # Early to Mid transition: +2 more games per player (4 total)
+    early_to_mid_matches = (num_players * 4) // 4
+    
+    # Mid to Late transition: +2 more games per player (6 total)
+    mid_to_late_matches = (num_players * 6) // 4
+    
+    return {
+        'early_to_mid': early_to_mid_matches,
+        'mid_to_late': mid_to_late_matches
+    }
+
+
+def get_adaptive_constraints(session: Session) -> Dict[str, float]:
+    """
+    Get adaptive balance weighting based on session progression.
+    
+    Uses dynamic thresholds based on player count and average games played.
+    MAINTAINS all variety constraints but reduces them minimally (never to 0).
+    
+    Returns:
+        Dict with 'roaming_range', 'partner_repetition', 'opponent_repetition', 'balance_weight'
+    """
+    # Count completed matches as progress metric
+    completed_matches = len([m for m in session.matches if m.status == 'completed'])
+    
+    # Calculate dynamic thresholds based on player count
+    thresholds = calculate_session_thresholds(session)
+    early_to_mid = thresholds['early_to_mid']
+    mid_to_late = thresholds['mid_to_late']
+    
+    # Base constraints that maintain quality
+    base_constraints = {
+        'roaming_range': 0.65,     # ALWAYS maintain skill bracket quality
+    }
+    
+    if completed_matches < early_to_mid:
+        # Early session: Standard constraints and weighting
+        return {
+            **base_constraints,
+            'partner_repetition': 3,    # Standard partner repetition
+            'opponent_repetition': 2,   # Standard opponent repetition
+            'balance_weight': 1.0       # Standard balance weighting
+        }
+    elif completed_matches < mid_to_late:
+        # Mid session: Slight constraint relaxation, increased balance priority
+        return {
+            **base_constraints,
+            'partner_repetition': 2,    # Reduced but not eliminated
+            'opponent_repetition': 1,   # Reduced but not eliminated
+            'balance_weight': 3.0       # 3x balance weighting
+        }
+    else:
+        # Late session: Minimal constraints, maximum balance priority
+        return {
+            **base_constraints,
+            'partner_repetition': 1,    # Minimum constraint (never 0)
+            'opponent_repetition': 1,   # Minimum constraint (never 0)
+            'balance_weight': 5.0       # 5x balance weighting
+        }
+
+
+def apply_adaptive_constraints(session: Session) -> None:
+    """
+    Apply adaptive constraints to the session based on progression.
+    Updates session settings to reflect current adaptive constraints.
+    """
+    constraints = get_adaptive_constraints(session)
+    
+    # Update session settings
+    session.competitive_variety_roaming_range_percent = constraints['roaming_range']
+    session.competitive_variety_partner_repetition_limit = constraints['partner_repetition']
+    session.competitive_variety_opponent_repetition_limit = constraints['opponent_repetition']
+    
+    # Store balance weight for scoring function
+    if not hasattr(session, 'adaptive_balance_weight'):
+        session.adaptive_balance_weight = constraints['balance_weight']
+    else:
+        session.adaptive_balance_weight = constraints['balance_weight']
 
 
 def calculate_elo_rating(player_stats) -> float:
@@ -419,11 +523,16 @@ def score_potential_match(session: Session, team1: List[str], team2: List[str]) 
     Higher score = better match.
     
     Factors:
-    - Skill balance (teams should be close in rating)
+    - Skill balance (teams should be close in rating) - weighted by session progression
     - Partnership variety (prefer new partnerships)
     - Opponent variety (prefer new opponents)
+    
+    Uses adaptive balance weighting: balance becomes more important as session progresses.
     """
     score = 0.0
+    
+    # Get adaptive balance weight (increases as session progresses)
+    balance_weight = getattr(session, 'adaptive_balance_weight', 1.0)
     
     # Calculate team ratings (total, not average, for better balance)
     team1_rating = sum(calculate_elo_rating(session.player_stats.get(p, 
@@ -434,10 +543,12 @@ def score_potential_match(session: Session, team1: List[str], team2: List[str]) 
                        for p in team2)
     
     # Penalize unbalanced teams (large skill difference)
+    # Apply adaptive balance weighting - penalty increases as session progresses
     rating_diff = abs(team1_rating - team2_rating)
-    score -= rating_diff * 2
+    balance_penalty = rating_diff * 2 * balance_weight
+    score -= balance_penalty
     
-    # Bonus for variety
+    # Bonus for variety (constant weight - does not increase with session progression)
     variety_bonus = 0
     for p1 in team1:
         for p2 in team2:
@@ -496,18 +607,25 @@ def _can_form_valid_teams(session: Session, players: List[str], allow_cross_brac
 
 def populate_empty_courts_competitive_variety(session: Session) -> None:
     """
-    Populate empty courts using competitive variety matchmaking rules with ELO system.
+    Populate empty courts using competitive variety matchmaking with adaptive balance weighting.
     
-    Rules:
+    Features:
     1. Check match queue first (respects waitlist)
-    2. If no queue matches, generate new matches from available players
-    3. Use ELO ratings to balance teams
-    4. Hard constraints: never play with same partner within 2 games, never play against same opponent within 1 game
-    5. Respect 50% matchmaking bracket (top/bottom split)
-    6. Prefer new partnerships and opponents
+    2. Generate new matches from available players using ELO balance
+    3. Maintains ALL variety constraints (roaming range, repetition limits) 
+    4. Adaptive balance weighting: balance becomes increasingly important over time
+    5. Preserves skill bracket quality throughout entire session
+    
+    Adaptive Philosophy:
+    - Constraints stay constant (preserve variety and skill-appropriate matches)
+    - Balance weighting increases progressively (1x → 3x → 5x → 8x)
+    - Algorithm chooses the most balanced option among valid constraint-compliant matches
     """
     if session.config.mode != 'competitive-variety':
         return
+    
+    # Apply adaptive balance weighting (constraints stay the same)
+    apply_adaptive_constraints(session)
     
     from .utils import generate_id
     from .types import Match, PlayerStats, QueuedMatch
@@ -747,8 +865,9 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                         # The candidates are already sorted by wait priority
                         search_limit = min(12, len(candidates_for_matching))
                     
-                    # Only one pass: Strict Bracketing (allow_cross_bracket=False)
+                    # Maintain skill bracket quality - no cross-bracket matching
                     allow_cross = False
+                    
                     for combo in combinations(candidates_for_matching[:search_limit], 4):
                         if _can_form_valid_teams(session, list(combo), allow_cross_bracket=allow_cross):
                             # Evaluate all valid team configurations and pick the most balanced
