@@ -569,6 +569,11 @@ sequence item 0: expected str instance, NoneType found
 * We are working on the adaptive balance feature, see @adaptiveRelaxation.patch ... the problem is, we still get somewhat imbalanced matches with the relaxation in place. As we relax variety constraints, should we not also add balance constraints? Assume the role of a staff level export developer and pickleball match expert with years and years of observing sessions... How would we smartly enforce balance constraints to get better matches as a session goes along? Implement that feature smartly.
 * Elite+Weak matches are undesirable... We want Elite vs Elite, Elite Vs Strong, Strong vs Average, Average vs Weak, Weak Vs Weak.
 * Remember, these balance constraints should only take effect once the adaptive balance system kicks in (after around round 4)
+* Can we add one final constraint once the adaptive balance takes effect, we don't want 2 people to play together, then play against each other, then play together again. We need special handling to prevent exactly that situation.
+** Make sure we are considering player-specific match histories when avoiding partner-opponent-partner patterns, not global match histories.
+** To be clear, we want them to be able to go from partners-opponents-someOtherGame-partners
+*** To be clear, we want them to be able to go from partners-opponents-someOtherGame-partners --- The pattern needs to match from both sides (If there is a gap where one person is on the waitlist and then the game is made is not right, both players need to have atleast 1 game before they play as partners again) --- This is only when balancing is prioritized (as the variety constraints are reduced)
+* When adaptive mode incremented after 4 rounds, competetiveness changed from competetive to semi-competetive -- that shouldn't happen. Adaptive mode should not change the competetiveness level ever (IE the roaming range percentage should remain constant even as the variety constraints adapt).
 
 =======================
 Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carroll: 11 beat Robert Dillon, SKyler

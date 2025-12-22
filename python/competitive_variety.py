@@ -398,6 +398,101 @@ def _get_last_played_info(session: Session, player_id: str) -> Tuple[Optional[Ma
     return None, -1
 
 
+def check_partner_opponent_partner_pattern(session: Session, player1: str, player2: str) -> bool:
+    """
+    Check for the problematic immediate Partner → Opponent → Partner pattern.
+    
+    When adaptive balance system is active (mid-late session), prevent:
+    - Players who were opponents from immediately becoming partners again
+    - BOTH players must have played at least one other game since being opponents
+    
+    ALLOWED: Partners → Opponents → [Both players play other games] → Partners
+    BLOCKED: Partners → Opponents → Partners (immediate, or when only one player had gap)
+    
+    Uses player-specific match histories for accurate relationship tracking.
+    
+    Returns True if trying to make immediate partners after being opponents without proper gap.
+    """
+    # Only apply this constraint when adaptive balance system is active
+    constraints = get_adaptive_constraints(session)
+    balance_weight = constraints['balance_weight']
+    
+    if balance_weight < 3.0:  # Early session - allow pattern exploration
+        return False
+    
+    # Get completed matches
+    completed_matches = [m for m in session.matches if m.status == 'completed']
+    
+    if len(completed_matches) < 2:
+        return False
+    
+    # Find the most recent match where player1 and player2 played together
+    last_game_together = None
+    last_game_index = -1
+    
+    for i, match in enumerate(completed_matches):
+        p1_in_match = player1 in match.team1 or player1 in match.team2
+        p2_in_match = player2 in match.team1 or player2 in match.team2
+        
+        if p1_in_match and p2_in_match:
+            last_game_together = match
+            last_game_index = i
+    
+    if not last_game_together:
+        return False  # They never played together
+    
+    # Check their relationship in the last game together
+    p1_team1 = player1 in last_game_together.team1
+    p1_team2 = player1 in last_game_together.team2  
+    p2_team1 = player2 in last_game_together.team1
+    p2_team2 = player2 in last_game_together.team2
+    
+    # Were they opponents in their last game together?
+    were_opponents_last = (p1_team1 and p2_team2) or (p1_team2 and p2_team1)
+    
+    if were_opponents_last:
+        # They were opponents in their last interaction
+        # Check if BOTH players have played at least one game since then
+        
+        games_since = completed_matches[last_game_index + 1:]  # Games after their opponent match
+        
+        p1_played_since = False
+        p2_played_since = False
+        
+        for game in games_since:
+            if player1 in game.team1 or player1 in game.team2:
+                p1_played_since = True
+            if player2 in game.team1 or player2 in game.team2:
+                p2_played_since = True
+        
+        # Block partnership if BOTH players haven't had a gap game
+        if not (p1_played_since and p2_played_since):
+            # Check if they had a partnership before the opponents match
+            had_prior_partnership = False
+            
+            for i in range(last_game_index):
+                prior_match = completed_matches[i]
+                p1_in_prior = player1 in prior_match.team1 or player1 in prior_match.team2
+                p2_in_prior = player2 in prior_match.team1 or player2 in prior_match.team2
+                
+                if p1_in_prior and p2_in_prior:
+                    # Check if they were partners
+                    p1_t1 = player1 in prior_match.team1
+                    p1_t2 = player1 in prior_match.team2
+                    p2_t1 = player2 in prior_match.team1
+                    p2_t2 = player2 in prior_match.team2
+                    
+                    if (p1_t1 and p2_t1) or (p1_t2 and p2_t2):
+                        had_prior_partnership = True
+                        break
+            
+            # Block if: Partners → Opponents → (trying Partners without both having gap)
+            if had_prior_partnership:
+                return True
+    
+    return False
+
+
 def can_play_with_player(session: Session, player1: str, player2: str, role: str, allow_cross_bracket: bool = False) -> bool:
     """
     Check if two players can play together in the given role.
@@ -409,8 +504,14 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
     - If partners: must wait PARTNER_REPETITION_GAMES_REQUIRED games
     - If opponents: must wait OPPONENT_REPETITION_GAMES_REQUIRED games
     - Must respect 50% matchmaking bracket for non-provisional players (unless allow_cross_bracket=True)
+    - Partner-Opponent-Partner pattern prevention (mid-late session only)
     - Only applies when 12+ players (otherwise fewer constraints)
     """
+    # -1. Check Partner-Opponent-Partner Pattern (when adaptive balance system is active)
+    if role == 'partner':
+        if check_partner_opponent_partner_pattern(session, player1, player2):
+            return False
+    
     # 0. Check Locked Teams & Banned Pairs
     # Check Banned Pairs (only applies to partners)
     if role == 'partner' and session.config.banned_pairs:

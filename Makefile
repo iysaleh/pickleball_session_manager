@@ -225,3 +225,6 @@ test_slider_auto_movement:
 
 test_enhanced_balance_constraints:
 	python3 test_enhanced_balance_constraints.py
+
+test_partner_opponent_partner_prevention:
+	python3 test_partner_opponent_partner_prevention.py

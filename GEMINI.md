@@ -62,16 +62,26 @@ This module implements an ELO-based skill-balanced matchmaking system with hard 
 - Enforces the 50% moving window rule
 - Returns (1, total_players) for < 12 players (no restriction)
 
+**check_partner_opponent_partner_pattern(session, player1, player2) → bool**
+- Detects the problematic Partner → Opponent → Partner relationship sequence
+- **Requires both-sided gaps**: Both players must have played other games since being opponents
+- Only active when adaptive balance system kicks in (mid-late session)
+- BLOCKED: Partners → Opponents → Partners (immediate) or Partners → Opponents → [One plays] → Partners
+- ALLOWED: Partners → Opponents → [Both players play other games] → Partners
+- Prevents unfair "waiting out" on bench scenarios and ensures balanced constraint application
+
 **can_play_with_player(session, player1, player2, role, allow_cross_bracket=False) → bool**
 - THE GATEKEEPER: checks if two players can play together
 - role = 'partner' or 'opponent'
 - allow_cross_bracket: when True, relaxes roaming range checks (used in fallback matching)
+- Enhanced with Partner-Opponent-Partner pattern prevention
 - Order of checks:
-  1. Locked teams (hard enforced)
-  2. Banned pairs (hard enforced)
-  3. Roaming range compatibility (if 12+ players & competitive-variety mode)
-  4. Global recency check (last N games globally)
-  5. Player-specific history check (intervening games in personal history)
+  1. Partner-Opponent-Partner pattern (when adaptive system active)
+  2. Locked teams (hard enforced)
+  3. Banned pairs (hard enforced)
+  4. Roaming range compatibility (if 12+ players & competitive-variety mode)
+  5. Global recency check (last N games globally)
+  6. Player-specific history check (intervening games in personal history)
 
 **populate_empty_courts_competitive_variety(session)**
 - Main court-filling function
@@ -83,6 +93,7 @@ This module implements an ELO-based skill-balanced matchmaking system with hard 
 - Prioritizes locked teams
 - Integrates with sophisticated candidate pool system from wait_priority module
 - **Adaptive constraints**: Automatically adjusts repetition constraints based on session progression
+- **Enhanced balance filtering**: Applies hard balance constraints in mid-late sessions
 
 **get_adaptive_constraints(session) → (partner_constraint, opponent_constraint)**
 - Calculates current repetition constraints based on player game progression
@@ -150,6 +161,13 @@ This module implements an ELO-based skill-balanced matchmaking system with hard 
    - GUI slider shows current phase and allows manual override
    - NEVER reduces constraints below 1 (back-to-back prevention always maintained)
    - Preserves skill-based roaming ranges (quality over quantity)
+
+9. **ENHANCED BALANCE CONSTRAINTS**:
+   - Only activate when adaptive system kicks in (balance_weight >= 3.0)
+   - Progressive thresholds: Early (no limit) → Mid (300 pts) → Late (200 pts)
+   - Homogeneous partnership bonuses and mismatch penalties scale with balance weight
+   - Partner-Opponent-Partner prevention requires both-sided gaps
+   - All constraints integrate seamlessly with existing variety and wait time systems
 
 ## WAIT TIME PRIORITY SYSTEM (python/wait_priority.py)
 
@@ -238,6 +256,7 @@ The adaptive constraints system intelligently relaxes variety constraints (partn
 - **Hard Balance Thresholds**: Maximum acceptable team rating differences that activate when adaptive system kicks in (mid-late session)
 - **Homogeneous Partnership Bonus**: Rewards pairing similar-skill players (Elite+Elite, Strong+Strong) once adaptive system activates
 - **Mismatched Partnership Penalties**: Discourages Elite+Weak partnerships that create 'carry' dynamics (mid-late session only)
+- **Partner-Opponent-Partner Prevention**: Blocks awkward Partner → Opponent → Partner sequences requiring both-sided gaps (mid-late session only)
 - **Balance-First Filtering**: Severely imbalanced matches (>threshold) automatically rejected after Round 3-4
 - **Progressive Balance Prioritization**: Variety weight decreases while balance weight increases over time
 - **Skill Tier Matching Bonus**: Extra rewards for Elite vs Elite, Strong vs Strong matchups (mid-late session only)
@@ -248,18 +267,29 @@ The adaptive constraints system intelligently relaxes variety constraints (partn
 - Position 1: **AUTO** - Automatic progression based on session progress (default behavior)
 - Positions 2-5: **Manual Override** - Fixed balance weights (2.0x, 3.0x, 5.0x, 8.0x)
 - Status display shows current phase and effective balance weight
+- **State Toggle Button**: Cycles through Disabled → Auto → Manual modes
 
 ### Critical Functions
 
 **get_balance_threshold(session) → float**
 - Calculates maximum acceptable team rating difference based on session progression
-- Early: 400 points, Mid: 300 points, Late: 200 points
+- Only activates when adaptive system kicks in (balance_weight >= 3.0)
+- Early: No threshold (inf), Mid: 300 points, Late: 200 points
 - Ensures progressively stricter balance requirements
 
 **meets_balance_constraints(session, team1, team2) → bool**
 - Checks if potential match meets hard balance constraints
 - Used to filter out severely imbalanced matches before scoring
 - Returns False for matches exceeding the current balance threshold
+- Only active when adaptive system kicks in
+
+**check_partner_opponent_partner_pattern(session, player1, player2) → bool**
+- Detects the problematic Partner → Opponent → Partner relationship sequence
+- **Requires both-sided gaps**: Both players must have played other games since being opponents
+- Only active when adaptive balance system kicks in (mid-late session)
+- BLOCKED: Partners → Opponents → Partners (immediate) or Partners → Opponents → [One plays] → Partners
+- ALLOWED: Partners → Opponents → [Both players play other games] → Partners
+- Prevents unfair "waiting out" on bench scenarios and ensures balanced constraint application
 
 **get_adaptive_constraints(session) → Dict**
 - Returns current constraints based on session progression or manual override
@@ -299,8 +329,9 @@ As a staff-level expert with years of observing sessions, this system implements
 2. **Hard Thresholds**: Absolute limits on acceptable imbalance that get stricter over time (mid-late session)
 3. **Homogeneous Partnerships**: Actively encourage similar-skill partnerships once adaptive system activates
 4. **Mismatch Penalties**: Discourage Elite+Weak partnerships that create 'carry' dynamics (mid-late session)
-5. **Progressive Prioritization**: Gradually shift from variety-first to balance-first matching
-6. **Threshold Enforcement**: Filter out bad matches before they're even considered (after Round 3-4)
+5. **Social Pattern Prevention**: Block Partner→Opponent→Partner sequences with both-sided gap requirements
+6. **Progressive Prioritization**: Gradually shift from variety-first to balance-first matching
+7. **Threshold Enforcement**: Filter out bad matches before they're even considered (after Round 3-4)
 
 **Session Progression Logic**
 - **Early (Rounds 1-3)**: Variety exploration, no balance constraints, moderate imbalance allowed
@@ -316,7 +347,7 @@ As a staff-level expert with years of observing sessions, this system implements
 
 **State Management**
 - NONE (0): `adaptive_constraints_disabled = True` - System completely disabled
-- AUTO (1): `adaptive_balance_weight = None` - Automatic progression active
+- AUTO (1): `adaptive_balance_weight = None` - Automatic progression active (DEFAULT)
 - Manual (2-5): `adaptive_balance_weight = [2.0, 3.0, 5.0, 8.0]` - Fixed override
 
 **Status Display Examples**
@@ -332,6 +363,7 @@ The enhanced system affects match generation at multiple levels:
 - `meets_balance_constraints()` pre-filters severely imbalanced combinations
 - Prevents 800+ rating point differences from being considered
 - Applied before scoring for computational efficiency
+- Only active when adaptive system kicks in (mid-late session)
 
 **Match Scoring Level**
 - Balance weight multiplier affects scoring: 1.0x → 3.0x → 5.0x → 8.0x
@@ -340,16 +372,20 @@ The enhanced system affects match generation at multiple levels:
 - Variety weight reduction: 3.0x → 1.0x to deprioritize repetition concerns
 - Perfect balance bonus: 50-250 points for very close team ratings
 - Skill tier matching bonus: 40-75+ points for Elite vs Elite, Strong vs Strong matchups
+- Partner-Opponent-Partner pattern prevention with both-sided gap requirements
 
 **Match Generation Level** 
 - Algorithm selects highest-scoring valid match that meets all constraints
 - Balance constraints integrated into core `populate_empty_courts_competitive_variety()`
 - Maintains all existing variety and roaming range constraints
+- Wait time prioritization fully preserved throughout
 
 ### Testing & Validation
 - `test_adaptive_slider.py`: Comprehensive slider functionality testing
 - `test_disabled_adaptive.py`: Validates disabled state behavior  
 - `test_enhanced_balance_constraints.py`: Tests all new balance constraint features
+- `test_both_sided_gap.py`: Tests Partner-Opponent-Partner pattern prevention with both-sided gaps
+- `test_partner_opponent_partner_prevention.py`: Social dynamic constraint testing
 - `demo_enhanced_balance_system.py`: Realistic demonstration of balance improvements
 - Fuzzing tests: `make run_fuzz_tests` validates constraint enforcement without violations
 
@@ -372,3 +408,6 @@ Critical test files:
 - test_wait_priority_integration.py: integration testing with existing systems
 - test_adaptive_matchmaking.py: validates adaptive constraint system behavior
 - test_adaptive_slider.py: tests GUI slider integration and manual override functionality
+- test_enhanced_balance_constraints.py: tests enhanced balance constraint system
+- test_both_sided_gap.py: tests both-sided gap requirements for pattern prevention
+- test_partner_opponent_partner_prevention.py: social dynamic constraint testing
