@@ -168,6 +168,15 @@ test_court_layout_visual:
 test_font_auto_sizing:
 	python3 test_font_auto_sizing.py
 
+test_waitlist_auto_sizing:
+	python3 test_waitlist_auto_sizing.py
+
+test_waitlist_auto_sizing_validation:
+	python3 test_waitlist_auto_sizing_validation.py
+
+test_comprehensive_auto_sizing:
+	python3 test_comprehensive_auto_sizing.py
+
 test_court_name_persistence:
 	python3 test_court_name_persistence.py
 

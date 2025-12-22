@@ -49,6 +49,13 @@ class DeselectableListWidget(QListWidget):
         else:
             # Otherwise, let default behavior handle selection
             super().mousePressEvent(event)
+    
+    def resizeEvent(self, event):
+        """Handle widget resize to update font sizes for all items"""
+        super().resizeEvent(event)
+        # Delay the font resize to ensure layout is complete
+        if hasattr(self.parent(), '_auto_size_waitlist_fonts'):
+            QTimer.singleShot(50, self.parent()._auto_size_waitlist_fonts)
 
 
 class CompetitivenessLabel(QLabel):
@@ -2662,6 +2669,9 @@ class SessionWindow(QMainWindow):
 
             self.waiting_count.setText(f"{len(waiting_ids)} player{'s' if len(waiting_ids) != 1 else ''} waiting")
             
+            # Auto-size waitlist fonts after updating
+            QTimer.singleShot(50, self._auto_size_waitlist_fonts)
+            
             # Update queued matches list
             queued_matches = get_queued_matches_for_display(self.session)
             self.queue_list.clear()
@@ -2743,6 +2753,76 @@ class SessionWindow(QMainWindow):
             print(f"REFRESH ERROR: {error_msg}")
             import traceback
             traceback.print_exc()
+    
+    def _auto_size_waitlist_fonts(self):
+        """Auto-size fonts for waitlist items to fill available space"""
+        if not hasattr(self, 'waiting_list'):
+            return
+            
+        self._auto_size_list_widget_fonts(self.waiting_list)
+    
+    def _auto_size_list_widget_fonts(self, list_widget):
+        """Auto-size font for all items in a QListWidget"""
+        from PyQt6.QtGui import QFontMetrics
+        from PyQt6.QtCore import QRect
+        
+        if list_widget.count() == 0:
+            return
+            
+        # Get the available space for items
+        widget_rect = list_widget.contentsRect()
+        if widget_rect.width() <= 0 or widget_rect.height() <= 0:
+            # If we don't have size info yet, try again later
+            QTimer.singleShot(100, lambda: self._auto_size_list_widget_fonts(list_widget))
+            return
+        
+        # Calculate available space per item
+        visible_count = list_widget.count()
+        if visible_count == 0:
+            return
+            
+        # Account for scrollbar and padding
+        scrollbar_width = list_widget.verticalScrollBar().sizeHint().width() if list_widget.verticalScrollBar().isVisible() else 0
+        padding = 20  # Account for padding and margins
+        target_width = max(1, widget_rect.width() - scrollbar_width - padding)
+        
+        # Calculate target height per item (assuming all items are visible)
+        item_height = widget_rect.height() // visible_count if visible_count > 0 else widget_rect.height()
+        target_height = max(1, item_height - 10)  # Account for item margins
+        
+        # Find the longest text to base font size on
+        longest_text = ""
+        for i in range(list_widget.count()):
+            item = list_widget.item(i)
+            if item and len(item.text()) > len(longest_text):
+                longest_text = item.text()
+        
+        if not longest_text.strip():
+            return
+        
+        # Find optimal font size
+        min_font_size = 8
+        max_font_size = 24  # Smaller max for list items
+        best_font_size = min_font_size
+        
+        # Binary search for the optimal font size
+        for font_size in range(min_font_size, max_font_size + 1):
+            font = QFont("Arial", font_size, QFont.Weight.Normal)
+            metrics = QFontMetrics(font)
+            text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height), 
+                                           Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, longest_text)
+            
+            if text_rect.width() <= target_width and text_rect.height() <= target_height:
+                best_font_size = font_size
+            else:
+                break
+        
+        # Apply the best font size to all items
+        font = QFont("Arial", best_font_size, QFont.Weight.Normal)
+        for i in range(list_widget.count()):
+            item = list_widget.item(i)
+            if item:
+                item.setFont(font)
     
     def export_session(self):
         """Export session results to a file"""
