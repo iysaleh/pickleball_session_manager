@@ -828,6 +828,10 @@ class CourtDisplayWidget(QWidget):
         self.show_rank = show_rank
         self.default_title = f"Court {self.court_number}"
         self.custom_title = None
+        
+        # Load saved court name if available
+        self._load_saved_court_name()
+        
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_timer)
         self.init_ui()
@@ -838,7 +842,8 @@ class CourtDisplayWidget(QWidget):
         
         # Court header
         header = QHBoxLayout()
-        self.title = ClickableLabel(self.default_title)
+        display_title = self.custom_title if self.custom_title else self.default_title
+        self.title = ClickableLabel(display_title)
         self.title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         self.title.setStyleSheet("QLabel { color: black; }")
         header.addWidget(self.title)
@@ -1053,6 +1058,24 @@ class CourtDisplayWidget(QWidget):
         # Delay the font resize to ensure layout is complete
         QTimer.singleShot(50, self._auto_size_team_fonts)
     
+    def _load_saved_court_name(self):
+        """Load saved court name from persistent storage"""
+        try:
+            from python.session_persistence import get_saved_court_name
+            saved_name = get_saved_court_name(self.court_number, self.session.config.courts)
+            if saved_name:
+                self.custom_title = saved_name
+        except Exception as e:
+            print(f"Error loading saved court name: {e}")
+    
+    def _save_court_name(self):
+        """Save current court name to persistent storage"""
+        try:
+            from python.session_persistence import save_single_court_name
+            save_single_court_name(self.court_number, self.custom_title, self.session.config.courts)
+        except Exception as e:
+            print(f"Error saving court name: {e}")
+    
     def complete_match_clicked(self):
         """Handle complete match button"""
         if not self.current_match:
@@ -1218,6 +1241,9 @@ class CourtDisplayWidget(QWidget):
                     # Set custom title
                     self.custom_title = new_title.strip()
                     self.title.setText(self.custom_title)
+                
+                # Save the court name to persistent storage
+                self._save_court_name()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error editing court title:\n{str(e)}")
     

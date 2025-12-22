@@ -13,6 +13,7 @@ from .time_manager import now
 SESSIONS_DIR = Path.home() / ".pickleball"
 LAST_SESSION_FILE = SESSIONS_DIR / "last_session.json"
 PLAYER_HISTORY_FILE = SESSIONS_DIR / "player_history.json"
+COURT_NAMES_FILE = SESSIONS_DIR / "court_names.json"
 
 
 def ensure_session_dir():
@@ -527,3 +528,102 @@ def clear_saved_session() -> bool:
     except Exception as e:
         print(f"Error clearing saved session: {e}")
         return False
+
+
+def save_court_names(court_names: Dict[int, str], num_courts: int) -> bool:
+    """
+    Save court names to persistent storage.
+    
+    Args:
+        court_names: Dictionary mapping court number to custom name
+        num_courts: Total number of courts in session
+    
+    Returns:
+        True if saved successfully, False otherwise
+    """
+    ensure_session_dir()
+    
+    court_data = {
+        "num_courts": num_courts,
+        "court_names": court_names,
+        "saved_at": now().isoformat()
+    }
+    
+    try:
+        with open(COURT_NAMES_FILE, 'w') as f:
+            json.dump(court_data, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"Error saving court names: {e}")
+        return False
+
+
+def load_court_names(num_courts: int) -> Dict[int, str]:
+    """
+    Load court names from persistent storage.
+    
+    Args:
+        num_courts: Number of courts in current session
+        
+    Returns:
+        Dictionary mapping court number to custom name.
+        Only returns names if the court count matches.
+    """
+    if not COURT_NAMES_FILE.exists():
+        return {}
+    
+    try:
+        with open(COURT_NAMES_FILE, 'r') as f:
+            data = json.load(f)
+        
+        # Only load if the number of courts matches
+        if data.get("num_courts") == num_courts:
+            return data.get("court_names", {})
+        else:
+            return {}
+            
+    except Exception as e:
+        print(f"Error loading court names: {e}")
+        return {}
+
+
+def get_saved_court_name(court_number: int, num_courts: int) -> Optional[str]:
+    """
+    Get the saved custom name for a specific court.
+    
+    Args:
+        court_number: The court number (1, 2, 3, etc.)
+        num_courts: Total number of courts in current session
+        
+    Returns:
+        Custom name if saved and court count matches, None otherwise
+    """
+    court_names = load_court_names(num_courts)
+    return court_names.get(str(court_number))  # JSON keys are strings
+
+
+def save_single_court_name(court_number: int, custom_name: Optional[str], num_courts: int) -> bool:
+    """
+    Save or update the name for a single court.
+    
+    Args:
+        court_number: The court number (1, 2, 3, etc.) 
+        custom_name: The custom name, or None to use default
+        num_courts: Total number of courts in current session
+        
+    Returns:
+        True if saved successfully, False otherwise
+    """
+    # Load existing court names
+    court_names = load_court_names(num_courts)
+    
+    # Update the specific court
+    if custom_name is None:
+        # Remove custom name (use default)
+        court_names.pop(str(court_number), None)
+    else:
+        # Set custom name
+        court_names[str(court_number)] = custom_name
+    
+    # Save back to file
+    return save_court_names(court_names, num_courts)

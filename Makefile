@@ -168,6 +168,12 @@ test_court_layout_visual:
 test_font_auto_sizing:
 	python3 test_font_auto_sizing.py
 
+test_court_name_persistence:
+	python3 test_court_name_persistence.py
+
+test_court_integration:
+	python3 test_court_integration.py
+
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
