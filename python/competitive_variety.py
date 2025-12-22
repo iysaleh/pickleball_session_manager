@@ -287,7 +287,8 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
 
     # Check bracket compatibility (Roaming Range Rule)
     # Relaxed if allow_cross_bracket is True
-    if not allow_cross_bracket:
+    # NOTE: Provisional players are exempt from roaming range restrictions
+    if not allow_cross_bracket and not (is_provisional(session, player1) or is_provisional(session, player2)):
         # Calculate rank difference limit using session's roaming range setting
         roaming_percent = getattr(session, 'competitive_variety_roaming_range_percent', ROAMING_RANK_PERCENTAGE)
         limit = int(len(session.active_players) * roaming_percent)
@@ -610,7 +611,18 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
         
         # If no queue match assigned, try to generate one from available players
         if not assigned:
-            available_players = [p for p in sorted(session.active_players) if p not in players_in_matches and p not in first_bye_players_set]
+            # Count completed matches to detect first round
+            completed_matches = [m for m in session.matches if m.status == 'completed']
+            is_first_round = len(completed_matches) == 0
+            
+            if is_first_round:
+                # First round: randomize player order for variety between sessions
+                import random
+                available_players = [p for p in session.active_players if p not in players_in_matches and p not in first_bye_players_set]
+                random.shuffle(available_players)
+            else:
+                # Later rounds: use deterministic sorted order for consistency
+                available_players = [p for p in sorted(session.active_players) if p not in players_in_matches and p not in first_bye_players_set]
             
             if len(available_players) >= 4:
                 # Try to find any 4 players that can form valid teams
@@ -707,22 +719,32 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                              pass
 
                 if not best_team1:
-                    # Use sophisticated wait time priority system to select candidates
-                    # This considers actual wait time, not just game counts
+                    # Detect if this is first round for special handling
+                    completed_matches = [m for m in session.matches if m.status == 'completed']
+                    is_first_round = len(completed_matches) == 0
                     
-                    # Calculate optimal number of candidates for matching
-                    # Need enough for ELO mixing flexibility while prioritizing waiters
-                    base_candidates = max(12, len(available_players) // 2)
-                    max_candidates = min(16, max(12, base_candidates))
-                    
-                    # Get priority-aware candidates using the new wait time system
-                    candidates_for_matching = get_priority_aware_candidates(
-                        session, available_players, max_candidates
-                    )
-                    
-                    # Limit combination search to maintain performance
-                    # The candidates are already sorted by wait priority
-                    search_limit = min(12, len(candidates_for_matching))
+                    if is_first_round:
+                        # First round: Use all available players to ensure we can fill all courts
+                        # Since everyone has equal wait time, no need for priority filtering
+                        candidates_for_matching = available_players
+                        search_limit = len(candidates_for_matching)
+                    else:
+                        # Later rounds: Use sophisticated wait time priority system to select candidates
+                        # This considers actual wait time, not just game counts
+                        
+                        # Calculate optimal number of candidates for matching
+                        # Need enough for ELO mixing flexibility while prioritizing waiters
+                        base_candidates = max(12, len(available_players) // 2)
+                        max_candidates = min(16, max(12, base_candidates))
+                        
+                        # Get priority-aware candidates using the new wait time system
+                        candidates_for_matching = get_priority_aware_candidates(
+                            session, available_players, max_candidates
+                        )
+                        
+                        # Limit combination search to maintain performance
+                        # The candidates are already sorted by wait priority
+                        search_limit = min(12, len(candidates_for_matching))
                     
                     # Only one pass: Strict Bracketing (allow_cross_bracket=False)
                     allow_cross = False

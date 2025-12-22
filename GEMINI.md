@@ -40,6 +40,15 @@ This module implements an ELO-based skill-balanced matchmaking system with hard 
 - Provisional players have NO roaming restrictions
 - Used by: get_roaming_rank_range(), can_play_with_player()
 
+**Candidate Pool Optimization (Smart Performance Scaling)**
+- Balances wait time fairness, ELO quality, and computational performance
+- **Small sessions (≤16 players)**: Uses ALL available players as candidates (no limitation)
+- **Large sessions (17+ players)**: Limits to top 12-16 candidates using priority system
+- Prevents combinatorial explosion: C(24,4)=10,626 → C(16,4)=1,820 (83% reduction)
+- Prioritizes candidates by wait time tiers: Extreme (20+ min) → Significant (12+ min) → Normal
+- **First round exception**: Uses all players to ensure court filling when everyone has equal priority
+- Automatic scaling: `max_candidates = min(16, max(12, available_players // 2))`
+
 **Locked Teams & Banned Pairs**
 - Locked teams MUST be partners (override repetition constraints)
 - Locked teams CANNOT be opponents
@@ -69,9 +78,10 @@ This module implements an ELO-based skill-balanced matchmaking system with hard 
 - Two-stage process:
   1. Try queued matches first (respects waitlist)
   2. Generate new matches from available players
+- **First round detection**: Uses randomized player order + all available players as candidates
+- **Later rounds**: Uses candidate pool optimization with wait time prioritization
 - Prioritizes locked teams
-- Uses sophisticated wait time priority system for candidate selection
-- Takes top 12-16 candidates using `get_priority_aware_candidates()` from wait_priority module
+- Integrates with sophisticated candidate pool system from wait_priority module
 
 **_can_form_valid_teams(session, players, allow_cross_bracket=False) → bool**
 - Helper: checks if 4 players can form ANY valid team configuration
@@ -104,10 +114,23 @@ This module implements an ELO-based skill-balanced matchmaking system with hard 
    - Line 335-336: locked partners return True immediately, skipping repetition checks
    - This is intentional - locked teams are exempt
 
-5. **WAIT PRIORITY INTEGRATION**: 
+5. **CANDIDATE POOL OPTIMIZATION**: 
+   - Small sessions (≤16 players): Uses ALL available players (no performance concerns)
+   - Large sessions (17+ players): Uses top 12-16 candidates by wait priority
+   - Automatic scaling prevents O(n^4) combinatorial explosion
+   - First round bypass: Uses all players when everyone has equal priority
+   - Ensures fairness (longest waiters first) while maintaining performance
+
+6. **FIRST ROUND RANDOMIZATION**:
+   - Player order is randomized in first round to ensure variety between sessions
+   - Later rounds use deterministic order for consistency
+   - Detection: `completed_matches = [m for m in session.matches if m.status == 'completed']`
+   - When `len(completed_matches) == 0`, randomize available player order
+
+7. **WAIT PRIORITY INTEGRATION**: 
    - Uses sophisticated wait time priority system (python/wait_priority.py)
    - Candidates selected via `get_priority_aware_candidates()` which prioritizes actual wait time
-   - Limited to 12-16 top-priority candidates to prevent O(n^4) slowness
+   - Integrates seamlessly with candidate pool optimization system
    - Maintains backward compatibility with legacy `games_waited` counter
 
 ## WAIT TIME PRIORITY SYSTEM (python/wait_priority.py)

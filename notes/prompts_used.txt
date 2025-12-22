@@ -535,6 +535,20 @@ sequence item 0: expected str instance, NoneType found
 * In @python/gui.py ; This assignment to 'stats' is unnecessary as it is redefined before this value is used.
 
 
+# Tweaks 12-21-2025
+* When making the first match, we need to randomly spread the players on the court that are not specified on the first bye list, it should not be consistent between runs but it currently is. 
+*  You broke something, in a 20 player 4 court scenario with 2 on the first bye list, the 4th court isn't being populated.
+
+
+=======================
+Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carroll: 11 beat Robert Dillon, SKyler
+   Hensley: 0 and Ibraheem Saleh, David Laforest: 11 beat Ellie Farias, Sheila B.: 5 -- That is NOT how the balance
+   should have been made!! Roaming range was set to 100%, so anyone could play with anyone. Ibraheem should have
+   been with Sheila and David witih Ellie (given the balanced variety setting)!!! The @python/competitive_variety.py
+    algorithm is clearly NOT balancing matches that are being made properly. Investigate why matches that are made
+   aren't being balanced. Be precise in your fix, and assume the role of a staff level export developer.
+
+
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts
