@@ -228,3 +228,6 @@ test_enhanced_balance_constraints:
 
 test_partner_opponent_partner_prevention:
 	python3 test_partner_opponent_partner_prevention.py
+
+test_roaming_range_preservation:
+	python3 test_roaming_range_preservation.py

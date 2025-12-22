@@ -91,12 +91,11 @@ def get_adaptive_constraints(session: Session) -> Dict[str, float]:
     MAINTAINS all variety constraints but reduces them minimally (never to 0).
     
     Returns:
-        Dict with 'roaming_range', 'partner_repetition', 'opponent_repetition', 'balance_weight'
+        Dict with 'partner_repetition', 'opponent_repetition', 'balance_weight'
     """
     # Check if adaptive constraints are disabled
     if session.adaptive_constraints_disabled:
         return {
-            'roaming_range': 0.65,           # Keep skill bracket quality
             'partner_repetition': 3,         # Standard constraints
             'opponent_repetition': 2,        # Standard constraints
             'balance_weight': 1.0            # Standard balance weighting
@@ -110,15 +109,9 @@ def get_adaptive_constraints(session: Session) -> Dict[str, float]:
     early_to_mid = thresholds['early_to_mid']
     mid_to_late = thresholds['mid_to_late']
     
-    # Base constraints that maintain quality
-    base_constraints = {
-        'roaming_range': 0.65,     # ALWAYS maintain skill bracket quality
-    }
-    
     if completed_matches < early_to_mid:
         # Early session: Standard constraints and weighting
         return {
-            **base_constraints,
             'partner_repetition': 3,    # Standard partner repetition
             'opponent_repetition': 2,   # Standard opponent repetition
             'balance_weight': 1.0       # Standard balance weighting
@@ -126,7 +119,6 @@ def get_adaptive_constraints(session: Session) -> Dict[str, float]:
     elif completed_matches < mid_to_late:
         # Mid session: Slight constraint relaxation, increased balance priority
         return {
-            **base_constraints,
             'partner_repetition': 2,    # Reduced but not eliminated
             'opponent_repetition': 1,   # Reduced but not eliminated
             'balance_weight': 3.0       # 3x balance weighting
@@ -134,7 +126,6 @@ def get_adaptive_constraints(session: Session) -> Dict[str, float]:
     else:
         # Late session: Minimal constraints, maximum balance priority
         return {
-            **base_constraints,
             'partner_repetition': 1,    # Minimum constraint (never 0)
             'opponent_repetition': 1,   # Minimum constraint (never 0)
             'balance_weight': 5.0       # 5x balance weighting
@@ -194,13 +185,15 @@ def apply_adaptive_constraints(session: Session) -> None:
     Apply adaptive constraints to the session based on progression.
     Updates session settings to reflect current adaptive constraints.
     
+    IMPORTANT: Does NOT change roaming range - that is a user preference!
+    Only adjusts variety constraints (repetition limits).
+    
     If session.adaptive_balance_weight is set (manual override), uses that value.
     Otherwise, calculates weight automatically based on session progression.
     """
     constraints = get_adaptive_constraints(session)
     
-    # Update session settings (roaming range and repetition limits)
-    session.competitive_variety_roaming_range_percent = constraints['roaming_range']
+    # Update session settings (repetition limits only - NOT roaming range!)
     session.competitive_variety_partner_repetition_limit = constraints['partner_repetition']
     session.competitive_variety_opponent_repetition_limit = constraints['opponent_repetition']
     

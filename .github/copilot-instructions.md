@@ -238,6 +238,8 @@ Implements sophisticated wait time priority logic that considers actual accumula
 ### Core Purpose
 The adaptive constraints system intelligently relaxes variety constraints (partner/opponent repetition) as sessions progress to improve match balance quality. It dynamically adjusts based on player count and average games played, ensuring variety constraints are relaxed gradually while implementing **progressively stricter balance constraints**.
 
+**CRITICAL**: The adaptive system **NEVER** changes the roaming range (competitiveness level). User's competitiveness choice is always preserved.
+
 ### Key Features
 
 **Dynamic Threshold Calculation**
@@ -386,6 +388,7 @@ The enhanced system affects match generation at multiple levels:
 - `test_enhanced_balance_constraints.py`: Tests all new balance constraint features
 - `test_both_sided_gap.py`: Tests Partner-Opponent-Partner pattern prevention with both-sided gaps
 - `test_partner_opponent_partner_prevention.py`: Social dynamic constraint testing
+- `test_roaming_range_preservation.py`: Verifies roaming range is never changed by adaptive system
 - `demo_enhanced_balance_system.py`: Realistic demonstration of balance improvements
 - Fuzzing tests: `make run_fuzz_tests` validates constraint enforcement without violations
 
@@ -411,3 +414,4 @@ Critical test files:
 - test_enhanced_balance_constraints.py: tests enhanced balance constraint system
 - test_both_sided_gap.py: tests both-sided gap requirements for pattern prevention
 - test_partner_opponent_partner_prevention.py: social dynamic constraint testing
+- test_roaming_range_preservation.py: verifies roaming range preservation across all adaptive phases
