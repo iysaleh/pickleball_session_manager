@@ -162,6 +162,12 @@ test_match_duration_resumption:
 test_complete_session_resumption:
 	python3 test_complete_session_resumption.py
 
+test_court_layout_visual:
+	python3 test_court_layout_visual.py
+
+test_font_auto_sizing:
+	python3 test_font_auto_sizing.py
+
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete

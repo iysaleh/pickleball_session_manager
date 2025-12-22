@@ -546,6 +546,8 @@ sequence item 0: expected str instance, NoneType found
 * When making the first match, we need to randomly spread the players on the court that are not specified on the first bye list, it should not be consistent between runs but it currently is. 
 *  You broke something, in a 20 player 4 court scenario with 2 on the first bye list, the 4th court isn't being populated sometimes, but sometimes it is --- it's inconsistent...
 * Explain the reason for artifically limiting the candidate pool, what does having this logic do for our matchmaking algorithm?
+* Right now, the courts render on the active courts page as a giant green box, with a division line, and then the side box, and then the team box within the side box and the names drawn within the team box. That is wasted space. Remove the inner team box and just have the side box, and then expand the names to auto fill the entire side box.
+** Good, but the names are still not taking up the entire box, is it possible to auto size the text to fill the entire box on the screen?
 
 
 =======================

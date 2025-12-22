@@ -855,17 +855,12 @@ class CourtDisplayWidget(QWidget):
         # Teams display
         teams_layout = QHBoxLayout()
         
-        # Team 1 side
-        team1_box = QFrame()
-        team1_box.setStyleSheet("QFrame { background-color: #ff9999; border: 2px solid #cc0000; border-radius: 3px; }")
-        team1_layout = QVBoxLayout(team1_box)
-        team1_layout.setContentsMargins(10, 10, 10, 10)
+        # Team 1 side (direct label without inner box)
         self.team1_label = QLabel("Team 1")
         self.team1_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
         self.team1_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.team1_label.setStyleSheet("QLabel { color: black; }")
-        team1_layout.addWidget(self.team1_label)
-        teams_layout.addWidget(team1_box)
+        self.team1_label.setStyleSheet("QLabel { color: black; background-color: #ff9999; border: 2px solid #cc0000; border-radius: 3px; padding: 10px; }")
+        teams_layout.addWidget(self.team1_label)
         
         # Net separator
         net = QFrame()
@@ -873,17 +868,12 @@ class CourtDisplayWidget(QWidget):
         net.setFixedWidth(4)
         teams_layout.addWidget(net)
         
-        # Team 2 side
-        team2_box = QFrame()
-        team2_box.setStyleSheet("QFrame { background-color: #99ccff; border: 2px solid #0066cc; border-radius: 3px; }")
-        team2_layout = QVBoxLayout(team2_box)
-        team2_layout.setContentsMargins(10, 10, 10, 10)
+        # Team 2 side (direct label without inner box)
         self.team2_label = QLabel("Team 2")
         self.team2_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
         self.team2_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.team2_label.setStyleSheet("QLabel { color: black; }")
-        team2_layout.addWidget(self.team2_label)
-        teams_layout.addWidget(team2_box)
+        self.team2_label.setStyleSheet("QLabel { color: black; background-color: #99ccff; border: 2px solid #0066cc; border-radius: 3px; padding: 10px; }")
+        teams_layout.addWidget(self.team2_label)
         
         court_layout.addLayout(teams_layout, 1)
         layout.addWidget(self.court_area, 1)
@@ -954,6 +944,12 @@ class CourtDisplayWidget(QWidget):
             self.team2_score.setValue(0)
             self.timer_display.setText("00:00")
             self.court_area.setStyleSheet("QFrame { background-color: #e0e0e0; border: 2px dashed #999; border-radius: 5px; }")
+            # Update team label backgrounds for empty court
+            self.team1_label.setStyleSheet("QLabel { color: black; background-color: #f0f0f0; border: 2px solid #ccc; border-radius: 3px; padding: 10px; }")
+            self.team2_label.setStyleSheet("QLabel { color: black; background-color: #f0f0f0; border: 2px solid #ccc; border-radius: 3px; padding: 10px; }")
+            
+            # Auto-size the fonts for empty court text
+            self._auto_size_team_fonts()
             return
         elapsed_seconds = (now() - match.start_time).total_seconds() if match.start_time else 0
         
@@ -961,6 +957,11 @@ class CourtDisplayWidget(QWidget):
             self.court_area.setStyleSheet("QFrame { background-color: #c4d76d; border: 3px solid #4CAF50; border-radius: 5px; }") # Green highlight
         else:
             self.court_area.setStyleSheet("QFrame { background-color: #c4d76d; border: 2px solid #333; border-radius: 5px; }")
+        
+        # Restore team label colors for active match
+        self.team1_label.setStyleSheet("QLabel { color: black; background-color: #ff9999; border: 2px solid #cc0000; border-radius: 3px; padding: 10px; }")
+        self.team2_label.setStyleSheet("QLabel { color: black; background-color: #99ccff; border: 2px solid #0066cc; border-radius: 3px; padding: 10px; }")
+        
         # Get player names
         team1_names = [get_player_name(self.session, pid) for pid in match.team1]
         team2_names = [get_player_name(self.session, pid) for pid in match.team2]
@@ -975,6 +976,9 @@ class CourtDisplayWidget(QWidget):
         
         self.team1_label.setText("\n".join(team1_names))
         self.team2_label.setText("\n".join(team2_names))
+        
+        # Auto-size the fonts to fill the available space
+        self._auto_size_team_fonts()
         
         if match.score:
             self.team1_score.setValue(match.score.get('team1_score', 0))
@@ -994,6 +998,60 @@ class CourtDisplayWidget(QWidget):
         minutes = elapsed_seconds // 60
         seconds = elapsed_seconds % 60
         self.timer_display.setText(f"{minutes:02d}:{seconds:02d}")
+    
+    def _auto_size_team_fonts(self):
+        """Auto-size fonts for team labels to fill available space"""
+        self._auto_size_label_font(self.team1_label)
+        self._auto_size_label_font(self.team2_label)
+    
+    def _auto_size_label_font(self, label):
+        """Auto-size font for a single label to fill its available space"""
+        from PyQt6.QtGui import QFontMetrics
+        from PyQt6.QtCore import QRect
+        
+        # Get the available space (minus padding and borders)
+        available_rect = label.contentsRect()
+        if available_rect.width() <= 0 or available_rect.height() <= 0:
+            # If we don't have size info yet, try again later
+            QTimer.singleShot(100, lambda: self._auto_size_label_font(label))
+            return
+        
+        text = label.text()
+        if not text.strip():
+            return
+        
+        # Account for padding (we have 10px padding in stylesheet)
+        padding = 20  # 10px on each side
+        target_width = max(1, available_rect.width() - padding)
+        target_height = max(1, available_rect.height() - padding)
+        
+        # Start with a reasonable font size and adjust
+        min_font_size = 8
+        max_font_size = 72
+        best_font_size = min_font_size
+        
+        # Binary search for the optimal font size
+        for font_size in range(min_font_size, max_font_size + 1):
+            font = QFont("Arial", font_size, QFont.Weight.Bold)
+            metrics = QFontMetrics(font)
+            text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height), 
+                                           Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, text)
+            
+            if text_rect.width() <= target_width and text_rect.height() <= target_height:
+                best_font_size = font_size
+            else:
+                break
+        
+        # Apply the best font size found
+        current_font = label.font()
+        current_font.setPointSize(best_font_size)
+        label.setFont(current_font)
+    
+    def resizeEvent(self, event):
+        """Handle widget resize to update font sizes"""
+        super().resizeEvent(event)
+        # Delay the font resize to ensure layout is complete
+        QTimer.singleShot(50, self._auto_size_team_fonts)
     
     def complete_match_clicked(self):
         """Handle complete match button"""
