@@ -1424,7 +1424,7 @@ class SessionWindow(QMainWindow):
         content_layout.addWidget(divider)
         
         # Right sidebar section (waiting list + queue)
-        right_section = QVBoxLayout()
+        self.right_section = QVBoxLayout()
         
         # Waiting list section header with toggle button
         waiting_header = QHBoxLayout()
@@ -1450,54 +1450,57 @@ class SessionWindow(QMainWindow):
         
         waiting_header.addStretch()
         
-        right_section.addLayout(waiting_header)
+        self.right_section.addLayout(waiting_header)
         
         self.waiting_list = DeselectableListWidget()
         self.waiting_list.setMinimumWidth(250)
         self.waiting_list.setMaximumHeight(150)
         # Connect signal to clear other lists when selected
         self.waiting_list.itemSelectionChanged.connect(self.on_waiting_list_selection_changed)
-        right_section.addWidget(self.waiting_list)
+        self.right_section.addWidget(self.waiting_list)
         
         self.waiting_count = QLabel("0 players waiting")
         self.waiting_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.waiting_count.setStyleSheet("QLabel { color: white; font-weight: bold; background-color: #2a2a2a; }")
-        right_section.addWidget(self.waiting_count)
+        self.right_section.addWidget(self.waiting_count)
         
         # Queue section
-        queue_label = QLabel("📋 Match Queue")
-        queue_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        queue_label.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 8px; border-radius: 3px; }")
-        right_section.addWidget(queue_label)
+        self.queue_label = QLabel("📋 Match Queue")
+        self.queue_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        self.queue_label.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 8px; border-radius: 3px; }")
+        self.right_section.addWidget(self.queue_label)
         
         self.queue_list = QListWidget()
         self.queue_list.setMinimumWidth(250)
-        right_section.addWidget(self.queue_list, 1)
+        self.right_section.addWidget(self.queue_list, 1)
         
         self.queue_count = QLabel("0 matches queued")
         self.queue_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.queue_count.setStyleSheet("QLabel { color: white; font-weight: bold; background-color: #2a2a2a; }")
-        right_section.addWidget(self.queue_count)
+        self.right_section.addWidget(self.queue_count)
         
         # History section
         history_label = QLabel("📜 Match History")
         history_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         history_label.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 8px; border-radius: 3px; }")
-        right_section.addWidget(history_label)
+        self.right_section.addWidget(history_label)
         
         self.history_list = DeselectableListWidget()
         self.history_list.setMinimumWidth(250)
         self.history_list.itemDoubleClicked.connect(self.edit_match_history)
         # Connect signal to clear other lists when selected
         self.history_list.itemSelectionChanged.connect(self.on_history_list_selection_changed)
-        right_section.addWidget(self.history_list, 1)
+        self.right_section.addWidget(self.history_list, 1)
         
         self.history_count = QLabel("0 matches completed")
         self.history_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.history_count.setStyleSheet("QLabel { color: white; font-weight: bold; background-color: #2a2a2a; }")
-        right_section.addWidget(self.history_count)
+        self.right_section.addWidget(self.history_count)
         
-        content_layout.addLayout(right_section, 1)
+        # Configure queue visibility after all widgets are created
+        self._configure_queue_visibility()
+        
+        content_layout.addLayout(self.right_section, 1)
         main_layout.addLayout(content_layout, 1)
         
         # Control buttons
@@ -4123,6 +4126,35 @@ class SessionWindow(QMainWindow):
             traceback.print_exc()
             QMessageBox.critical(self, "Error", error_msg)
     
+    
+    def _configure_queue_visibility(self):
+        """Configure match queue visibility based on game mode"""
+        is_competitive_variety = self.session.config.mode == 'competitive-variety'
+        
+        # Hide queue widgets for competitive variety mode
+        if is_competitive_variety:
+            self.queue_label.hide()
+            self.queue_list.hide()
+            self.queue_count.hide()
+        else:
+            self.queue_label.show()
+            self.queue_list.show()
+            self.queue_count.show()
+        
+        # Adjust waitlist and history stretch factors based on queue visibility
+        if is_competitive_variety:
+            # Remove height restriction and give waitlist the stretch that queue had
+            self.waiting_list.setMaximumHeight(16777215)  # Max int value for unlimited
+            # Set waitlist to take the space that queue would have had
+            self.right_section.setStretchFactor(self.waiting_list, 1)
+            self.right_section.setStretchFactor(self.history_list, 1)
+        else:
+            # Restore original height restriction and stretch factors
+            self.waiting_list.setMaximumHeight(150)
+            # Reset to original: waitlist no stretch, history gets stretch
+            self.right_section.setStretchFactor(self.waiting_list, 0)
+            self.right_section.setStretchFactor(self.history_list, 1)
+
     def end_session(self):
         """End the session"""
         reply = QMessageBox.question(
