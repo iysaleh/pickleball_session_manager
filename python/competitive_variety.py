@@ -582,18 +582,66 @@ def can_play_with_player(session: Session, player1: str, player2: str, role: str
     return True
 
 
+def get_balance_threshold(session: Session) -> float:
+    """
+    Calculate the maximum acceptable team rating difference based on session progression.
+    Balance constraints only activate when adaptive system kicks in (mid-late session).
+    
+    Returns maximum acceptable rating difference between teams.
+    """
+    constraints = get_adaptive_constraints(session)
+    balance_weight = constraints['balance_weight']
+    
+    # Balance constraints only activate when adaptive system kicks in
+    if balance_weight <= 1.0:  # Early session - no balance constraints
+        return float('inf')  # No balance threshold in early session
+    elif balance_weight >= 5.0:  # Late session
+        return 200  # Very strict balance required
+    elif balance_weight >= 3.0:  # Mid session  
+        return 300  # Moderate balance required
+    else:  # Transitional phase
+        return 400  # Lenient balance threshold
+
+
+def meets_balance_constraints(session: Session, team1: List[str], team2: List[str]) -> bool:
+    """
+    Check if a potential match meets hard balance constraints.
+    As sessions progress and variety constraints relax, balance constraints get stricter.
+    """
+    # Calculate team ratings
+    team1_rating = sum(calculate_elo_rating(session.player_stats.get(p, 
+                       type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
+                       for p in team1)
+    team2_rating = sum(calculate_elo_rating(session.player_stats.get(p, 
+                       type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
+                       for p in team2)
+    
+    # Check if imbalance exceeds threshold
+    rating_diff = abs(team1_rating - team2_rating)
+    threshold = get_balance_threshold(session)
+    
+    return rating_diff <= threshold
+
+
 def score_potential_match(session: Session, team1: List[str], team2: List[str]) -> float:
     """
     Score a potential match based on skill balance and variety.
     Higher score = better match.
     
     Factors:
-    - Skill balance (teams should be close in rating) - weighted by session progression
+    - Hard balance constraints (must meet threshold to be valid)
+    - Skill balance (teams should be close in rating) - weighted by session progression  
     - Partnership variety (prefer new partnerships)
     - Opponent variety (prefer new opponents)
+    - Homogeneous partnership bonus (encourages similar skill partnerships)
     
-    Uses adaptive balance weighting: balance becomes more important as session progresses.
+    Uses adaptive balance weighting and hard balance thresholds.
+    Prefers Elite vs Elite, Strong vs Strong, etc. over mixed skill partnerships.
     """
+    # First check: must meet hard balance constraints
+    if not meets_balance_constraints(session, team1, team2):
+        return -10000  # Severely penalize matches that violate balance constraints
+    
     score = 0.0
     
     # Get effective adaptive balance weight (increases as session progresses)
@@ -607,21 +655,85 @@ def score_potential_match(session: Session, team1: List[str], team2: List[str]) 
                        type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
                        for p in team2)
     
+    # Calculate individual player ratings for partnership analysis
+    team1_ratings = [calculate_elo_rating(session.player_stats.get(p, 
+                     type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
+                     for p in team1]
+    team2_ratings = [calculate_elo_rating(session.player_stats.get(p, 
+                     type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
+                     for p in team2]
+    
     # Penalize unbalanced teams (large skill difference)
-    # Apply adaptive balance weighting - penalty increases as session progresses
     rating_diff = abs(team1_rating - team2_rating)
     balance_penalty = rating_diff * 2 * balance_weight
     score -= balance_penalty
     
-    # Bonus for variety (constant weight - does not increase with session progression)
+    # Homogeneous Partnership Bonus (only activates when adaptive system kicks in)
+    # Reward teams where partners have similar skill levels
+    # Elite vs Elite, Strong vs Strong, etc. creates better pickleball experiences
+    if balance_weight >= 3.0:  # Mid to late session - adaptive system active
+        homogeneous_bonus = 0
+        
+        # Check each team for similar skill composition
+        for team_ratings in [team1_ratings, team2_ratings]:
+            skill_difference = max(team_ratings) - min(team_ratings)
+            if skill_difference <= 150:  # Partners within 150 rating points (very similar)
+                homogeneous_bonus += 75 * balance_weight
+            elif skill_difference <= 250:  # Partners within 250 rating points (reasonably similar)
+                homogeneous_bonus += 40 * balance_weight
+        
+        score += homogeneous_bonus
+    
+    # Penalty for mismatched partnerships (only when adaptive system active)
+    # This discourages the "carry" dynamic that creates poor experiences
+    if balance_weight >= 3.0:  # Mid to late session - adaptive system active
+        mismatch_penalty = 0
+        for team_ratings in [team1_ratings, team2_ratings]:
+            skill_difference = max(team_ratings) - min(team_ratings)
+            if skill_difference >= 400:  # Very large skill gap within team
+                mismatch_penalty += 100 * balance_weight  # Heavy penalty
+            elif skill_difference >= 300:  # Large skill gap within team  
+                mismatch_penalty += 50 * balance_weight   # Moderate penalty
+        
+        score -= mismatch_penalty
+    
+    # Bonus for variety (reduced weight as session progresses to prioritize balance)
+    variety_weight = max(1.0, 3.0 - (balance_weight - 1.0))  # Decreases from 3.0 to 1.0
     variety_bonus = 0
+    
+    # Partner variety bonus
+    for team in [team1, team2]:
+        p1, p2 = team
+        if (p1 not in session.player_stats or p2 not in session.player_stats or 
+            p2 not in session.player_stats[p1].partners_played):
+            variety_bonus += 5 * variety_weight
+    
+    # Opponent variety bonus  
     for p1 in team1:
         for p2 in team2:
-            if p1 not in session.player_stats or p2 not in session.player_stats:
-                variety_bonus += 10
-            elif p2 not in session.player_stats[p1].opponents_played:
-                variety_bonus += 5
+            if (p1 not in session.player_stats or p2 not in session.player_stats or
+                p2 not in session.player_stats[p1].opponents_played):
+                variety_bonus += 3 * variety_weight
+    
     score += variety_bonus
+    
+    # Perfect balance bonus (extra reward for very close team ratings)
+    if rating_diff <= 100:  # Very close teams
+        score += 100 * balance_weight
+    elif rating_diff <= 200:  # Close teams
+        score += 50 * balance_weight
+    
+    # Skill tier matching bonus (only when adaptive system active)
+    # Encourage matches between similar skill levels across teams
+    if balance_weight >= 3.0:  # Mid to late session - adaptive system active
+        avg_team1_rating = sum(team1_ratings) / 2
+        avg_team2_rating = sum(team2_ratings) / 2
+        team_avg_diff = abs(avg_team1_rating - avg_team2_rating)
+        
+        if team_avg_diff <= 100:  # Similar average team skill
+            score += 75 * balance_weight
+        elif team_avg_diff <= 200:  # Reasonably similar average team skill
+            score += 40 * balance_weight
     
     return score
 
@@ -959,11 +1071,13 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                                             break
                                     
                                     if valid:
-                                        # Score this configuration for balance and variety
-                                        score = score_potential_match(session, team1, team2)
-                                        if score > best_score:
-                                            best_score = score
-                                            best_config = (list(team1), list(team2))
+                                        # First check: Must meet hard balance constraints (filters out severely imbalanced matches)
+                                        if meets_balance_constraints(session, team1, team2):
+                                            # Score this configuration for balance and variety
+                                            score = score_potential_match(session, team1, team2)
+                                            if score > best_score:
+                                                best_score = score
+                                                best_config = (list(team1), list(team2))
                             
                             if best_config:
                                 best_team1, best_team2 = best_config

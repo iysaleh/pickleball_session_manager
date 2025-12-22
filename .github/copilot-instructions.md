@@ -218,7 +218,7 @@ Implements sophisticated wait time priority logic that considers actual accumula
 ## ADAPTIVE CONSTRAINTS SYSTEM (python/competitive_variety.py)
 
 ### Core Purpose
-The adaptive constraints system intelligently relaxes variety constraints (partner/opponent repetition) as sessions progress to improve match balance quality. It dynamically adjusts based on player count and average games played, ensuring variety constraints are relaxed gradually and never completely eliminated.
+The adaptive constraints system intelligently relaxes variety constraints (partner/opponent repetition) as sessions progress to improve match balance quality. It dynamically adjusts based on player count and average games played, ensuring variety constraints are relaxed gradually while implementing **progressively stricter balance constraints**.
 
 ### Key Features
 
@@ -228,11 +228,20 @@ The adaptive constraints system intelligently relaxes variety constraints (partn
 - Thresholds scale with player count: `threshold = (player_count * target_games_per_player) / 4`
 - Example: 16 players → Early→Mid at 16 matches, Mid→Late at 24 matches
 
-**Progressive Constraint Relaxation**
-- **Early phase**: Standard constraints (partner: 3 games, opponent: 2 games), 1.0x balance weight
-- **Mid phase**: Reduced constraints (partner: 2 games, opponent: 1 game), 3.0x balance weight
-- **Late phase**: Minimal constraints (partner: 1 game, opponent: 1 game), 5.0x balance weight
+**Progressive Constraint Relaxation + Balance Enforcement**
+- **Early phase**: Standard constraints (partner: 3 games, opponent: 2 games), 1.0x balance weight, ≤400 rating threshold
+- **Mid phase**: Reduced constraints (partner: 2 games, opponent: 1 game), 3.0x balance weight, ≤300 rating threshold
+- **Late phase**: Minimal constraints (partner: 1 game, opponent: 1 game), 5.0x balance weight, ≤200 rating threshold
 - **NEVER goes to 0**: Maintains minimum 1-game gaps to prevent back-to-back repetition
+
+**Enhanced Balance Constraint System**
+- **Hard Balance Thresholds**: Maximum acceptable team rating differences that activate when adaptive system kicks in (mid-late session)
+- **Homogeneous Partnership Bonus**: Rewards pairing similar-skill players (Elite+Elite, Strong+Strong) once adaptive system activates
+- **Mismatched Partnership Penalties**: Discourages Elite+Weak partnerships that create 'carry' dynamics (mid-late session only)
+- **Balance-First Filtering**: Severely imbalanced matches (>threshold) automatically rejected after Round 3-4
+- **Progressive Balance Prioritization**: Variety weight decreases while balance weight increases over time
+- **Skill Tier Matching Bonus**: Extra rewards for Elite vs Elite, Strong vs Strong matchups (mid-late session only)
+- **Perfect Balance Bonus**: Extra scoring rewards for very close team rating matches (all phases)
 
 **GUI Slider Control**
 - Position 0: **NONE** - Disables adaptive constraints entirely (maintains standard Early phase settings)
@@ -242,10 +251,27 @@ The adaptive constraints system intelligently relaxes variety constraints (partn
 
 ### Critical Functions
 
+**get_balance_threshold(session) → float**
+- Calculates maximum acceptable team rating difference based on session progression
+- Early: 400 points, Mid: 300 points, Late: 200 points
+- Ensures progressively stricter balance requirements
+
+**meets_balance_constraints(session, team1, team2) → bool**
+- Checks if potential match meets hard balance constraints
+- Used to filter out severely imbalanced matches before scoring
+- Returns False for matches exceeding the current balance threshold
+
 **get_adaptive_constraints(session) → Dict**
 - Returns current constraints based on session progression or manual override
 - Handles disabled state when `session.adaptive_constraints_disabled = True`
 - Never allows constraints to go to 0 (minimum partner: 1, opponent: 1)
+
+**score_potential_match(session, team1, team2) → float**
+- Enhanced scoring function with balance constraint integration
+- Returns -10000 for matches that violate hard balance constraints
+- Includes elite+weak partnership bonus (50+ points scaled by balance weight)
+- Progressive variety weight reduction (3.0→1.0) as balance weight increases
+- Perfect balance bonus for very close teams (50-100 points scaled by balance weight)
 
 **get_adaptive_phase_info(session) → Dict**
 - Provides comprehensive information about current adaptive state
@@ -256,6 +282,30 @@ The adaptive constraints system intelligently relaxes variety constraints (partn
 - Computes dynamic thresholds based on player count
 - Formula: `(player_count * games_per_player) / 4` matches per threshold
 - Ensures thresholds scale appropriately with session size
+
+### Expert Balance Strategy Implementation
+
+As a staff-level expert with years of observing sessions, this system implements these key insights:
+
+**Problem Identification**
+- Variety constraints become too restrictive in long sessions
+- Algorithm forced to choose imbalanced matches when good options blocked
+- Players get frustrated with 800+ rating point team differences
+- Elite vs beginner matches create poor experiences
+- **But early rounds need variety exploration to work properly**
+
+**Smart Balance Solution**
+1. **Delayed Activation**: Balance constraints only activate when adaptive system kicks in (Round 4+)
+2. **Hard Thresholds**: Absolute limits on acceptable imbalance that get stricter over time (mid-late session)
+3. **Homogeneous Partnerships**: Actively encourage similar-skill partnerships once adaptive system activates
+4. **Mismatch Penalties**: Discourage Elite+Weak partnerships that create 'carry' dynamics (mid-late session)
+5. **Progressive Prioritization**: Gradually shift from variety-first to balance-first matching
+6. **Threshold Enforcement**: Filter out bad matches before they're even considered (after Round 3-4)
+
+**Session Progression Logic**
+- **Early (Rounds 1-3)**: Variety exploration, no balance constraints, moderate imbalance allowed
+- **Mid (Round 4+)**: Balance constraints activate (≤300 pts), homogeneous partnerships encouraged  
+- **Late (Round 6+)**: Strict balance priority (≤200 pts), minimal imbalance tolerated
 
 ### Slider Behavior Design
 
@@ -276,16 +326,32 @@ The adaptive constraints system intelligently relaxes variety constraints (partn
 
 ### Integration with Balance Algorithm
 
-The balance weight multiplier affects how strongly the matching algorithm prioritizes ELO balance versus variety constraints:
-- 1.0x: Standard balance consideration
-- 3.0x: 3× more weight given to skill balance in match selection
-- 5.0x: 5× more weight - aggressively prioritizes balanced matches
-- 8.0x: Maximum balance priority - will accept more repetition for better skill balance
+The enhanced system affects match generation at multiple levels:
+
+**Match Filtering Level**
+- `meets_balance_constraints()` pre-filters severely imbalanced combinations
+- Prevents 800+ rating point differences from being considered
+- Applied before scoring for computational efficiency
+
+**Match Scoring Level**
+- Balance weight multiplier affects scoring: 1.0x → 3.0x → 5.0x → 8.0x
+- Homogeneous partnership bonus: 75+ points for similar-skill partnerships (Elite+Elite, Strong+Strong)
+- Mismatched partnership penalties: 50-100+ points for Elite+Weak combinations that create 'carry' dynamics
+- Variety weight reduction: 3.0x → 1.0x to deprioritize repetition concerns
+- Perfect balance bonus: 50-250 points for very close team ratings
+- Skill tier matching bonus: 40-75+ points for Elite vs Elite, Strong vs Strong matchups
+
+**Match Generation Level** 
+- Algorithm selects highest-scoring valid match that meets all constraints
+- Balance constraints integrated into core `populate_empty_courts_competitive_variety()`
+- Maintains all existing variety and roaming range constraints
 
 ### Testing & Validation
 - `test_adaptive_slider.py`: Comprehensive slider functionality testing
-- `test_disabled_adaptive.py`: Validates disabled state behavior
-- Fuzzing tests: `make run_fuzz_tests` validates constraint enforcement
+- `test_disabled_adaptive.py`: Validates disabled state behavior  
+- `test_enhanced_balance_constraints.py`: Tests all new balance constraint features
+- `demo_enhanced_balance_system.py`: Realistic demonstration of balance improvements
+- Fuzzing tests: `make run_fuzz_tests` validates constraint enforcement without violations
 
 ### Threshold Logic Examples
 

@@ -550,6 +550,7 @@ sequence item 0: expected str instance, NoneType found
 ** Good, but the names are still not taking up the entire box, is it possible to auto size the text to fill the entire box on the screen?
 * When a user renames a court name, and then ends the session and starts a brand new one, they need to rename the court name every time. Persist court names between sessions so long as the number of courts is the same.
 
+# Adaptive Balance
 * Even after many games, we still get a lot of imbalanced matches -- a lot of the time it's because of the variety constraints. Analyze the competetive variety matchmaking algorithm. How can we adjust it as the session goes on to get more balanced matches?
 * By relaxing Roaming Range, you're lowering the quality of the games. That's bad. We want more balanced matches at higher levels.
 * We never want to relax the partnership and opponent constraints to 0 -- at max they should go down to 1.
@@ -562,6 +563,9 @@ sequence item 0: expected str instance, NoneType found
 * You misunderstood me, I want there to be an auto state for the adaptive balance system (and that should be default) -- we need to add the auto state.
 * When I click the state button, it only cycles through Disabled and Manual. It seems like Auto is bugged and doesn't toggle.
 * *As auto changes and the match progresses, the slider doesn't move. But the slider should automatically move when the state changes.
+* We are working on the adaptive balance feature, see @adaptiveRelaxation.patch ... the problem is, we still get somewhat imbalanced matches with the relaxation in place. As we relax variety constraints, should we not also add balance constraints? Assume the role of a staff level export developer and pickleball match expert with years and years of observing sessions... How would we smartly enforce balance constraints to get better matches as a session goes along? Implement that feature smartly.
+* Elite+Weak matches are undesirable... We want Elite vs Elite, Elite Vs Strong, Strong vs Average, Average vs Weak, Weak Vs Weak.
+* Remember, these balance constraints should only take effect once the adaptive balance system kicks in (after around round 4)
 
 =======================
 Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carroll: 11 beat Robert Dillon, SKyler
