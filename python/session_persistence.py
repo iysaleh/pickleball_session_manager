@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 from typing import Optional, List, Dict
 from pathlib import Path
+from .time_manager import now
 
 # Session files locations
 SESSIONS_DIR = Path.home() / ".pickleball"
@@ -34,7 +35,7 @@ def save_player_history(player_names: List[str], first_bye_players: List[str] = 
     history_data = {
         "players": unique_players,
         "first_bye_players": first_bye_players or [],
-        "last_updated": datetime.now().isoformat()
+        "last_updated": now().isoformat()
     }
     
     try:
@@ -158,7 +159,8 @@ def serialize_session(session) -> Dict:
         "competitive_variety_roaming_range_percent": session.competitive_variety_roaming_range_percent,
         "competitive_variety_partner_repetition_limit": session.competitive_variety_partner_repetition_limit,
         "competitive_variety_opponent_repetition_limit": session.competitive_variety_opponent_repetition_limit,
-        "saved_at": datetime.now().isoformat()
+        "session_start_time": session.session_start_time.isoformat() if session.session_start_time else None,
+        "saved_at": now().isoformat()
     }
 
 
@@ -372,7 +374,103 @@ def deserialize_session(data: Dict):
     if "competitive_variety_opponent_repetition_limit" in data:
         session.competitive_variety_opponent_repetition_limit = data["competitive_variety_opponent_repetition_limit"]
     
+    # Load session start time if available
+    if "session_start_time" in data and data["session_start_time"]:
+        from datetime import datetime as dt
+        session.session_start_time = dt.fromisoformat(data["session_start_time"])
+    
+    # Store the original data for later wait time adjustment
+    session._original_serialized_data = data
+    
     return session
+
+
+def adjust_wait_times_after_time_manager_start(session):
+    """
+    Adjust wait and match times after time manager has been properly started.
+    This should be called after deserializing a session and starting the time manager.
+    """
+    if not hasattr(session, '_original_serialized_data'):
+        return  # Nothing to adjust
+    
+    _adjust_times_for_resume(session, session._original_serialized_data)
+    
+    # Clean up the temporary data
+    delattr(session, '_original_serialized_data')
+
+
+def _adjust_times_for_resume(session, original_data):
+    """
+    Adjust wait start times and match start times when resuming a session to preserve durations.
+    
+    When a session is saved and later loaded, any active timers need to be
+    adjusted to work with the new session timeline while preserving elapsed time.
+    """
+    from python.time_manager import get_session_start_time, now
+    from datetime import datetime as dt, timedelta
+    
+    # Get the original session start time 
+    original_session_start = None
+    if "session_start_time" in original_data and original_data["session_start_time"]:
+        original_session_start = dt.fromisoformat(original_data["session_start_time"])
+    
+    # Get the time when the session was saved (in the original timeline)
+    saved_at = None
+    if "saved_at" in original_data and original_data["saved_at"]:
+        saved_at = dt.fromisoformat(original_data["saved_at"])
+    
+    # If we don't have the necessary timestamps, we can't adjust
+    if original_session_start is None or saved_at is None:
+        # For each player with wait_start_time, clear it to avoid negative times
+        for stats in session.player_stats.values():
+            if stats.wait_start_time is not None:
+                stats.wait_start_time = None
+        
+        # For each match with start_time, clear it to avoid negative durations
+        for match in session.matches:
+            if match.start_time is not None and match.status in ['waiting', 'in-progress']:
+                match.start_time = None
+        return
+    
+    current_session_start = get_session_start_time()
+    if current_session_start is None:
+        return
+    
+    # Adjust each player's wait start time
+    for player_id, stats in session.player_stats.items():
+        if stats.wait_start_time is not None:
+            # Calculate how long this player had been waiting when the session was saved
+            # (in the original timeline)
+            wait_duration_at_save = (saved_at - stats.wait_start_time).total_seconds()
+            
+            if wait_duration_at_save < 0:
+                # This shouldn't happen, but if it does, clear the wait timer
+                stats.wait_start_time = None
+                continue
+            
+            # Set the wait start time in the new timeline so that the current wait 
+            # duration equals the duration they had already waited when saved
+            new_wait_start_time = current_session_start - timedelta(seconds=wait_duration_at_save)
+            stats.wait_start_time = new_wait_start_time
+    
+    # Adjust match start times for active matches
+    for match in session.matches:
+        if (match.start_time is not None and 
+            match.status in ['waiting', 'in-progress'] and
+            match.end_time is None):
+            
+            # Calculate how long this match had been running when the session was saved
+            match_duration_at_save = (saved_at - match.start_time).total_seconds()
+            
+            if match_duration_at_save < 0:
+                # This shouldn't happen, but if it does, reset the start time
+                match.start_time = current_session_start
+                continue
+            
+            # Set the match start time in the new timeline so that the current duration
+            # equals the duration it had when saved
+            new_match_start_time = current_session_start - timedelta(seconds=match_duration_at_save)
+            match.start_time = new_match_start_time
 
 
 def save_session(session) -> bool:

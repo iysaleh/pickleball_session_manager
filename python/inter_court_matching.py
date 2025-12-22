@@ -13,6 +13,7 @@ from .competitive_variety import (
 )
 from itertools import combinations
 from .utils import generate_id
+from .time_manager import now
 
 
 def get_last_court_for_player(session: Session, player_id: str) -> Optional[int]:
@@ -348,7 +349,7 @@ def populate_with_inter_court_mixing(session: Session) -> None:
                     team1=team1,
                     team2=team2,
                     status='waiting',
-                    start_time=datetime.now()
+                    start_time=now()
                 )
                 session.matches.append(match)
                 

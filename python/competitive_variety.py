@@ -5,6 +5,7 @@ Competitive Variety Matchmaking - ELO-based skill-balanced matchmaking with hard
 from typing import List, Dict, Tuple, Set, Optional
 from datetime import datetime
 from .types import Player, QueuedMatch, Session, Match
+from .time_manager import now
 import math
 from itertools import combinations
 from .wait_priority import get_priority_aware_candidates, should_prioritize_wait_differences
@@ -601,7 +602,7 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                         team1=queued_match.team1,
                         team2=queued_match.team2,
                         status='waiting',
-                        start_time=datetime.now()
+                        start_time=now()
                     )
                     session.matches.append(match)
                     players_in_matches.update(match_players)
@@ -791,7 +792,7 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                         team1=best_team1,
                         team2=best_team2,
                         status='waiting',
-                        start_time=datetime.now()
+                        start_time=now()
                     )
                     
                     session.matches.append(match)

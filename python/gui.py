@@ -28,6 +28,7 @@ from python.session import (
     get_active_matches, get_completed_matches, evaluate_and_create_matches,
     get_active_player_names
 )
+from python.time_manager import now, start_session as tm_start_session
 
 
 class DeselectableListWidget(QListWidget):
@@ -153,7 +154,7 @@ class PlayerListWidget(QWidget):
         if not name:
             return
         
-        player = Player(id=f"player_{len(self.players)}_{datetime.now().timestamp()}", name=name)
+        player = Player(id=f"player_{len(self.players)}_{now().timestamp()}", name=name)
         self.players.append(player)
         
         item = QListWidgetItem(name)
@@ -621,7 +622,7 @@ class SetupDialog(QDialog):
         # Add previous players if available
         if self.previous_players:
             for player_name in self.previous_players:
-                player = Player(id=f"player_{len(self.player_widget.players)}_{datetime.now().timestamp()}", name=player_name)
+                player = Player(id=f"player_{len(self.player_widget.players)}_{now().timestamp()}", name=player_name)
                 self.player_widget.players.append(player)
                 item = QListWidgetItem(player_name)
                 item.setData(Qt.ItemDataRole.UserRole, player.id)
@@ -728,7 +729,7 @@ class SetupDialog(QDialog):
         ]
         
         for name in names:
-            player = Player(id=f"player_{len(self.player_widget.players)}_{datetime.now().timestamp()}", name=name)
+            player = Player(id=f"player_{len(self.player_widget.players)}_{now().timestamp()}", name=name)
             self.player_widget.players.append(player)
             item = QListWidgetItem(name)
             item.setData(Qt.ItemDataRole.UserRole, player.id)
@@ -954,7 +955,7 @@ class CourtDisplayWidget(QWidget):
             self.timer_display.setText("00:00")
             self.court_area.setStyleSheet("QFrame { background-color: #e0e0e0; border: 2px dashed #999; border-radius: 5px; }")
             return
-        elapsed_seconds = (datetime.now() - match.start_time).total_seconds() if match.start_time else 0
+        elapsed_seconds = (now() - match.start_time).total_seconds() if match.start_time else 0
         
         if 0 < elapsed_seconds <= 30:
             self.court_area.setStyleSheet("QFrame { background-color: #c4d76d; border: 3px solid #4CAF50; border-radius: 5px; }") # Green highlight
@@ -989,8 +990,7 @@ class CourtDisplayWidget(QWidget):
             self.timer_display.setText("00:00")
             return
         
-        from datetime import datetime
-        elapsed_seconds = int((datetime.now() - self.current_match.start_time).total_seconds())
+        elapsed_seconds = int((now() - self.current_match.start_time).total_seconds())
         minutes = elapsed_seconds // 60
         seconds = elapsed_seconds % 60
         self.timer_display.setText(f"{minutes:02d}:{seconds:02d}")
@@ -2424,7 +2424,7 @@ class SessionWindow(QMainWindow):
             export_lines = []
             export_lines.append(f"Pickleball Session Export")
             export_lines.append(f"{'='*70}")
-            export_lines.append(f"Date/Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            export_lines.append(f"Date/Time: {now().strftime('%Y-%m-%d %H:%M:%S')}")
             export_lines.append(f"Mode: {self.session.config.mode.title()}")
             export_lines.append(f"Type: {self.session.config.session_type.title()}")
             export_lines.append(f"Courts: {self.session.config.courts}")
@@ -2559,7 +2559,7 @@ class SessionWindow(QMainWindow):
             export_text = "\n".join(export_lines)
             
             # Save to file in current directory
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = now().strftime("%Y%m%d_%H%M%S")
             filename = f"pickleball_session_{timestamp}.txt"
             filepath = os.path.join(os.getcwd(), filename)
             
@@ -2731,7 +2731,7 @@ class SessionWindow(QMainWindow):
                     
                     # Add players
                     for player_name in players_to_add:
-                        new_player = Player(id=f"player_{datetime.now().timestamp()}", name=player_name)
+                        new_player = Player(id=f"player_{now().timestamp()}", name=player_name)
                         add_player_to_session(self.session, new_player)
                     
                     # Regenerate match queue once at the end
@@ -3820,6 +3820,14 @@ class MainWindow(QMainWindow):
                 return
             
             self.session = session
+            
+            # Initialize session timing with the saved start time
+            tm_start_session(session.session_start_time)
+            
+            # Adjust wait times now that time manager is properly initialized
+            from python.session_persistence import adjust_wait_times_after_time_manager_start
+            adjust_wait_times_after_time_manager_start(session)
+            
             try:
                 self.session_window = SessionWindow(self.session, parent_window=self)
                 self.session_window.show()

@@ -6,6 +6,7 @@ from typing import List, Optional, Dict
 from datetime import datetime
 from .types import Session, Match, QueuedMatch, MatchStatus
 from .utils import generate_id
+from .time_manager import now
 
 
 def get_empty_courts(session: Session) -> List[int]:
@@ -287,7 +288,7 @@ def populate_empty_courts(session: Session) -> Session:
             team1=best_match.team1,
             team2=best_match.team2,
             status='waiting',
-            start_time=datetime.now()
+            start_time=now()
         )
         
         session.matches.append(match)

@@ -28,6 +28,10 @@ from python.utils import start_player_wait_timer, stop_player_wait_timer, genera
 
 def create_realistic_test_session():
     """Create a realistic test session with mixed wait scenarios"""
+    # Initialize time manager for tests
+    from python.time_manager import initialize_time_manager
+    initialize_time_manager(test_mode=False)
+    
     players = [Player(id=f"player{i+1}", name=f"Player {i+1}") for i in range(16)]
     
     config = SessionConfig(

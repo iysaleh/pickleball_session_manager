@@ -34,6 +34,10 @@ from python.utils import start_player_wait_timer, stop_player_wait_timer
 
 def create_test_session(num_players=16, courts=4):
     """Create a test session with specified number of players"""
+    # Initialize time manager for tests
+    from python.time_manager import initialize_time_manager
+    initialize_time_manager(test_mode=False)
+    
     # Create players first
     players = [Player(id=f"player{i+1}", name=f"Player {i+1}") for i in range(num_players)]
     

@@ -7,6 +7,7 @@ from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 from .types import Player, Session, PlayerStats, Match
 from .utils import generate_id
+from .time_manager import now
 
 
 def calculate_player_rating(
@@ -115,7 +116,7 @@ def create_koc_match(
         team1=team1,
         team2=team2,
         status='waiting',
-        start_time=datetime.now()
+        start_time=now()
     )
 
 

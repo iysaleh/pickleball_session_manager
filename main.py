@@ -6,6 +6,7 @@ Main entry point for Pickleball Session Manager GUI
 import sys
 import os
 import logging
+import argparse
 
 # Setup logging
 logging.basicConfig(
@@ -20,7 +21,18 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 if __name__ == '__main__':
     try:
-        logger.info("Starting application...")
+        # Parse command line arguments
+        parser = argparse.ArgumentParser(description='Pickleball Session Manager')
+        parser.add_argument('--test', action='store_true', 
+                          help='Enable test mode (15x accelerated timing)')
+        args = parser.parse_args()
+        
+        logger.info(f"Starting application... (test mode: {args.test})")
+        
+        # Initialize time manager before importing GUI
+        from python.time_manager import initialize_time_manager
+        initialize_time_manager(test_mode=args.test)
+        
         from python.gui import main
         logger.info("GUI module imported successfully")
         main()

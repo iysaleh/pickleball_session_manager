@@ -154,6 +154,8 @@ class Session:
     competitive_variety_opponent_repetition_limit: int = 2  # Games to wait before playing against same opponent
     # First bye players (to sit out the first match)
     first_bye_used: bool = False  # Flag indicating if first bye players have been applied
+    # Session timing
+    session_start_time: Optional[datetime] = None  # When the session actually started playing
 
 
 @dataclass

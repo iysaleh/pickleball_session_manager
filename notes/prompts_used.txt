@@ -535,9 +535,17 @@ sequence item 0: expected str instance, NoneType found
 * In @python/gui.py ; This assignment to 'stats' is unnecessary as it is redefined before this value is used.
 
 
+# Relative Times update
+* Update all the timers to use relative timing instead of times based on the system clock. If I end a session and then resume it, all of the clocks should resume exactly where they left off. If I load a session at some point, all the times should load to exactly what they were before.
+* Add support for a --test flag that when set at program start causes the timer to accelerate by 15 seconds for every second, that way we can better test wait prioritization. 
+=
+* If we resume a session after ending it, all the wait times show as negative. We need to be able to resume a session with the timers exactly where they left off and continue incrementing them normally.
+* When we resume a session, the game duration timers still show as negative, that hasn't been fixed yet.
+
 # Tweaks 12-21-2025
 * When making the first match, we need to randomly spread the players on the court that are not specified on the first bye list, it should not be consistent between runs but it currently is. 
-*  You broke something, in a 20 player 4 court scenario with 2 on the first bye list, the 4th court isn't being populated.
+*  You broke something, in a 20 player 4 court scenario with 2 on the first bye list, the 4th court isn't being populated sometimes, but sometimes it is --- it's inconsistent...
+* Explain the reason for artifically limiting the candidate pool, what does having this logic do for our matchmaking algorithm?
 
 
 =======================

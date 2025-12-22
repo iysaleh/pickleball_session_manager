@@ -10,10 +10,12 @@ from .types import (
 )
 from .utils import generate_id, create_player_stats, shuffle_list, get_default_advanced_config
 from .roundrobin import generate_round_robin_queue
+from .time_manager import now
 
 
 def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     """Create a new session"""
+    from .time_manager import start_session as tm_start_session, get_session_start_time, now
     
     player_stats: Dict[str, PlayerStats] = {}
     active_players = set()
@@ -59,6 +61,12 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     if final_config.mode == 'competitive-variety':
         waiting_players = [p.id for p in players_to_use]
     
+    # Start the session timing if not already started
+    session_start_time = get_session_start_time()
+    if session_start_time is None:
+        tm_start_session()
+        session_start_time = get_session_start_time()
+    
     session = Session(
         id=generate_id(),
         config=final_config,
@@ -68,7 +76,8 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
         active_players=active_players,
         match_queue=match_queue,
         max_queue_size=max_queue_size,
-        advanced_config=advanced_config
+        advanced_config=advanced_config,
+        session_start_time=session_start_time
     )
     
     # Set default competitive variety settings based on waitlist size
@@ -247,7 +256,7 @@ def _create_session_snapshot(session: Session, match_id: str) -> MatchSnapshot:
     
     return MatchSnapshot(
         match_id=match_id,
-        timestamp=datetime.now(),
+        timestamp=now(),
         matches=matches_data,
         waiting_players=list(session.waiting_players),
         player_stats=stats_data,
@@ -370,7 +379,7 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
     # Update match
     match.status = 'completed'
     match.score = {'team1_score': team1_score, 'team2_score': team2_score}
-    match.end_time = datetime.now()
+    match.end_time = now()
     
     # Determine winner and update stats
     team1_won = team1_score > team2_score
@@ -490,7 +499,7 @@ def forfeit_match(session: Session, match_id: str) -> bool:
         return False
     
     match.status = 'forfeited'
-    match.end_time = datetime.now()
+    match.end_time = now()
     
     # Don't record any statistics for forfeits
     # Just mark partnership/opponent interactions
@@ -581,7 +590,7 @@ def create_manual_match(session: Session, court_number: int, team1_ids: List[str
     for match in session.matches[:]:
         if match.court_number == court_number and match.status in ['waiting', 'in-progress']:
             match.status = 'forfeited'
-            match.end_time = datetime.now()
+            match.end_time = now()
     
     # Create new match
     match = Match(
@@ -590,7 +599,7 @@ def create_manual_match(session: Session, court_number: int, team1_ids: List[str
         team1=team1_ids,
         team2=team2_ids,
         status='waiting',
-        start_time=datetime.now()
+        start_time=now()
     )
     
     session.matches.append(match)
