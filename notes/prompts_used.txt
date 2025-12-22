@@ -554,6 +554,14 @@ sequence item 0: expected str instance, NoneType found
 * By relaxing Roaming Range, you're lowering the quality of the games. That's bad. We want more balanced matches at higher levels.
 * We never want to relax the partnership and opponent constraints to 0 -- at max they should go down to 1.
 * The problem is completed matches before relaxation happens is hardcoded to 15, 30, etc... It needs to be dynamic based on the number of players and the number of games they have played. We have 2 provisional matches, then all players should play 2 more (on average) before we start relaxing to the first mid level. Then 2 more again before we relax to the late level.
+* Add an adaptive constraints slider like we have for competetiveness and variety. It should automatically change as the match progresses (indicating where we are in adapting the constraints)
+* Update @CLAUDE.md documenting the adaptive constraints system.
+* I don't understand the adaptive balance slider, it goes from AUTO to MAX, and then says Manual: 8.0x at the bottom... How do I set it to auto and have it take over? Shouldn't it go from NONE to MAX? When it adjusts variety constraints, should the variety slider stay put or change?
+* I can go from None/Disabled to Manual, but I don't have an easy way to toggle Auto. Add a state button below it that I can click that changes between Disabled, Auto, Manual, then the slider can be moved depending on the state.
+* The states are now Disabled and Manual -- there is no Auto!
+* You misunderstood me, I want there to be an auto state for the adaptive balance system (and that should be default) -- we need to add the auto state.
+* When I click the state button, it only cycles through Disabled and Manual. It seems like Auto is bugged and doesn't toggle.
+* *As auto changes and the match progresses, the slider doesn't move. But the slider should automatically move when the state changes.
 
 =======================
 Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carroll: 11 beat Robert Dillon, SKyler

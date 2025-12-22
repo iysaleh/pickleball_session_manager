@@ -1342,6 +1342,8 @@ class SessionWindow(QMainWindow):
             self.init_competitive_variety_slider(courts_header)
             # Add variety slider after competitiveness slider
             self.init_variety_slider(courts_header)
+            # Add adaptive constraints slider after variety slider
+            self.init_adaptive_constraints_slider(courts_header)
         
         self.sound_toggle_btn = QPushButton("🔇")
         self.sound_toggle_btn.setCheckable(True)
@@ -1872,6 +1874,249 @@ class SessionWindow(QMainWindow):
         from python.queue_manager import populate_empty_courts
         populate_empty_courts(self.session)
         self.refresh_display()
+
+    def init_adaptive_constraints_slider(self, parent_layout: QHBoxLayout):
+        """Initialize the adaptive constraints slider widget"""
+        from python.competitive_variety import get_adaptive_phase_info
+        
+        # Container for the adaptive constraints slider
+        adaptive_container = QWidget()
+        adaptive_layout = QVBoxLayout(adaptive_container)
+        adaptive_layout.setContentsMargins(5, 0, 5, 0)
+        adaptive_layout.setSpacing(2)
+        
+        # Title label
+        title_label = QLabel("Adaptive Balance")
+        title_label.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        title_label.setStyleSheet("color: white; margin: 0px; padding: 0px;")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        adaptive_layout.addWidget(title_label)
+        
+        # Slider container
+        slider_container = QWidget()
+        slider_layout = QHBoxLayout(slider_container)
+        slider_layout.setContentsMargins(0, 0, 0, 0)
+        slider_layout.setSpacing(5)
+        
+        # Slider
+        self.adaptive_constraints_slider = QSlider(Qt.Orientation.Horizontal)
+        self.adaptive_constraints_slider.setMinimum(0)  # Will be set to 2 in manual mode
+        self.adaptive_constraints_slider.setMaximum(5)  # 2=2x, 3=3x, 4=5x, 5=8x
+        self.adaptive_constraints_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.adaptive_constraints_slider.setTickInterval(1)
+        self.adaptive_constraints_slider.setMaximumWidth(150)
+        self.adaptive_constraints_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                border: 1px solid #999;
+                height: 6px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4CAF50, stop:0.5 #FF9800, stop:1 #F44336);
+                margin: 2px 0;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: white;
+                border: 2px solid #555;
+                width: 16px;
+                margin: -6px 0;
+                border-radius: 8px;
+            }
+        """)
+        
+        # Low label (left side)
+        low_label = QLabel("LOW")
+        low_label.setFont(QFont("Arial", 7))
+        low_label.setStyleSheet("color: #4CAF50; margin: 0px; padding: 0px;")
+        
+        # Max label (right side)
+        max_label = QLabel("MAX")
+        max_label.setFont(QFont("Arial", 7))
+        max_label.setStyleSheet("color: #F44336; margin: 0px; padding: 0px;")
+        
+        slider_layout.addWidget(low_label)
+        slider_layout.addWidget(self.adaptive_constraints_slider)
+        slider_layout.addWidget(max_label)
+        
+        adaptive_layout.addWidget(slider_container)
+        
+        # State toggle button
+        self.adaptive_state_button = QPushButton("Auto")  # Default to Auto state
+        self.adaptive_state_button.setFont(QFont("Arial", 8, QFont.Weight.Bold))
+        self.adaptive_state_button.setMaximumHeight(25)
+        self.adaptive_state_button.setStyleSheet("""
+            QPushButton {
+                background-color: #666;
+                color: white;
+                border: 1px solid #888;
+                border-radius: 3px;
+                padding: 2px 8px;
+                margin: 2px;
+            }
+            QPushButton:hover {
+                background-color: #777;
+            }
+            QPushButton:pressed {
+                background-color: #555;
+            }
+        """)
+        self.adaptive_state_button.clicked.connect(self.on_adaptive_state_button_clicked)
+        adaptive_layout.addWidget(self.adaptive_state_button)
+        
+        # Status label
+        self.adaptive_status_label = QLabel()
+        self.adaptive_status_label.setFont(QFont("Arial", 8))
+        self.adaptive_status_label.setStyleSheet("color: #ccc; margin: 0px; padding: 0px;")
+        self.adaptive_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        adaptive_layout.addWidget(self.adaptive_status_label)
+        
+        parent_layout.addWidget(adaptive_container)
+        
+        # Initialize slider position and status
+        self.update_adaptive_constraints_slider()
+        
+        # Connect events
+        self.adaptive_constraints_slider.sliderMoved.connect(self.on_adaptive_constraints_slider_moved)
+        self.adaptive_constraints_slider.valueChanged.connect(self.on_adaptive_constraints_slider_moved)
+
+    def update_adaptive_constraints_slider(self):
+        """Update adaptive constraints slider to reflect current state"""
+        if self.session.config.mode != 'competitive-variety':
+            return
+            
+        try:
+            from python.competitive_variety import get_adaptive_phase_info
+            phase_info = get_adaptive_phase_info(self.session)
+            
+            # Three states: Disabled, Auto, and Manual
+            is_disabled = self.session.adaptive_constraints_disabled
+            is_auto = self.session.adaptive_balance_weight is None and not is_disabled
+            
+            if is_disabled:
+                # Disabled state
+                self.adaptive_state_button.setText("Disabled")
+                self.adaptive_constraints_slider.setEnabled(False)  # Disable slider when disabled
+                self.adaptive_constraints_slider.setMinimum(0)
+                self.adaptive_constraints_slider.setValue(0)
+                status_text = "Disabled"
+            elif is_auto:
+                # Auto mode
+                self.adaptive_state_button.setText("Auto")
+                self.adaptive_constraints_slider.setEnabled(False)  # Disable slider in auto mode
+                self.adaptive_constraints_slider.setMinimum(0)
+                
+                # Set slider position to reflect current auto weight
+                phase_name = phase_info['phase_name']
+                auto_weight = phase_info['auto_balance_weight']
+                
+                # Map auto weight to visual slider position
+                if auto_weight <= 1.0:
+                    slider_value = 1  # Early phase
+                elif auto_weight <= 3.0:
+                    slider_value = 3  # Mid phase  
+                else:
+                    slider_value = 4  # Late phase (5.0x)
+                
+                self.adaptive_constraints_slider.setValue(slider_value)
+                status_text = f"Auto: {phase_name} ({auto_weight:.1f}x)"
+            else:
+                # Manual mode
+                self.adaptive_state_button.setText("Manual")
+                self.adaptive_constraints_slider.setEnabled(True)  # Enable slider for manual adjustment
+                self.adaptive_constraints_slider.setMinimum(2)  # Manual starts at 2 (2.0x)
+                
+                # Map weight to slider position
+                weight = self.session.adaptive_balance_weight
+                if weight <= 2.0:
+                    slider_value = 2
+                elif weight <= 3.0:
+                    slider_value = 3
+                elif weight <= 5.0:
+                    slider_value = 4
+                else:
+                    slider_value = 5  # 8.0x
+                
+                self.adaptive_constraints_slider.setValue(slider_value)
+                status_text = f"Manual: {weight:.1f}x"
+            
+            self.adaptive_status_label.setText(status_text)
+            
+        except Exception as e:
+            print(f"Error updating adaptive constraints slider: {e}")
+            self.adaptive_status_label.setText("Error")
+
+    def on_adaptive_constraints_slider_moved(self, value):
+        """Handle adaptive constraints slider movement (only in Manual mode)"""
+        if self.session.config.mode != 'competitive-variety':
+            return
+            
+        # Only respond to slider changes in manual mode (not disabled or auto)
+        is_disabled = self.session.adaptive_constraints_disabled
+        is_auto = self.session.adaptive_balance_weight is None and not is_disabled
+        
+        if is_disabled or is_auto:
+            return  # Ignore slider changes when disabled or in auto mode
+            
+        try:
+            # Map slider value to balance weight (only manual positions)
+            weight_mapping = {
+                2: 2.0,         # Low manual
+                3: 3.0,         # Medium manual  
+                4: 5.0,         # High manual
+                5: 8.0          # Max manual
+            }
+            
+            if value in weight_mapping:
+                self.session.adaptive_balance_weight = weight_mapping[value]
+                
+                # Update display
+                self.update_adaptive_constraints_slider()
+                
+                # Re-evaluate matches immediately if there are waiting matches
+                from python.queue_manager import populate_empty_courts
+                populate_empty_courts(self.session)
+                self.refresh_display()
+            
+        except Exception as e:
+            print(f"Error handling adaptive constraints slider: {e}")
+
+    def on_adaptive_state_button_clicked(self):
+        """Handle adaptive state button clicks to cycle through Disabled/Auto/Manual"""
+        if self.session.config.mode != 'competitive-variety':
+            return
+            
+        try:
+            # Determine current state - three states: Disabled, Auto, Manual
+            is_disabled = self.session.adaptive_constraints_disabled
+            is_auto = self.session.adaptive_balance_weight is None and not is_disabled
+            
+            if is_disabled:
+                # Disabled -> Auto
+                self.session.adaptive_constraints_disabled = False
+                self.session.adaptive_balance_weight = None
+                new_state = "Auto"
+            elif is_auto:
+                # Auto -> Manual (start with 3.0x)
+                self.session.adaptive_constraints_disabled = False
+                self.session.adaptive_balance_weight = 3.0
+                new_state = "Manual"
+            else:
+                # Manual -> Disabled
+                self.session.adaptive_constraints_disabled = True
+                self.session.adaptive_balance_weight = None
+                new_state = "Disabled"
+            
+            # Update button text
+            self.adaptive_state_button.setText(new_state)
+            
+            # Update slider and status display
+            self.update_adaptive_constraints_slider()
+            
+            # Re-evaluate matches immediately if there are waiting matches
+            from python.queue_manager import populate_empty_courts
+            populate_empty_courts(self.session)
+            self.refresh_display()
+            
+        except Exception as e:
+            print(f"Error handling adaptive state button: {e}")
 
 
     def show_competitive_variety_custom_dialog(self):
@@ -2489,6 +2734,10 @@ class SessionWindow(QMainWindow):
             # Update summary info
             summary = get_session_summary(self.session)
             self.update_title(summary)
+            
+            # Update adaptive constraints slider if in competitive-variety mode
+            if self.session.config.mode == 'competitive-variety' and hasattr(self, 'adaptive_constraints_slider'):
+                self.update_adaptive_constraints_slider()
         except Exception as e:
             error_msg = f"Error in refresh_display:\n{str(e)}"
             print(f"REFRESH ERROR: {error_msg}")

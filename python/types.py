@@ -152,6 +152,8 @@ class Session:
     competitive_variety_roaming_range_percent: float = 0.5  # Roaming range as percentage (0.35-1.0)
     competitive_variety_partner_repetition_limit: int = 3  # Games to wait before playing with same partner
     competitive_variety_opponent_repetition_limit: int = 2  # Games to wait before playing against same opponent
+    adaptive_balance_weight: Optional[float] = None  # Manual override for adaptive balance weight (None = auto)
+    adaptive_constraints_disabled: bool = False  # When True, adaptive constraints are completely disabled
     # First bye players (to sit out the first match)
     first_bye_used: bool = False  # Flag indicating if first bye players have been applied
     # Session timing

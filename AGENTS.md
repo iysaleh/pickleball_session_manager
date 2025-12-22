@@ -82,6 +82,13 @@ This module implements an ELO-based skill-balanced matchmaking system with hard 
 - **Later rounds**: Uses candidate pool optimization with wait time prioritization
 - Prioritizes locked teams
 - Integrates with sophisticated candidate pool system from wait_priority module
+- **Adaptive constraints**: Automatically adjusts repetition constraints based on session progression
+
+**get_adaptive_constraints(session) → (partner_constraint, opponent_constraint)**
+- Calculates current repetition constraints based on player game progression
+- Returns dynamically adjusted constraints (3→2→1 for partners, 2→1→1 for opponents)
+- Uses average games played across all players to determine phase
+- Ensures minimum constraint of 1 (never allows back-to-back repetition)
 
 **_can_form_valid_teams(session, players, allow_cross_bracket=False) → bool**
 - Helper: checks if 4 players can form ANY valid team configuration
@@ -132,6 +139,17 @@ This module implements an ELO-based skill-balanced matchmaking system with hard 
    - Candidates selected via `get_priority_aware_candidates()` which prioritizes actual wait time
    - Integrates seamlessly with candidate pool optimization system
    - Maintains backward compatibility with legacy `games_waited` counter
+
+8. **ADAPTIVE CONSTRAINT SYSTEM**:
+   - Dynamically relaxes repetition constraints as sessions progress to improve match balance
+   - Uses player-based progression instead of hardcoded match counts
+   - Three phases: Early (full constraints), Mid (partner: 2→1, opponent: 2→1), Late (partner: 1→1, opponent: 1→1)
+   - Thresholds based on average player game counts:
+     - Mid phase: After players average 4+ games (2 provisional + 2 regular)
+     - Late phase: After players average 6+ games (2 more games beyond mid)
+   - GUI slider shows current phase and allows manual override
+   - NEVER reduces constraints below 1 (back-to-back prevention always maintained)
+   - Preserves skill-based roaming ranges (quality over quantity)
 
 ## WAIT TIME PRIORITY SYSTEM (python/wait_priority.py)
 
@@ -197,6 +215,78 @@ Implements sophisticated wait time priority logic that considers actual accumula
 - Wait timers (`start_player_wait_timer`, `stop_player_wait_timer`) accumulate to `total_wait_time`
 - Seamless integration with existing persistence and serialization
 
+## ADAPTIVE CONSTRAINTS SYSTEM (python/competitive_variety.py)
+
+### Core Purpose
+The adaptive constraints system intelligently relaxes variety constraints (partner/opponent repetition) as sessions progress to improve match balance quality. It dynamically adjusts based on player count and average games played, ensuring variety constraints are relaxed gradually and never completely eliminated.
+
+### Key Features
+
+**Dynamic Threshold Calculation**
+- Early → Mid: Each player has played 4 games on average
+- Mid → Late: Each player has played 6 games on average  
+- Thresholds scale with player count: `threshold = (player_count * target_games_per_player) / 4`
+- Example: 16 players → Early→Mid at 16 matches, Mid→Late at 24 matches
+
+**Progressive Constraint Relaxation**
+- **Early phase**: Standard constraints (partner: 3 games, opponent: 2 games), 1.0x balance weight
+- **Mid phase**: Reduced constraints (partner: 2 games, opponent: 1 game), 3.0x balance weight
+- **Late phase**: Minimal constraints (partner: 1 game, opponent: 1 game), 5.0x balance weight
+- **NEVER goes to 0**: Maintains minimum 1-game gaps to prevent back-to-back repetition
+
+**GUI Slider Control**
+- Position 0: **NONE** - Disables adaptive constraints entirely (maintains standard Early phase settings)
+- Position 1: **AUTO** - Automatic progression based on session progress (default behavior)
+- Positions 2-5: **Manual Override** - Fixed balance weights (2.0x, 3.0x, 5.0x, 8.0x)
+- Status display shows current phase and effective balance weight
+
+### Critical Functions
+
+**get_adaptive_constraints(session) → Dict**
+- Returns current constraints based on session progression or manual override
+- Handles disabled state when `session.adaptive_constraints_disabled = True`
+- Never allows constraints to go to 0 (minimum partner: 1, opponent: 1)
+
+**get_adaptive_phase_info(session) → Dict**
+- Provides comprehensive information about current adaptive state
+- Includes phase name, auto weight, effective weight, and progression thresholds
+- Returns "Disabled" phase when adaptive constraints are turned off
+
+**calculate_session_thresholds(session) → Dict**
+- Computes dynamic thresholds based on player count
+- Formula: `(player_count * games_per_player) / 4` matches per threshold
+- Ensures thresholds scale appropriately with session size
+
+### Slider Behavior Design
+
+**User Experience Philosophy**
+- Variety slider (user preference) **remains unchanged** when adaptive constraints activate
+- Adaptive constraints slider shows **current state** and allows manual control
+- Clear separation between user preferences and automatic system adjustments
+
+**State Management**
+- NONE (0): `adaptive_constraints_disabled = True` - System completely disabled
+- AUTO (1): `adaptive_balance_weight = None` - Automatic progression active
+- Manual (2-5): `adaptive_balance_weight = [2.0, 3.0, 5.0, 8.0]` - Fixed override
+
+**Status Display Examples**
+- AUTO mode: "Auto: Mid (3.0x)" - Shows automatic phase and weight
+- Manual mode: "Manual: 5.0x" - Shows fixed override weight  
+- Disabled: "Disabled" - Adaptive system completely off
+
+### Integration with Balance Algorithm
+
+The balance weight multiplier affects how strongly the matching algorithm prioritizes ELO balance versus variety constraints:
+- 1.0x: Standard balance consideration
+- 3.0x: 3× more weight given to skill balance in match selection
+- 5.0x: 5× more weight - aggressively prioritizes balanced matches
+- 8.0x: Maximum balance priority - will accept more repetition for better skill balance
+
+### Testing & Validation
+- `test_adaptive_slider.py`: Comprehensive slider functionality testing
+- `test_disabled_adaptive.py`: Validates disabled state behavior
+- Fuzzing tests: `make run_fuzz_tests` validates constraint enforcement
+
 ### Threshold Logic Examples
 
 - **15 players all waited 2-4 minutes**: Algorithm treats equally, no micro-optimization (gaps < 12 min)
@@ -214,3 +304,5 @@ Critical test files:
 - test_roaming_range_enforcement.py: roaming range specific tests
 - test_wait_priority_system.py: comprehensive wait priority system validation
 - test_wait_priority_integration.py: integration testing with existing systems
+- test_adaptive_matchmaking.py: validates adaptive constraint system behavior
+- test_adaptive_slider.py: tests GUI slider integration and manual override functionality

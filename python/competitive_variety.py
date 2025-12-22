@@ -93,6 +93,15 @@ def get_adaptive_constraints(session: Session) -> Dict[str, float]:
     Returns:
         Dict with 'roaming_range', 'partner_repetition', 'opponent_repetition', 'balance_weight'
     """
+    # Check if adaptive constraints are disabled
+    if session.adaptive_constraints_disabled:
+        return {
+            'roaming_range': 0.65,           # Keep skill bracket quality
+            'partner_repetition': 3,         # Standard constraints
+            'opponent_repetition': 2,        # Standard constraints
+            'balance_weight': 1.0            # Standard balance weighting
+        }
+    
     # Count completed matches as progress metric
     completed_matches = len([m for m in session.matches if m.status == 'completed'])
     
@@ -132,23 +141,79 @@ def get_adaptive_constraints(session: Session) -> Dict[str, float]:
         }
 
 
+def get_adaptive_phase_info(session: Session) -> Dict[str, any]:
+    """
+    Get information about the current adaptive phase.
+    
+    Returns:
+        Dict with 'phase_name', 'phase_index', 'auto_balance_weight', 'effective_balance_weight',
+        'early_threshold', 'late_threshold', 'completed_matches', 'avg_games_per_player'
+    """
+    completed_matches = len([m for m in session.matches if m.status == 'completed'])
+    thresholds = calculate_session_thresholds(session)
+    constraints = get_adaptive_constraints(session)
+    
+    # Check if disabled
+    if session.adaptive_constraints_disabled:
+        phase_name = "Disabled"
+        phase_index = -1
+    else:
+        # Determine current phase
+        if completed_matches < thresholds['early_to_mid']:
+            phase_name = "Early"
+            phase_index = 0
+        elif completed_matches < thresholds['mid_to_late']:
+            phase_name = "Mid"
+            phase_index = 1
+        else:
+            phase_name = "Late"
+            phase_index = 2
+    
+    # Calculate average games per player
+    num_players = len(session.active_players)
+    avg_games_per_player = (completed_matches * 4) / num_players if num_players > 0 else 0
+    
+    # Get effective balance weight (manual override or automatic)
+    auto_balance_weight = constraints['balance_weight']
+    effective_balance_weight = session.adaptive_balance_weight if session.adaptive_balance_weight is not None else auto_balance_weight
+    
+    return {
+        'phase_name': phase_name,
+        'phase_index': phase_index,
+        'auto_balance_weight': auto_balance_weight,
+        'effective_balance_weight': effective_balance_weight,
+        'early_threshold': thresholds['early_to_mid'],
+        'late_threshold': thresholds['mid_to_late'],
+        'completed_matches': completed_matches,
+        'avg_games_per_player': avg_games_per_player
+    }
+
+
 def apply_adaptive_constraints(session: Session) -> None:
     """
     Apply adaptive constraints to the session based on progression.
     Updates session settings to reflect current adaptive constraints.
+    
+    If session.adaptive_balance_weight is set (manual override), uses that value.
+    Otherwise, calculates weight automatically based on session progression.
     """
     constraints = get_adaptive_constraints(session)
     
-    # Update session settings
+    # Update session settings (roaming range and repetition limits)
     session.competitive_variety_roaming_range_percent = constraints['roaming_range']
     session.competitive_variety_partner_repetition_limit = constraints['partner_repetition']
     session.competitive_variety_opponent_repetition_limit = constraints['opponent_repetition']
     
-    # Store balance weight for scoring function
-    if not hasattr(session, 'adaptive_balance_weight'):
-        session.adaptive_balance_weight = constraints['balance_weight']
+    # Determine effective balance weight but don't overwrite adaptive_balance_weight
+    if session.adaptive_balance_weight is not None:
+        # Manual override is active
+        effective_weight = session.adaptive_balance_weight
     else:
-        session.adaptive_balance_weight = constraints['balance_weight']
+        # Use automatic calculation  
+        effective_weight = constraints['balance_weight']
+    
+    # Store the effective balance weight in a separate field for scoring function
+    session._effective_adaptive_balance_weight = effective_weight
 
 
 def calculate_elo_rating(player_stats) -> float:
@@ -531,8 +596,8 @@ def score_potential_match(session: Session, team1: List[str], team2: List[str]) 
     """
     score = 0.0
     
-    # Get adaptive balance weight (increases as session progresses)
-    balance_weight = getattr(session, 'adaptive_balance_weight', 1.0)
+    # Get effective adaptive balance weight (increases as session progresses)
+    balance_weight = getattr(session, '_effective_adaptive_balance_weight', 1.0)
     
     # Calculate team ratings (total, not average, for better balance)
     team1_rating = sum(calculate_elo_rating(session.player_stats.get(p, 

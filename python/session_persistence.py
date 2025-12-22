@@ -160,6 +160,8 @@ def serialize_session(session) -> Dict:
         "competitive_variety_roaming_range_percent": session.competitive_variety_roaming_range_percent,
         "competitive_variety_partner_repetition_limit": session.competitive_variety_partner_repetition_limit,
         "competitive_variety_opponent_repetition_limit": session.competitive_variety_opponent_repetition_limit,
+        "adaptive_balance_weight": session.adaptive_balance_weight,
+        "adaptive_constraints_disabled": session.adaptive_constraints_disabled,
         "session_start_time": session.session_start_time.isoformat() if session.session_start_time else None,
         "saved_at": now().isoformat()
     }
@@ -374,6 +376,10 @@ def deserialize_session(data: Dict):
         session.competitive_variety_partner_repetition_limit = data["competitive_variety_partner_repetition_limit"]
     if "competitive_variety_opponent_repetition_limit" in data:
         session.competitive_variety_opponent_repetition_limit = data["competitive_variety_opponent_repetition_limit"]
+    if "adaptive_balance_weight" in data:
+        session.adaptive_balance_weight = data["adaptive_balance_weight"]
+    if "adaptive_constraints_disabled" in data:
+        session.adaptive_constraints_disabled = data["adaptive_constraints_disabled"]
     
     # Load session start time if available
     if "session_start_time" in data and data["session_start_time"]:
