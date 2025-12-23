@@ -2964,7 +2964,7 @@ class SessionWindow(QMainWindow):
                                 if court_strings:
                                     deps_str = ", ".join(court_strings)
                                     old_item_text = item_text
-                                    item_text += f"  🎯[{deps_str}]"  # Add emoji to make it more visible
+                                    item_text += f"\n    🎯{deps_str}"
                                     print(f"DEBUG: Updated text from '{old_item_text}' to '{item_text}'")
                         except Exception as e:
                             # Silent fallback if dependencies fail
@@ -3021,7 +3021,7 @@ class SessionWindow(QMainWindow):
                                 
                                     if court_strings:
                                         deps_str = ", ".join(court_strings)
-                                        item_text += f"  🎯[{deps_str}]"  # Add emoji to make it more visible
+                                        item_text += f"\n    🎯{deps_str}"
                         except Exception as e:
                             # Silent fallback if dependencies fail
                             print(f"DEBUG: Error getting dependencies for {player_id}: {e}")
@@ -3171,9 +3171,18 @@ class SessionWindow(QMainWindow):
         padding = 20  # Account for padding and margins
         target_width = max(1, widget_rect.width() - scrollbar_width - padding)
         
-        # Calculate target height per item (assuming all items are visible)
-        item_height = widget_rect.height() // visible_count if visible_count > 0 else widget_rect.height()
-        target_height = max(1, item_height - 10)  # Account for item margins
+        # Calculate target height per item - account for multi-line items with dependencies
+        base_item_height = widget_rect.height() // visible_count if visible_count > 0 else widget_rect.height()
+        
+        # Check if any items have dependencies (multi-line)
+        has_multi_line = any('\n' in (list_widget.item(i).text() if list_widget.item(i) else '') 
+                           for i in range(list_widget.count()))
+        
+        if has_multi_line:
+            # Allow more height for multi-line items
+            target_height = max(1, base_item_height * 2 - 10)
+        else:
+            target_height = max(1, base_item_height - 10)  # Account for item margins
         
         # Find the longest text to base font size on
         longest_text = ""
@@ -3190,24 +3199,40 @@ class SessionWindow(QMainWindow):
         max_font_size = 24  # Smaller max for list items
         best_font_size = min_font_size
         
-        # Binary search for the optimal font size
+        # Binary search for the optimal font size for main text only
+        # Dependencies will use fixed size 12 regardless
         for font_size in range(min_font_size, max_font_size + 1):
             font = QFont("Arial", font_size, QFont.Weight.Normal)
             metrics = QFontMetrics(font)
-            text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height),
-                                           Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, longest_text)
             
-            if text_rect.width() <= target_width and text_rect.height() <= target_height:
+            # For items with dependencies, only check the main text (first line)
+            if '\n' in longest_text:
+                main_text = longest_text.split('\n')[0]  # Just the player name
+                text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height // 2),
+                                               Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, main_text)
+            else:
+                # Single line text - use original logic
+                text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height),
+                                               Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, longest_text)
+            
+            if text_rect.width() <= target_width and text_rect.height() <= (target_height // 2 if '\n' in longest_text else target_height):
                 best_font_size = font_size
             else:
                 break
         
-        # Apply the best font size to all items
-        font = QFont("Arial", best_font_size, QFont.Weight.Normal)
+        # Apply the best font size to all items, but use smaller font for dependency items
+        base_font = QFont("Arial", best_font_size, QFont.Weight.Normal)
+        small_font = QFont("Arial", 12, QFont.Weight.Normal)  # Fixed size 12 for dependencies
+        
         for i in range(list_widget.count()):
             item = list_widget.item(i)
             if item:
-                item.setFont(font)
+                if '\n' in item.text() and '🎯' in item.text():
+                    # Item has dependencies - use smaller font
+                    item.setFont(small_font)
+                else:
+                    # Regular item - use calculated font
+                    item.setFont(base_font)
     
     def export_session(self):
         """Export session results to a file"""
