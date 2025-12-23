@@ -3,6 +3,15 @@
 run_test_gui_new_match_highlight:
 	python3 python/test_gui_new_match_highlight.py
 
+test_skill_based_deterministic:
+	python test_skill_based_deterministic.py
+
+test_skill_based_courts_roaming:
+	python test_skill_based_courts.py
+
+test_skill_based_courts:
+	python test_skill_based_courts.py
+
 test_real_user_workflow:
 	python test_real_user_workflow.py
 

@@ -323,6 +323,89 @@ def calculate_elo_rating(player_stats, pre_seeded_rating: Optional[float] = None
     return max(MIN_RATING, min(MAX_RATING, rating))
 
 
+def create_skill_based_matches_for_pre_seeded(session: Session, available_players: List[str], courts_needed: int) -> List[QueuedMatch]:
+    """
+    Create skill-based matches for pre-seeded sessions with deterministic court assignments.
+    
+    Pattern: 
+    - Court 1: Use top 4 players → #1,#4 vs #2,#3 
+    - Court 2: Use bottom 4 players → similar pattern
+    - Court 3: Use next top 4 players → #5,#8 vs #6,#7
+    - etc.
+    
+    Respects basic constraints but prioritizes skill-based pattern for first round.
+    """
+    if not session.config.pre_seeded_ratings or len(available_players) < 4:
+        return []
+    
+    # Sort players by skill rating (highest to lowest)
+    player_ratings = []
+    for player_id in available_players:
+        for player in session.config.players:
+            if player.id == player_id and player.skill_rating is not None:
+                player_ratings.append((player_id, player.skill_rating))
+                break
+    
+    if not player_ratings:
+        return []
+    
+    # Sort by skill rating (highest first) 
+    player_ratings.sort(key=lambda x: x[1], reverse=True)
+    sorted_players = [p[0] for p in player_ratings]
+    
+    if len(sorted_players) < 4:
+        return []
+    
+    matches = []
+    players_used = set()
+    
+    # Create deterministic skill-based courts
+    for court_idx in range(courts_needed):
+        # Get currently available players (not yet used)
+        available_sorted = [p for p in sorted_players if p not in players_used]
+        
+        if len(available_sorted) < 4:
+            break
+        
+        if court_idx % 2 == 0:
+            # Even courts: Use top 4 available players with #1,#4 vs #2,#3 pattern
+            p1, p2, p3, p4 = available_sorted[0], available_sorted[1], available_sorted[2], available_sorted[3]
+            team1 = [p1, p4]  # Best + 4th best
+            team2 = [p2, p3]  # 2nd + 3rd best
+        else:
+            # Odd courts: Use bottom 4 available players with same pattern
+            # Take bottom 4 from available
+            bottom_4 = available_sorted[-4:]
+            p1, p2, p3, p4 = bottom_4[0], bottom_4[1], bottom_4[2], bottom_4[3]
+            team1 = [p1, p4]  
+            team2 = [p2, p3]
+        
+        # Basic validation - check for locked teams and banned pairs
+        valid_match = True
+        
+        # Check banned pairs (cannot be on same team)
+        if session.config.banned_pairs:
+            for banned_pair in session.config.banned_pairs:
+                if len(banned_pair) == 2:
+                    if (set(banned_pair).issubset(set(team1)) or set(banned_pair).issubset(set(team2))):
+                        valid_match = False
+                        break
+        
+        # Check locked teams (must be on same team if present)
+        if valid_match and session.config.locked_teams:
+            for locked_team in session.config.locked_teams:
+                if len(locked_team) == 2 and set(locked_team).issubset(set(team1 + team2)):
+                    if not (set(locked_team).issubset(set(team1)) or set(locked_team).issubset(set(team2))):
+                        valid_match = False
+                        break
+        
+        if valid_match:
+            matches.append(QueuedMatch(team1=team1, team2=team2))
+            players_used.update(team1 + team2)
+    
+    return matches
+
+
 def get_player_ranking(session: Session, player_id: str) -> Tuple[int, float]:
     """
     Get a player's rank and rating.
@@ -1069,6 +1152,39 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
             # Count completed matches to detect first round
             completed_matches = [m for m in session.matches if m.status == 'completed']
             is_first_round = len(completed_matches) == 0
+            
+            # Get available players
+            available_players = [p for p in session.active_players if p not in players_in_matches and p not in first_bye_players_set]
+            
+            # For pre-seeded sessions in first round, use skill-based court filling
+            if is_first_round and session.config.pre_seeded_ratings and len(available_players) >= 4:
+                # Calculate how many courts we can still fill
+                remaining_courts = len(empty_courts) - court_idx
+                skill_matches = create_skill_based_matches_for_pre_seeded(
+                    session, available_players, remaining_courts
+                )
+                
+                # Assign skill-based matches to remaining courts
+                courts_filled = 0
+                for i, skill_match in enumerate(skill_matches):
+                    if court_idx + i < len(empty_courts):
+                        court_num = empty_courts[court_idx + i]
+                        session.matches.append(Match(
+                            id=f"match_{now().timestamp()}_{court_num}",
+                            court_number=court_num,
+                            team1=skill_match.team1,
+                            team2=skill_match.team2,
+                            status='waiting',
+                            start_time=now()
+                        ))
+                        
+                        # Update players in matches to prevent double-assignment
+                        players_in_matches.update(skill_match.team1 + skill_match.team2)
+                        courts_filled += 1
+                
+                # If we filled courts with skill-based matching, exit the loop
+                if courts_filled > 0:
+                    break
             
             if is_first_round:
                 # First round: randomize player order for variety between sessions
