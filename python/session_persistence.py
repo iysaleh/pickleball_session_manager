@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Optional, List, Dict
 from pathlib import Path
 from .time_manager import now
+from .types import Player
 
 # Session files locations
 SESSIONS_DIR = Path.home() / ".pickleball"
@@ -21,8 +22,10 @@ def ensure_session_dir():
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def save_player_history(player_names: List[str], first_bye_players: List[str] = None):
-    """Save the list of player names and first bye players to history"""
+def save_player_history(player_names: List[str], first_bye_players: List[str] = None, 
+                       players_with_ratings: List[Player] = None, pre_seeded: bool = False,
+                       game_mode: str = None, session_type: str = None):
+    """Save the list of player names, first bye players, pre-seeded ratings, and game configuration to history"""
     ensure_session_dir()
     
     # Remove duplicates while preserving order
@@ -33,9 +36,20 @@ def save_player_history(player_names: List[str], first_bye_players: List[str] = 
             unique_players.append(name)
             seen.add(name)
     
+    # Store pre-seeded ratings if available
+    player_ratings = {}
+    if pre_seeded and players_with_ratings:
+        for player in players_with_ratings:
+            if player.skill_rating is not None:
+                player_ratings[player.name] = player.skill_rating
+    
     history_data = {
         "players": unique_players,
         "first_bye_players": first_bye_players or [],
+        "pre_seeded": pre_seeded,
+        "player_ratings": player_ratings,
+        "game_mode": game_mode,  # Store the game mode
+        "session_type": session_type,  # Store session type (doubles/singles)
         "last_updated": now().isoformat()
     }
     
@@ -58,6 +72,41 @@ def load_player_history() -> List[str]:
     except Exception as e:
         print(f"Error loading player history: {e}")
         return []
+
+
+def load_player_history_with_ratings() -> Dict:
+    """Load complete player history including pre-seeded ratings and game configuration"""
+    if not PLAYER_HISTORY_FILE.exists():
+        return {
+            "players": [], 
+            "first_bye_players": [], 
+            "pre_seeded": False, 
+            "player_ratings": {},
+            "game_mode": None,
+            "session_type": None
+        }
+    
+    try:
+        with open(PLAYER_HISTORY_FILE, 'r') as f:
+            data = json.load(f)
+            return {
+                "players": data.get("players", []),
+                "first_bye_players": data.get("first_bye_players", []),
+                "pre_seeded": data.get("pre_seeded", False),
+                "player_ratings": data.get("player_ratings", {}),
+                "game_mode": data.get("game_mode", None),
+                "session_type": data.get("session_type", None)
+            }
+    except Exception as e:
+        print(f"Error loading player history with ratings: {e}")
+        return {
+            "players": [], 
+            "first_bye_players": [], 
+            "pre_seeded": False, 
+            "player_ratings": {},
+            "game_mode": None,
+            "session_type": None
+        }
 
 
 def load_first_bye_players() -> List[str]:

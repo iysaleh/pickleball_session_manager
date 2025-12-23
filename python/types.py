@@ -16,6 +16,7 @@ class Player:
     """Represents a player in the session"""
     id: str
     name: str
+    skill_rating: Optional[float] = None  # Pre-seeded skill rating (3.0, 3.25, 3.5, etc.)
 
 
 @dataclass
@@ -121,6 +122,7 @@ class SessionConfig:
     court_sliding_mode: Literal['None', 'Right to Left', 'Left to Right'] = 'Right to Left'
     randomize_player_order: bool = False
     advanced_config: Optional[AdvancedConfig] = None
+    pre_seeded_ratings: bool = False  # Whether skill ratings were pre-seeded
 
 
 @dataclass

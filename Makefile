@@ -3,6 +3,21 @@
 run_test_gui_new_match_highlight:
 	python3 python/test_gui_new_match_highlight.py
 
+test_real_user_workflow:
+	python test_real_user_workflow.py
+
+test_complete_session_restoration:
+	python test_complete_session_restoration.py
+
+test_pre_seed_restoration:
+	python test_pre_seed_restoration.py
+
+test_pre_seeded_ratings:
+	python test_pre_seeded_ratings.py
+
+test_gui_integration:
+	python test_gui_integration.py
+
 run_fuzz_tests:
 	python3 test_competitive_variety_fuzzing.py
 

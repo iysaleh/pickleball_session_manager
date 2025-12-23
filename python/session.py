@@ -38,7 +38,8 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
         first_bye_players=config.first_bye_players,
         court_sliding_mode=config.court_sliding_mode,
         randomize_player_order=config.randomize_player_order,
-        advanced_config=config.advanced_config
+        advanced_config=config.advanced_config,
+        pre_seeded_ratings=config.pre_seeded_ratings
     )
     
     # Generate match queue for round-robin mode
@@ -654,23 +655,11 @@ def analyze_match_balance(session: Session, team1_ids: List[str], team2_ids: Lis
     - 'alternative_configs': List of better team configurations if available
     - 'constraints_violated': List of any constraint violations
     """
-    from .competitive_variety import calculate_elo_rating, score_potential_match, can_play_with_player
+    from .competitive_variety import calculate_player_elo_rating, score_potential_match, can_play_with_player
     
-    # Calculate team ratings
-    team1_rating = 0
-    team2_rating = 0
-    
-    for player_id in team1_ids:
-        if player_id in session.player_stats:
-            team1_rating += calculate_elo_rating(session.player_stats[player_id])
-        else:
-            team1_rating += 1500  # Base rating for new players
-    
-    for player_id in team2_ids:
-        if player_id in session.player_stats:
-            team2_rating += calculate_elo_rating(session.player_stats[player_id])
-        else:
-            team2_rating += 1500  # Base rating for new players
+    # Calculate team ratings using pre-seeded ratings if available
+    team1_rating = sum(calculate_player_elo_rating(session, player_id) for player_id in team1_ids)
+    team2_rating = sum(calculate_player_elo_rating(session, player_id) for player_id in team2_ids)
     
     rating_diff = abs(team1_rating - team2_rating)
     
@@ -717,20 +706,9 @@ def analyze_match_balance(session: Session, team1_ids: List[str], team2_ids: Lis
         
         for alt_team1, alt_team2 in configs:
             # Calculate alternative rating difference
-            alt_team1_rating = 0
-            alt_team2_rating = 0
-            
-            for player_id in alt_team1:
-                if player_id in session.player_stats:
-                    alt_team1_rating += calculate_elo_rating(session.player_stats[player_id])
-                else:
-                    alt_team1_rating += 1500
-            
-            for player_id in alt_team2:
-                if player_id in session.player_stats:
-                    alt_team2_rating += calculate_elo_rating(session.player_stats[player_id])
-                else:
-                    alt_team2_rating += 1500
+            # Calculate alternative team rating using pre-seeded ratings if available
+            alt_team1_rating = sum(calculate_player_elo_rating(session, player_id) for player_id in alt_team1)
+            alt_team2_rating = sum(calculate_player_elo_rating(session, player_id) for player_id in alt_team2)
             
             alt_rating_diff = abs(alt_team1_rating - alt_team2_rating)
             

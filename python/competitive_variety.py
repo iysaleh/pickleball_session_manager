@@ -56,8 +56,10 @@ def calculate_session_thresholds(session: Session) -> Dict[str, int]:
     Logic:
     - Provisional: First 2 games for all players (exploration phase)
     - Early to Mid: Players average 2 more games (4 total - variety establishment)
-    - Mid to Late: Players average 2 more games (6 total - balance prioritization)
+    - Mid to Late: Players average 2 more games (6 total - balance prioritization)  
     - Late+: Beyond 6 games per player (maximum balance focus)
+    
+    For pre-seeded matches: Adaptive constraints activate after only 2 rounds instead of 4.
     
     Returns thresholds for early_to_mid, mid_to_late transitions.
     """
@@ -67,15 +69,27 @@ def calculate_session_thresholds(session: Session) -> Dict[str, int]:
     # But we need to account for players sitting out
     matches_per_round = max(1, num_players // 4)
     
-    # Provisional phase: 2 games per player on average
-    # Total matches needed = (num_players * 2) / 4 players per match
-    provisional_matches = (num_players * 2) // 4
+    # Check if this is a pre-seeded session
+    is_pre_seeded = session.config.pre_seeded_ratings
     
-    # Early to Mid transition: +2 more games per player (4 total)
-    early_to_mid_matches = (num_players * 4) // 4
-    
-    # Mid to Late transition: +2 more games per player (6 total)
-    mid_to_late_matches = (num_players * 6) // 4
+    if is_pre_seeded:
+        # Pre-seeded sessions: Adaptive constraints activate earlier since we know skill levels
+        # Early to Mid transition: After 2 rounds (half the time)
+        early_to_mid_matches = (num_players * 2) // 4
+        
+        # Mid to Late transition: After 4 rounds total
+        mid_to_late_matches = (num_players * 4) // 4
+    else:
+        # Standard sessions: Need more exploration time
+        # Provisional phase: 2 games per player on average
+        # Total matches needed = (num_players * 2) / 4 players per match
+        provisional_matches = (num_players * 2) // 4
+        
+        # Early to Mid transition: +2 more games per player (4 total)
+        early_to_mid_matches = (num_players * 4) // 4
+        
+        # Mid to Late transition: +2 more games per player (6 total)
+        mid_to_late_matches = (num_players * 6) // 4
     
     return {
         'early_to_mid': early_to_mid_matches,
@@ -209,9 +223,67 @@ def apply_adaptive_constraints(session: Session) -> None:
     session._effective_adaptive_balance_weight = effective_weight
 
 
-def calculate_elo_rating(player_stats) -> float:
+def get_player_pre_seeded_rating(session: Session, player_id: str) -> Optional[float]:
+    """Get the pre-seeded skill rating for a player if available."""
+    if not session.config.pre_seeded_ratings:
+        return None
+    
+    # Find the player in the session config
+    for player in session.config.players:
+        if player.id == player_id:
+            return player.skill_rating
+    
+    return None
+
+
+def calculate_player_elo_rating(session: Session, player_id: str) -> float:
+    """Calculate ELO rating for a player, using pre-seeded rating if available."""
+    player_stats = session.player_stats.get(player_id)
+    if not player_stats:
+        # Create a dummy stats object for new players
+        from .types import PlayerStats
+        player_stats = PlayerStats(player_id=player_id)
+    
+    pre_seeded_rating = get_player_pre_seeded_rating(session, player_id)
+    
+    # Use pre-seeded rating as base if provided
+    if pre_seeded_rating is not None:
+        # Convert skill rating (3.0-5.0+) to ELO scale
+        # 3.0 = 1200, 3.5 = 1500, 4.0 = 1800, 4.5 = 2100, 5.0+ = 2200
+        base_rating = min(MAX_RATING, max(MIN_RATING, 1200 + (pre_seeded_rating - 3.0) * 600))
+    else:
+        base_rating = BASE_RATING
+    
+    if player_stats.games_played == 0:
+        return base_rating
+    
+    games = player_stats.games_played
+    wins = player_stats.wins
+    win_rate = wins / games
+    
+    # Win rate adjustment (logarithmic) - start from base rating
+    rating = base_rating + math.log(1 + win_rate * 9) * 200 - 200
+    
+    # Point differential adjustment
+    if games > 0:
+        avg_point_diff = (player_stats.total_points_for - player_stats.total_points_against) / games
+        if avg_point_diff != 0:
+            rating += math.log(1 + abs(avg_point_diff)) * 50 * (1 if avg_point_diff > 0 else -1)
+    
+    # Consistency bonus for strong players
+    if win_rate >= 0.6 and games > 0:
+        rating += math.log(games) * 30
+    
+    # Clamp to valid range
+    return max(MIN_RATING, min(MAX_RATING, rating))
+
+
+def calculate_elo_rating(player_stats, pre_seeded_rating: Optional[float] = None) -> float:
     """
+    Legacy function for backward compatibility. 
     Calculate ELO-style rating for a player using logarithmic scaling.
+    
+    For new code, use calculate_player_elo_rating() instead.
     
     Formula inspired by KOC_RANKING_ALGORITHM.md:
     rating = BASE_RATING + 
@@ -219,15 +291,23 @@ def calculate_elo_rating(player_stats) -> float:
              log(1 + |avgPointDiff|) * 50 * sign(avgPointDiff) +
              log(gamesPlayed) * 30 (if winRate >= 0.6)
     """
+    # Use pre-seeded rating as base if provided
+    if pre_seeded_rating is not None:
+        # Convert skill rating (3.0-5.0+) to ELO scale
+        # 3.0 = 1200, 3.5 = 1500, 4.0 = 1800, 4.5 = 2100, 5.0+ = 2200
+        base_rating = min(MAX_RATING, max(MIN_RATING, 1200 + (pre_seeded_rating - 3.0) * 600))
+    else:
+        base_rating = BASE_RATING
+    
     if player_stats.games_played == 0:
-        return BASE_RATING
+        return base_rating
     
     games = player_stats.games_played
     wins = player_stats.wins
     win_rate = wins / games
     
-    # Win rate adjustment (logarithmic)
-    rating = BASE_RATING + math.log(1 + win_rate * 9) * 200 - 200
+    # Win rate adjustment (logarithmic) - start from base rating
+    rating = base_rating + math.log(1 + win_rate * 9) * 200 - 200
     
     # Point differential adjustment
     if games > 0:
@@ -252,10 +332,7 @@ def get_player_ranking(session: Session, player_id: str) -> Tuple[int, float]:
     # Calculate ratings for all active players (sorted for determinism)
     ratings = []
     for pid in sorted(session.active_players):
-        if pid in session.player_stats:
-            rating = calculate_elo_rating(session.player_stats[pid])
-        else:
-            rating = BASE_RATING
+        rating = calculate_player_elo_rating(session, pid)
         ratings.append((pid, rating))
     
     # Sort by rating descending (best first)
@@ -702,13 +779,9 @@ def meets_balance_constraints(session: Session, team1: List[str], team2: List[st
     Check if a potential match meets hard balance constraints.
     As sessions progress and variety constraints relax, balance constraints get stricter.
     """
-    # Calculate team ratings
-    team1_rating = sum(calculate_elo_rating(session.player_stats.get(p, 
-                       type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
-                       for p in team1)
-    team2_rating = sum(calculate_elo_rating(session.player_stats.get(p, 
-                       type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
-                       for p in team2)
+    # Calculate team ratings using pre-seeded ratings if available
+    team1_rating = sum(calculate_player_elo_rating(session, p) for p in team1)
+    team2_rating = sum(calculate_player_elo_rating(session, p) for p in team2)
     
     # Check if imbalance exceeds threshold
     rating_diff = abs(team1_rating - team2_rating)
@@ -741,21 +814,13 @@ def score_potential_match(session: Session, team1: List[str], team2: List[str]) 
     # Get effective adaptive balance weight (increases as session progresses)
     balance_weight = getattr(session, '_effective_adaptive_balance_weight', 1.0)
     
-    # Calculate team ratings (total, not average, for better balance)
-    team1_rating = sum(calculate_elo_rating(session.player_stats.get(p, 
-                       type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
-                       for p in team1)
-    team2_rating = sum(calculate_elo_rating(session.player_stats.get(p, 
-                       type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
-                       for p in team2)
+    # Calculate team ratings (total, not average, for better balance) using pre-seeded ratings
+    team1_rating = sum(calculate_player_elo_rating(session, p) for p in team1)
+    team2_rating = sum(calculate_player_elo_rating(session, p) for p in team2)
     
     # Calculate individual player ratings for partnership analysis
-    team1_ratings = [calculate_elo_rating(session.player_stats.get(p, 
-                     type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
-                     for p in team1]
-    team2_ratings = [calculate_elo_rating(session.player_stats.get(p, 
-                     type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))
-                     for p in team2]
+    team1_ratings = [calculate_player_elo_rating(session, p) for p in team1]
+    team2_ratings = [calculate_player_elo_rating(session, p) for p in team2]
     
     # Penalize unbalanced teams (large skill difference)
     rating_diff = abs(team1_rating - team2_rating)
@@ -1061,10 +1126,8 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                         pair1 = locked_pairs[0]
                         remaining = [p for p in available_players if p not in pair1]
                         
-                        # Sort remaining by rating
-                        player_ratings = [(p, calculate_elo_rating(session.player_stats.get(p, 
-                                          type('', (), {'games_played': 0, 'wins': 0, 'total_points_for': 0, 'total_points_against': 0})()))) 
-                                          for p in remaining]
+                        # Sort remaining by rating using pre-seeded ratings if available
+                        player_ratings = [(p, calculate_player_elo_rating(session, p)) for p in remaining]
                         player_ratings.sort(key=lambda x: x[1], reverse=True)
 
                         # Try to find a partner pair for opponents

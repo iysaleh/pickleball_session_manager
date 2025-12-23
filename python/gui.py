@@ -119,6 +119,7 @@ class PlayerListWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.players: List[Player] = []
+        self.pre_seed_mode = False
         self.init_ui()
     
     def init_ui(self):
@@ -130,6 +131,13 @@ class PlayerListWidget(QWidget):
         self.player_input.setPlaceholderText("Enter player name")
         self.player_input.returnPressed.connect(self.add_player)
         
+        # Skill rating input (initially hidden)
+        self.skill_input = QLineEdit()
+        self.skill_input.setPlaceholderText("Skill (3.0, 3.25, 3.5, etc.)")
+        self.skill_input.setMaximumWidth(150)
+        self.skill_input.setVisible(False)
+        self.skill_input.returnPressed.connect(self.add_player)
+        
         add_btn = QPushButton("Add Player")
         add_btn.clicked.connect(self.add_player)
         
@@ -137,6 +145,7 @@ class PlayerListWidget(QWidget):
         remove_btn.clicked.connect(self.remove_selected_player)
         
         input_layout.addWidget(self.player_input)
+        input_layout.addWidget(self.skill_input)
         input_layout.addWidget(add_btn)
         input_layout.addWidget(remove_btn)
         layout.addLayout(input_layout)
@@ -155,21 +164,61 @@ class PlayerListWidget(QWidget):
         
         self.setLayout(layout)
     
+    def set_pre_seed_mode(self, enabled: bool):
+        """Enable or disable pre-seed mode"""
+        self.pre_seed_mode = enabled
+        self.skill_input.setVisible(enabled)
+        
+        if enabled:
+            self.player_input.setPlaceholderText("Enter player name")
+            self.skill_input.setPlaceholderText("Skill (3.0, 3.25, 3.5, etc.)")
+        else:
+            self.player_input.setPlaceholderText("Enter player name")
+    
     def add_player(self):
         """Add a player to the list"""
         name = self.player_input.text().strip()
         if not name:
             return
         
-        player = Player(id=f"player_{len(self.players)}_{now().timestamp()}", name=name)
+        skill_rating = None
+        if self.pre_seed_mode:
+            skill_text = self.skill_input.text().strip()
+            if not skill_text:
+                QMessageBox.warning(self, "Error", "Please enter a skill rating (e.g., 3.0, 3.25, 4.0)")
+                return
+            
+            try:
+                skill_rating = float(skill_text)
+                if skill_rating < 1.0 or skill_rating > 6.0:
+                    QMessageBox.warning(self, "Error", "Skill rating should be between 1.0 and 6.0")
+                    return
+            except ValueError:
+                QMessageBox.warning(self, "Error", "Invalid skill rating. Use format: 3.0, 3.25, 3.5, etc.")
+                return
+        
+        player = Player(
+            id=f"player_{len(self.players)}_{now().timestamp()}", 
+            name=name,
+            skill_rating=skill_rating
+        )
         self.players.append(player)
         
-        item = QListWidgetItem(name)
+        # Display name with skill rating if in pre-seed mode
+        display_text = name
+        if self.pre_seed_mode and skill_rating is not None:
+            display_text = f"{name} ({skill_rating})"
+        
+        item = QListWidgetItem(display_text)
         item.setData(Qt.ItemDataRole.UserRole, player.id)
         self.player_list.addItem(item)
         
         self.player_input.clear()
-        self.player_input.setFocus()
+        if self.pre_seed_mode:
+            self.skill_input.clear()
+            self.player_input.setFocus()  # Keep focus on name input
+        else:
+            self.player_input.setFocus()
         self.update_player_count()
     
     def remove_selected_player(self):
@@ -553,14 +602,21 @@ class ManageByesDialog(QDialog):
 class SetupDialog(QDialog):
     """Dialog for session setup"""
     
-    def __init__(self, parent=None, previous_players=None, previous_first_byes=None):
+    def __init__(self, parent=None, previous_players=None, previous_first_byes=None, 
+                 previous_pre_seeded=False, previous_ratings=None, previous_game_mode=None,
+                 previous_session_type=None):
         super().__init__(parent)
         self.session: Optional[Session] = None
         self.previous_players = previous_players or []
         self.previous_first_byes = previous_first_byes or []  # Store names temporarily
+        self.previous_pre_seeded = previous_pre_seeded
+        self.previous_ratings = previous_ratings or {}
+        self.previous_game_mode = previous_game_mode
+        self.previous_session_type = previous_session_type
         self.banned_pairs = []
         self.locked_teams = []
         self.first_bye_players = []
+        self._initializing_from_previous = False  # Flag to track initialization
         self.init_ui()
         
         # Populate first bye players from previous session if provided
@@ -579,8 +635,18 @@ class SetupDialog(QDialog):
         # Set default to 'Competitive Variety'
         self.mode_combo.setCurrentIndex(self.mode_combo.findText("Competitive Variety"))
         mode_layout.addWidget(self.mode_combo)
+        
+        # Pre-seeded Skill Ratings checkbox (only show for Competitive Variety)
+        self.pre_seed_checkbox = QCheckBox("Pre-Seed Skill Ratings")
+        self.pre_seed_checkbox.setVisible(False)  # Hidden by default
+        self.pre_seed_checkbox.stateChanged.connect(self.on_pre_seed_changed)
+        mode_layout.addWidget(self.pre_seed_checkbox)
+        
         mode_layout.addStretch()
         layout.addLayout(mode_layout)
+        
+        # Connect game mode change to update pre-seed checkbox visibility
+        self.mode_combo.currentTextChanged.connect(self.on_game_mode_changed)
         
         # Session Type
         type_layout = QHBoxLayout()
@@ -628,13 +694,37 @@ class SetupDialog(QDialog):
         
         # Add previous players if available
         if self.previous_players:
+            self._initializing_from_previous = True  # Set flag during initialization
+            
+            # Set pre-seed mode if previous session was pre-seeded
+            if self.previous_pre_seeded:
+                self.pre_seed_checkbox.setChecked(True)
+                self.player_widget.set_pre_seed_mode(True)
+            
             for player_name in self.previous_players:
-                player = Player(id=f"player_{len(self.player_widget.players)}_{now().timestamp()}", name=player_name)
+                # Get skill rating from previous session if available
+                skill_rating = None
+                if self.previous_pre_seeded and player_name in self.previous_ratings:
+                    skill_rating = self.previous_ratings[player_name]
+                
+                player = Player(
+                    id=f"player_{len(self.player_widget.players)}_{now().timestamp()}", 
+                    name=player_name,
+                    skill_rating=skill_rating
+                )
                 self.player_widget.players.append(player)
-                item = QListWidgetItem(player_name)
+                
+                # Display name with skill rating if available
+                display_text = player_name
+                if skill_rating is not None:
+                    display_text = f"{player_name} ({skill_rating})"
+                
+                item = QListWidgetItem(display_text)
                 item.setData(Qt.ItemDataRole.UserRole, player.id)
                 self.player_widget.player_list.addItem(item)
             self.player_widget.update_player_count()
+            
+            self._initializing_from_previous = False  # Clear flag after initialization
         
         # Test data button
         test_btn = QPushButton("Add 18 Test Players")
@@ -694,11 +784,110 @@ class SetupDialog(QDialog):
             }
             QPushButton:hover { background-color: #1565c0; }
             QPushButton:pressed { background-color: #0d47a1; }
+            QCheckBox {
+                color: white;
+                background-color: #2a2a2a;
+                spacing: 5px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+            }
+            QCheckBox::indicator:unchecked {
+                border: 2px solid #555;
+                border-radius: 3px;
+                background-color: #3a3a3a;
+            }
+            QCheckBox::indicator:checked {
+                border: 2px solid #2196F3;
+                border-radius: 3px;
+                background-color: #2196F3;
+            }
         """
         self.setStyleSheet(dark_stylesheet)
         
         self.setWindowTitle("Session Setup")
         self.resize(600, 500)
+        
+        # Initialize pre-seed checkbox visibility and default state
+        current_mode = self.mode_combo.currentText()
+        self.on_game_mode_changed(current_mode)
+        
+        # Set game mode and session type from previous session if available
+        if self.previous_game_mode:
+            # Map internal mode names to display names
+            mode_mapping = {
+                'competitive-variety': 'Competitive Variety',
+                'round-robin': 'Round Robin',
+                'king-of-court': 'King of the Court'
+            }
+            display_mode = mode_mapping.get(self.previous_game_mode, 'Competitive Variety')
+            
+            # Set the game mode from previous session
+            mode_index = self.mode_combo.findText(display_mode)
+            if mode_index >= 0:
+                self.mode_combo.setCurrentIndex(mode_index)
+                # Update visibility based on restored mode
+                self.on_game_mode_changed(display_mode)
+        
+        if self.previous_session_type:
+            # Set session type from previous session
+            if self.previous_session_type.lower() == 'singles':
+                self.type_combo.setCurrentText('Singles')
+            else:
+                self.type_combo.setCurrentText('Doubles')
+        
+        # Get current mode after potential restoration
+        current_mode = self.mode_combo.currentText()
+        
+        # Set default behavior ONLY for new sessions (no previous players)
+        if current_mode == "Competitive Variety" and not self.previous_players:
+            # New session - default to pre-seeded mode for Competitive Variety
+            self.pre_seed_checkbox.setChecked(True)
+            self.player_widget.set_pre_seed_mode(True)
+    
+    def on_game_mode_changed(self, mode_text):
+        """Handle game mode change to show/hide pre-seed checkbox"""
+        is_competitive_variety = mode_text == "Competitive Variety"
+        self.pre_seed_checkbox.setVisible(is_competitive_variety)
+        
+        # If switching away from competitive variety, uncheck pre-seed
+        if not is_competitive_variety:
+            self.pre_seed_checkbox.setChecked(False)
+
+    def on_pre_seed_changed(self, state):
+        """Handle pre-seed checkbox change"""
+        is_checked = state == Qt.CheckState.Checked.value
+        
+        # Update PlayerListWidget to show/hide skill rating input
+        self.player_widget.set_pre_seed_mode(is_checked)
+        
+        # Don't prompt to clear players if:
+        # 1. We're initializing from previous session, OR
+        # 2. Existing players already have skill ratings (coming from pre-seeded session)
+        if is_checked and len(self.player_widget.players) > 0:
+            # Check if we're initializing from previous session
+            if self._initializing_from_previous:
+                return  # Don't prompt during initialization
+            
+            # Check if existing players already have skill ratings
+            players_have_ratings = any(player.skill_rating is not None for player in self.player_widget.players)
+            if players_have_ratings:
+                return  # Don't prompt if players already have ratings
+            
+            # Only prompt if players exist and don't have ratings (need to convert to pre-seeded)
+            reply = QMessageBox.question(
+                self, 
+                "Clear Players", 
+                "Pre-seeding skill ratings requires clearing existing players. Continue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.player_widget.clear()
+            else:
+                # User cancelled, uncheck the checkbox
+                self.pre_seed_checkbox.setChecked(False)
+                return
     
     def _map_previous_byes_to_ids(self):
         """Map previously saved bye player names to current session IDs"""
@@ -726,7 +915,9 @@ class SetupDialog(QDialog):
         dialog.exec()
 
     def add_test_players(self):
-        """Add 18 test players"""
+        """Add 18 test players with optional random skill ratings"""
+        import random
+        
         names = [
             "Alice Johnson", "Bob Smith", "Charlie Brown", "Diana Prince",
             "Eve Wilson", "Frank Castle", "Grace Lee", "Henry Davis",
@@ -736,9 +927,26 @@ class SetupDialog(QDialog):
         ]
         
         for name in names:
-            player = Player(id=f"player_{len(self.player_widget.players)}_{now().timestamp()}", name=name)
+            # Generate random skill rating if in pre-seed mode
+            skill_rating = None
+            if self.pre_seed_checkbox.isChecked():
+                # Generate ratings between 3.0 and 4.5 in 0.25 increments
+                # This creates a realistic distribution of skill levels
+                skill_rating = round(random.uniform(3.0, 4.5) * 4) / 4  # Round to nearest 0.25
+            
+            player = Player(
+                id=f"player_{len(self.player_widget.players)}_{now().timestamp()}", 
+                name=name,
+                skill_rating=skill_rating
+            )
             self.player_widget.players.append(player)
-            item = QListWidgetItem(name)
+            
+            # Display name with skill rating if in pre-seed mode
+            display_text = name
+            if skill_rating is not None:
+                display_text = f"{name} ({skill_rating})"
+            
+            item = QListWidgetItem(display_text)
             item.setData(Qt.ItemDataRole.UserRole, player.id)
             self.player_widget.player_list.addItem(item)
         
@@ -797,7 +1005,8 @@ class SetupDialog(QDialog):
                 locked_teams=self.locked_teams,
                 first_bye_players=self.first_bye_players,
                 court_sliding_mode=self.sliding_combo.currentText(),
-                randomize_player_order=False
+                randomize_player_order=False,
+                pre_seeded_ratings=self.pre_seed_checkbox.isChecked()
             )
             
             self.session = create_session(config)
@@ -811,8 +1020,16 @@ class SetupDialog(QDialog):
                         bye_player_names.append(p.name)
                         break
             
+            # Save complete player history with pre-seeded ratings and game configuration
             from python.session_persistence import save_player_history
-            save_player_history(player_names, bye_player_names)
+            save_player_history(
+                player_names, 
+                bye_player_names, 
+                players_with_ratings=players,
+                pre_seeded=self.pre_seed_checkbox.isChecked(),
+                game_mode=mode,
+                session_type=session_type.replace('-', ' ')  # Convert to readable format
+            )
             
             self.accept()
         except Exception as e:
@@ -1331,8 +1548,30 @@ class SessionWindow(QMainWindow):
         self.update_timer.stop()
         
         # Save session state before closing
-        from python.session_persistence import save_session
+        from python.session_persistence import save_session, save_player_history
         save_session(self.session)
+        
+        # Also save player history for "New Session with Previous Players"
+        player_names = [player.name for player in self.session.config.players]
+        
+        # Get first bye players (convert IDs to names)
+        bye_player_names = []
+        if hasattr(self.session, 'first_bye_players'):
+            for bye_id in self.session.first_bye_players:
+                for player in self.session.config.players:
+                    if player.id == bye_id:
+                        bye_player_names.append(player.name)
+                        break
+        
+        # Save complete player history with configuration
+        save_player_history(
+            player_names=player_names,
+            first_bye_players=bye_player_names,
+            players_with_ratings=self.session.config.players,
+            pre_seeded=self.session.config.pre_seeded_ratings,
+            game_mode=self.session.config.mode,
+            session_type=self.session.config.session_type
+        )
         
         if self.parent_window:
             self.parent_window.show()
@@ -2907,8 +3146,8 @@ class SessionWindow(QMainWindow):
                 elo = 0
                 try:
                     if self.session.config.mode == 'competitive-variety':
-                        from python.competitive_variety import calculate_elo_rating
-                        elo = calculate_elo_rating(stats)
+                        from python.competitive_variety import calculate_player_elo_rating
+                        elo = calculate_player_elo_rating(self.session, player.id)
                     else:
                         # For other modes, use a simple ELO-like calculation
                         from python.kingofcourt import calculate_player_rating
@@ -3469,8 +3708,8 @@ class SessionWindow(QMainWindow):
                 
                 # Calculate ELO rating if in competitive variety mode
                 if is_competitive_variety:
-                    from python.competitive_variety import calculate_elo_rating
-                    elo = calculate_elo_rating(stats)
+                    from python.competitive_variety import calculate_player_elo_rating
+                    elo = calculate_player_elo_rating(self.session, player.id)
                 else:
                     elo = 0
                 
@@ -4312,18 +4551,31 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", error_msg)
     
     def new_session_with_previous_players(self):
-        """Create a new session with players from previous sessions"""
+        """Create a new session with players and configuration from previous sessions"""
         try:
-            from python.session_persistence import load_player_history, load_first_bye_players
+            from python.session_persistence import load_player_history_with_ratings
             
-            player_history = load_player_history()
-            first_bye_history = load_first_bye_players()
+            player_history_data = load_player_history_with_ratings()
+            player_names = player_history_data["players"]
+            first_bye_history = player_history_data["first_bye_players"]
+            was_pre_seeded = player_history_data["pre_seeded"]
+            player_ratings = player_history_data["player_ratings"]
+            previous_game_mode = player_history_data["game_mode"]
+            previous_session_type = player_history_data["session_type"]
             
-            if not player_history:
+            if not player_names:
                 QMessageBox.warning(self, "Error", "No player history available")
                 return
             
-            setup = SetupDialog(self, previous_players=player_history, previous_first_byes=first_bye_history)
+            setup = SetupDialog(
+                self, 
+                previous_players=player_names, 
+                previous_first_byes=first_bye_history,
+                previous_pre_seeded=was_pre_seeded,
+                previous_ratings=player_ratings,
+                previous_game_mode=previous_game_mode,
+                previous_session_type=previous_session_type
+            )
             if setup.exec() == QDialog.DialogCode.Accepted:
                 self.session = setup.session
                 try:
