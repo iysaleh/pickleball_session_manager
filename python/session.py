@@ -431,6 +431,14 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
     if session.config.mode == 'competitive-variety':
         from .competitive_variety import update_variety_tracking_after_match
         update_variety_tracking_after_match(session, match.court_number, match.team1, match.team2)
+        
+        # Update deterministic waitlist predictions
+        from .deterministic_waitlist_v2 import calculate_waitlist_predictions_v2
+        try:
+            session.advanced_config.waitlist_predictions = calculate_waitlist_predictions_v2(session)
+        except Exception as e:
+            print(f"Warning: Could not update waitlist predictions: {e}")
+            session.advanced_config.waitlist_predictions = []
     
     # Handle Court Sliding
     slides = []

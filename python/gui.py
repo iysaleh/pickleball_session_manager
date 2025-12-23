@@ -1525,6 +1525,7 @@ class SessionWindow(QMainWindow):
             self.sound_enabled = False
             self.show_wait_times = False
             self.show_rank = False
+            self.show_deterministic_waitlist = False
             self.last_known_matches: Dict[int, str] = {}
             self.announcement_queue: List[str] = []
             self.is_announcing = False
@@ -1686,6 +1687,14 @@ class SessionWindow(QMainWindow):
         self.toggle_rank_btn.setStyleSheet("QPushButton { background-color: #4a4a4a; color: white; font-weight: bold; padding: 5px; border-radius: 3px; font-size: 10px; } QPushButton:hover { background-color: #5a5a5a; }")
         self.toggle_rank_btn.clicked.connect(self.toggle_rank_display)
         waiting_header.addWidget(self.toggle_rank_btn)
+        
+        # Toggle button for deterministic waitlist
+        self.toggle_deterministic_waitlist_btn = QPushButton("Show Court Deps")
+        self.toggle_deterministic_waitlist_btn.setMaximumWidth(120)
+        self.toggle_deterministic_waitlist_btn.setStyleSheet("QPushButton { background-color: #4a4a4a; color: white; font-weight: bold; padding: 5px; border-radius: 3px; font-size: 10px; } QPushButton:hover { background-color: #5a5a5a; }")
+        self.toggle_deterministic_waitlist_btn.clicked.connect(self.toggle_deterministic_waitlist_display)
+        self.show_deterministic_waitlist = False
+        waiting_header.addWidget(self.toggle_deterministic_waitlist_btn)
         
         waiting_header.addStretch()
         
@@ -2687,6 +2696,37 @@ class SessionWindow(QMainWindow):
         # Trigger a refresh to update the display
         self.refresh_display()
     
+    def toggle_deterministic_waitlist_display(self):
+        """Toggle the display of deterministic court dependencies in the waitlist"""
+        self.show_deterministic_waitlist = not self.show_deterministic_waitlist
+        if self.show_deterministic_waitlist:
+            self.toggle_deterministic_waitlist_btn.setText("Hide Court Deps")
+            print(f"DEBUG: Deterministic waitlist enabled")
+            
+            # Check if there are actually any waiting players to show dependencies for
+            if self.session.config.mode == 'competitive-variety':
+                from python.queue_manager import get_waiting_players
+                waiting = get_waiting_players(self.session)
+                total_players = len(self.session.active_players)
+                court_capacity = self.session.config.courts * 4
+                
+                if len(waiting) == 0:
+                    if total_players <= court_capacity:
+                        print(f"DEBUG: No dependencies to show - all {total_players} players fit on {self.session.config.courts} courts (capacity: {court_capacity})")
+                        print(f"DEBUG: To see dependencies: add more players or reduce courts")
+                    else:
+                        print(f"DEBUG: No dependencies to show - no matches in progress")
+                        print(f"DEBUG: To see dependencies: start some matches")
+                else:
+                    print(f"DEBUG: Will show dependencies for {len(waiting)} waiting players")
+        else:
+            self.toggle_deterministic_waitlist_btn.setText("Show Court Deps")
+            print(f"DEBUG: Deterministic waitlist disabled")
+        # Trigger a refresh to update the display  
+        self.refresh_display()
+        # Force font resize since text length changed
+        QTimer.singleShot(100, self._auto_size_waitlist_fonts)
+    
     def on_waiting_list_selection_changed(self):
         """Handle selection change in waiting list"""
         # If waiting list has selection, clear history list selection
@@ -2888,6 +2928,49 @@ class SessionWindow(QMainWindow):
                             total_wait_str = format_wait_time_display(stats.total_wait_time + current_wait)
                             item_text += f"  [{current_wait_str} / {total_wait_str}]"
                     
+                    # Add deterministic court dependencies if enabled
+                    if self.show_deterministic_waitlist and self.session.config.mode == 'competitive-variety':
+                        from python.deterministic_waitlist_v2 import get_court_outcome_dependencies_v2
+                        from python.queue_manager import get_waiting_players
+                        
+                        try:
+                            # Debug: Check if this player is actually waiting
+                            waiting_players = get_waiting_players(self.session)
+                            is_waiting = player_id in waiting_players
+                            
+                            dependencies = get_court_outcome_dependencies_v2(self.session, player_id)
+                            player_name = get_player_name(self.session, player_id)
+                            print(f"DEBUG V2: {player_name} ({player_id}): waiting={is_waiting}, deps={dependencies}")
+                            
+                            if dependencies and is_waiting:
+                                court_strings = []
+                                for court_num in sorted(dependencies.keys()):
+                                    outcomes = dependencies[court_num]
+                                    
+                                    # Convert outcome names to compact format
+                                    outcome_chars = []
+                                    if "red_wins" in outcomes:
+                                        outcome_chars.append("R")
+                                    if "blue_wins" in outcomes:
+                                        outcome_chars.append("B")
+                                    
+                                    if len(outcome_chars) == 2:
+                                        outcome_str = "RB"
+                                    else:
+                                        outcome_str = "".join(outcome_chars)
+                                    
+                                    court_strings.append(f"C{court_num}{outcome_str}")
+                                
+                                if court_strings:
+                                    deps_str = ", ".join(court_strings)
+                                    old_item_text = item_text
+                                    item_text += f"  🎯[{deps_str}]"  # Add emoji to make it more visible
+                                    print(f"DEBUG: Updated text from '{old_item_text}' to '{item_text}'")
+                        except Exception as e:
+                            # Silent fallback if dependencies fail
+                            print(f"DEBUG: Error getting dependencies for {player_id}: {e}")
+                            pass
+                    
                     if player_id in existing_items:
                         # Update existing item
                         item = existing_items[player_id]
@@ -2904,6 +2987,45 @@ class SessionWindow(QMainWindow):
                         from python.competitive_variety import get_player_ranking
                         rank, _ = get_player_ranking(self.session, player_id)
                         item_text += f" [{rank}]"
+                    
+                    # Add deterministic court dependencies if enabled (even when wait times not shown)
+                    if self.show_deterministic_waitlist and self.session.config.mode == 'competitive-variety':
+                        from python.deterministic_waitlist_v2 import get_court_outcome_dependencies_v2
+                        from python.queue_manager import get_waiting_players
+                        
+                        try:
+                            # Only show dependencies for players who are actually waiting
+                            waiting_players = get_waiting_players(self.session)
+                            is_waiting = player_id in waiting_players
+                            
+                            if is_waiting:
+                                dependencies = get_court_outcome_dependencies_v2(self.session, player_id)
+                                if dependencies:
+                                    court_strings = []
+                                    for court_num in sorted(dependencies.keys()):
+                                        outcomes = dependencies[court_num]
+                                        
+                                        # Convert outcome names to compact format
+                                        outcome_chars = []
+                                        if "red_wins" in outcomes:
+                                            outcome_chars.append("R")
+                                        if "blue_wins" in outcomes:
+                                            outcome_chars.append("B")
+                                        
+                                        if len(outcome_chars) == 2:
+                                            outcome_str = "RB"
+                                        else:
+                                            outcome_str = "".join(outcome_chars)
+                                        
+                                        court_strings.append(f"C{court_num}{outcome_str}")
+                                
+                                    if court_strings:
+                                        deps_str = ", ".join(court_strings)
+                                        item_text += f"  🎯[{deps_str}]"  # Add emoji to make it more visible
+                        except Exception as e:
+                            # Silent fallback if dependencies fail
+                            print(f"DEBUG: Error getting dependencies for {player_id}: {e}")
+                            pass
                     
                     if player_id in existing_items:
                         item = existing_items[player_id]
@@ -3064,7 +3186,7 @@ class SessionWindow(QMainWindow):
             return
         
         # Find optimal font size
-        min_font_size = 8
+        min_font_size = 9  # Increased from 8 to ensure readability
         max_font_size = 24  # Smaller max for list items
         best_font_size = min_font_size
         
@@ -3072,7 +3194,7 @@ class SessionWindow(QMainWindow):
         for font_size in range(min_font_size, max_font_size + 1):
             font = QFont("Arial", font_size, QFont.Weight.Normal)
             metrics = QFontMetrics(font)
-            text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height), 
+            text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height),
                                            Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, longest_text)
             
             if text_rect.width() <= target_width and text_rect.height() <= target_height:

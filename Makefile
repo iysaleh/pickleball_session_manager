@@ -258,3 +258,9 @@ test_partner_opponent_partner_prevention:
 
 test_roaming_range_preservation:
 	python3 test_roaming_range_preservation.py
+
+test_deterministic_waitlist:
+	python test_deterministic_waitlist.py
+
+test_deterministic_waitlist_v2:
+	python test_deterministic_waitlist_v2.py

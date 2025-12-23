@@ -3,7 +3,7 @@ Core data types for the Pickleball Session Manager
 """
 
 from dataclasses import dataclass, field
-from typing import List, Set, Dict, Optional, Literal
+from typing import List, Set, Dict, Optional, Literal, Any
 from datetime import datetime
 
 GameMode = Literal['king-of-court', 'round-robin', 'competitive-variety']
@@ -107,6 +107,9 @@ class AdvancedConfig:
     """Advanced configuration settings"""
     king_of_court: KingOfCourtConfig = field(default_factory=KingOfCourtConfig)
     round_robin: RoundRobinConfig = field(default_factory=RoundRobinConfig)
+    
+    # Deterministic waitlist predictions
+    waitlist_predictions: List[Any] = field(default_factory=list)  # WaitlistPrediction objects
 
 
 @dataclass

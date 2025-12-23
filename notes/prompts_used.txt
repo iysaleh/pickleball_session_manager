@@ -597,7 +597,12 @@ sequence item 0: expected str instance, NoneType found
 ###
 * When filling the courts for a pre-seeded session, the games are being created with random skill levels... Instead, we should create games as follows #1,#4vs#2,#3, #n,#n-3vs#n-1,n-2,#5#8vs#6#7 --- And keep up that pattern depending on the number of courts we can fill -- we pre-seeded, so we know relative skill levels. Make a court from the top of the pool, make one from the bottom, top again, bottom again, etc...
 * Look at @pickleball_session_20251223_142128.txt -- court 1 is #2,#5 vs #1,#3 -- it should be #1#4,vs#2,#3, unless 1,2,3,4 are on the waitlist, which they're not. Court filling should be deterministic at the start when pre-seeding.
-* 
+
+# deterministic waitlist
+* People on the wait-list get tired of waiting very quickly, especially since they don't know how long they are going to be waiting for. Build an advanced system that evaluates current matches and the statistic changes that occur if a match finishes. Based on a players current ranking on the waitlist, and the rank changes that would happen if matches finish with either side as the victor, update the waitlist to show what courts a player on the waitlist is waiting to finish before they will get their next game, EG: Noah Taylor[Court 1R, Court4RB] if Noah will get a game if either court 1 finishes and the red side wins or court 4 finishes and either the red or blue side finishes...
+* When I click Show Dependencies, I don't see anything, I think the font for the dependencies is not visible.
+* Dependencies aren't working: DEBUG: Dependencies for player_0_1766531262.826098: {} DEBUG: Dependencies for player_11_1766531262.826193: {} --- 
+** Refactor the code to share the same evaluation loop as the dependencies calculation function so that when we add or remove competetive variety algorithm steps, the calculation also updates. This is a complex feature that requires deep thinking.
 =======================
 Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carroll: 11 beat Robert Dillon, SKyler
    Hensley: 0 and Ibraheem Saleh, David Laforest: 11 beat Ellie Farias, Sheila B.: 5 -- That is NOT how the balance
