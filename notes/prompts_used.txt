@@ -605,6 +605,7 @@ sequence item 0: expected str instance, NoneType found
 ** Refactor the code to share the same evaluation loop as the dependencies calculation function so that when we add or remove competetive variety algorithm steps, the calculation also updates. This is a complex feature that requires deep thinking.
 * For dependencies, keep the name size large as it is, but have the courts listed as small sub text.
 * Update Export Session functionality to also include the courts that people on the waitlist are waiting for in the Waitlist section.
+* Look at @pickleball_session_20251223_153405.txt , it shows that if Court 1 Red or Blue finish, Diana Prince will get in a game, but if Court 1 Red or Blue finishes, other people on the waitlist actually get the game (Rachel & Frank vs Henry & Charlie) --- The problem is, the deterministic waitlist is not taking into account who gets priority for the game being made, which needs to happen.
 =======================
 Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carroll: 11 beat Robert Dillon, SKyler
    Hensley: 0 and Ibraheem Saleh, David Laforest: 11 beat Ellie Farias, Sheila B.: 5 -- That is NOT how the balance

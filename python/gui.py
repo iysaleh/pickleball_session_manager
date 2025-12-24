@@ -3257,7 +3257,43 @@ class SessionWindow(QMainWindow):
             if waiting_ids:
                 for player_id in waiting_ids:
                     player_name = get_player_name(self.session, player_id)
-                    export_lines.append(f"  - {player_name}")
+                    
+                    # Add deterministic court dependencies if enabled and in competitive-variety mode
+                    if self.show_deterministic_waitlist and self.session.config.mode == 'competitive-variety':
+                        try:
+                            from python.deterministic_waitlist_v2 import get_court_outcome_dependencies_v2
+                            dependencies = get_court_outcome_dependencies_v2(self.session, player_id)
+                            
+                            if dependencies:
+                                # Build dependency string same as GUI
+                                court_strings = []
+                                for court_num in sorted(dependencies.keys()):
+                                    outcomes = dependencies[court_num]
+                                    outcome_chars = []
+                                    if "red_wins" in outcomes:
+                                        outcome_chars.append("R")
+                                    if "blue_wins" in outcomes:
+                                        outcome_chars.append("B")
+                                    
+                                    if len(outcome_chars) == 2:
+                                        outcome_str = "RB"
+                                    else:
+                                        outcome_str = "".join(outcome_chars)
+                                    
+                                    court_strings.append(f"C{court_num}{outcome_str}")
+                                
+                                if court_strings:
+                                    deps_str = ", ".join(court_strings)
+                                    export_lines.append(f"  - {player_name} [{deps_str}]")
+                                else:
+                                    export_lines.append(f"  - {player_name}")
+                            else:
+                                export_lines.append(f"  - {player_name}")
+                        except Exception:
+                            # Fallback if dependencies fail
+                            export_lines.append(f"  - {player_name}")
+                    else:
+                        export_lines.append(f"  - {player_name}")
             else:
                 export_lines.append("  (No players waiting)")
             export_lines.append("")

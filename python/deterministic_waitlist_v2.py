@@ -209,7 +209,9 @@ def calculate_player_dependencies(session: Session, player_id: str) -> Dict[int,
     """
     Calculate which court outcomes would lead to a player getting assigned.
     
-    This is the main interface that uses the instrumented algorithm.
+    Uses a CONSERVATIVE approach that only shows dependencies for players who are very likely
+    to get assigned based on wait time priority. This prevents showing dependencies for 
+    players who technically COULD be assigned but WON'T be due to higher priority waiters.
     
     Args:
         session: Current session state
@@ -233,24 +235,32 @@ def calculate_player_dependencies(session: Session, player_id: str) -> Dict[int,
     if not active_matches:
         return {}
     
+    # Calculate wait time priority order for conservative filtering
+    from .wait_priority import sort_players_by_wait_priority
+    priority_ordered_waiters = sort_players_by_wait_priority(session, waiting_players, reverse=True)
+    
+    # Find this player's position in the priority queue
+    # reverse=True means highest priority (longest waiters) come first
+    try:
+        player_priority_position = priority_ordered_waiters.index(player_id)
+    except ValueError:
+        return {}  # Player not in waiting list
+    
     dependencies = {}
     
     # For each active court, analyze both possible outcomes
     for match in active_matches:
         court_num = match.court_number
-        court_outcomes = analyze_court_finish_scenarios(session, court_num)
         
-        outcomes_that_help = []
+        # CRITICAL FIX: When THIS specific court finishes, it only creates 1 match (4 slots)
+        # Plus the 4 players from the finished match become available
+        # So we can assign at most 4 NEW players from the waitlist per court finish
         
-        for outcome, matching_results in court_outcomes.items():
-            # Check if this player gets assigned in any of the matching results
-            for result in matching_results:
-                if player_id in result.assigned_players:
-                    outcomes_that_help.append(outcome)
-                    break
-        
-        if outcomes_that_help:
-            dependencies[court_num] = outcomes_that_help
+        # Conservative check: only show dependency if player is in top 4 waiters
+        # who would get priority for the single match created when this court finishes
+        if player_priority_position < 4:
+            # This player has high enough priority to get assigned when this court finishes
+            dependencies[court_num] = ['red_wins', 'blue_wins']
     
     return dependencies
 
