@@ -2701,7 +2701,6 @@ class SessionWindow(QMainWindow):
         self.show_deterministic_waitlist = not self.show_deterministic_waitlist
         if self.show_deterministic_waitlist:
             self.toggle_deterministic_waitlist_btn.setText("Hide Court Deps")
-            print(f"DEBUG: Deterministic waitlist enabled")
             
             # Check if there are actually any waiting players to show dependencies for
             if self.session.config.mode == 'competitive-variety':
@@ -2712,16 +2711,11 @@ class SessionWindow(QMainWindow):
                 
                 if len(waiting) == 0:
                     if total_players <= court_capacity:
-                        print(f"DEBUG: No dependencies to show - all {total_players} players fit on {self.session.config.courts} courts (capacity: {court_capacity})")
-                        print(f"DEBUG: To see dependencies: add more players or reduce courts")
+                        pass  # All players fit on courts
                     else:
-                        print(f"DEBUG: No dependencies to show - no matches in progress")
-                        print(f"DEBUG: To see dependencies: start some matches")
-                else:
-                    print(f"DEBUG: Will show dependencies for {len(waiting)} waiting players")
+                        pass  # No matches in progress
         else:
             self.toggle_deterministic_waitlist_btn.setText("Show Court Deps")
-            print(f"DEBUG: Deterministic waitlist disabled")
         # Trigger a refresh to update the display  
         self.refresh_display()
         # Force font resize since text length changed
@@ -2939,8 +2933,6 @@ class SessionWindow(QMainWindow):
                             is_waiting = player_id in waiting_players
                             
                             dependencies = get_court_outcome_dependencies_v2(self.session, player_id)
-                            player_name = get_player_name(self.session, player_id)
-                            print(f"DEBUG V2: {player_name} ({player_id}): waiting={is_waiting}, deps={dependencies}")
                             
                             if dependencies and is_waiting:
                                 court_strings = []
@@ -2965,10 +2957,8 @@ class SessionWindow(QMainWindow):
                                     deps_str = ", ".join(court_strings)
                                     old_item_text = item_text
                                     item_text += f"\n    🎯{deps_str}"
-                                    print(f"DEBUG: Updated text from '{old_item_text}' to '{item_text}'")
                         except Exception as e:
                             # Silent fallback if dependencies fail
-                            print(f"DEBUG: Error getting dependencies for {player_id}: {e}")
                             pass
                     
                     if player_id in existing_items:
@@ -3024,7 +3014,6 @@ class SessionWindow(QMainWindow):
                                         item_text += f"\n    🎯{deps_str}"
                         except Exception as e:
                             # Silent fallback if dependencies fail
-                            print(f"DEBUG: Error getting dependencies for {player_id}: {e}")
                             pass
                     
                     if player_id in existing_items:
@@ -3171,27 +3160,35 @@ class SessionWindow(QMainWindow):
         padding = 20  # Account for padding and margins
         target_width = max(1, widget_rect.width() - scrollbar_width - padding)
         
-        # Calculate target height per item - account for multi-line items with dependencies
+        # Calculate target height per item - account for items with dependencies
         base_item_height = widget_rect.height() // visible_count if visible_count > 0 else widget_rect.height()
         
-        # Check if any items have dependencies (multi-line)
-        has_multi_line = any('\n' in (list_widget.item(i).text() if list_widget.item(i) else '') 
-                           for i in range(list_widget.count()))
+        # Check if any items have dependencies (newlines)
+        has_dependencies = any('\n' in (list_widget.item(i).text() if list_widget.item(i) else '') 
+                              for i in range(list_widget.count()))
         
-        if has_multi_line:
-            # Allow more height for multi-line items
+        if has_dependencies:
+            # Allow more height for items with dependencies
             target_height = max(1, base_item_height * 2 - 10)
         else:
             target_height = max(1, base_item_height - 10)  # Account for item margins
         
-        # Find the longest text to base font size on
-        longest_text = ""
+        # Find the longest PLAYER NAME to base font size on (ignore dependency text)
+        longest_player_name = ""
         for i in range(list_widget.count()):
             item = list_widget.item(i)
-            if item and len(item.text()) > len(longest_text):
-                longest_text = item.text()
+            if item:
+                text = item.text()
+                # Extract just the player name (before newline if dependencies exist)
+                if '\n' in text:
+                    player_name = text.split('\n')[0]
+                else:
+                    player_name = text
+                
+                if len(player_name) > len(longest_player_name):
+                    longest_player_name = player_name
         
-        if not longest_text.strip():
+        if not longest_player_name.strip():
             return
         
         # Find optimal font size
@@ -3199,40 +3196,28 @@ class SessionWindow(QMainWindow):
         max_font_size = 24  # Smaller max for list items
         best_font_size = min_font_size
         
-        # Binary search for the optimal font size for main text only
-        # Dependencies will use fixed size 12 regardless
+        # Binary search for the optimal font size based on PLAYER NAMES only
+        # This ensures player names stay large regardless of dependency text
         for font_size in range(min_font_size, max_font_size + 1):
             font = QFont("Arial", font_size, QFont.Weight.Normal)
             metrics = QFontMetrics(font)
             
-            # For items with dependencies, only check the main text (first line)
-            if '\n' in longest_text:
-                main_text = longest_text.split('\n')[0]  # Just the player name
-                text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height // 2),
-                                               Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, main_text)
-            else:
-                # Single line text - use original logic
-                text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height),
-                                               Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, longest_text)
+            # Only check player name size, not dependency text
+            text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height // 2),
+                                           Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, longest_player_name)
             
-            if text_rect.width() <= target_width and text_rect.height() <= (target_height // 2 if '\n' in longest_text else target_height):
+            if text_rect.width() <= target_width and text_rect.height() <= (target_height // 2):
                 best_font_size = font_size
             else:
                 break
         
-        # Apply the best font size to all items, but use smaller font for dependency items
-        base_font = QFont("Arial", best_font_size, QFont.Weight.Normal)
-        small_font = QFont("Arial", 12, QFont.Weight.Normal)  # Fixed size 12 for dependencies
-        
+        # Apply the best font size to all items - don't reduce size for dependency items
+        # This keeps player names large even when they have dependencies
+        font = QFont("Arial", best_font_size, QFont.Weight.Normal)
         for i in range(list_widget.count()):
             item = list_widget.item(i)
             if item:
-                if '\n' in item.text() and '🎯' in item.text():
-                    # Item has dependencies - use smaller font
-                    item.setFont(small_font)
-                else:
-                    # Regular item - use calculated font
-                    item.setFont(base_font)
+                item.setFont(font)
     
     def export_session(self):
         """Export session results to a file"""

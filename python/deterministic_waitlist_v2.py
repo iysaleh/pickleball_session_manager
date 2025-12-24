@@ -65,21 +65,29 @@ def run_matching_in_trial_mode(session: Session, track_court: Optional[int] = No
     initial_matches = {m.court_number: m.id for m in trial_session.matches 
                       if m.status in ['waiting', 'in-progress']}
     
-    # Run the actual matching algorithm
-    populate_empty_courts_competitive_variety(trial_session)
-    
-    # Analyze what changed
+    # Run the actual matching algorithm ITERATIVELY until no more matches can be made
+    # This handles the case where multiple empty courts should be filled
+    max_iterations = 10  # Prevent infinite loops
     results = []
     
-    for match in trial_session.matches:
-        if match.status == 'waiting':
-            # This is a newly created match
-            if match.court_number not in initial_matches:
-                # New assignment on this court
-                assigned_players = set(match.team1 + match.team2)
-                
-                # Only track if we care about this court
+    for iteration in range(max_iterations):
+        initial_count = len(trial_session.matches)
+        
+        # Run one iteration of the matching algorithm
+        populate_empty_courts_competitive_variety(trial_session)
+        
+        final_count = len(trial_session.matches)
+        
+        # If no new matches were created, we're done
+        if final_count == initial_count:
+            break
+        
+        # Track what was created in this iteration
+        for match in trial_session.matches[initial_count:]:
+            if match.status == 'waiting':
+                # This is a newly created match
                 if track_court is None or match.court_number == track_court:
+                    assigned_players = set(match.team1 + match.team2)
                     results.append(MatchingResult(
                         court_number=match.court_number,
                         assigned_players=assigned_players,
@@ -133,8 +141,30 @@ def analyze_court_finish_scenarios(session: Session, court_number: int) -> Dict[
         # Update player stats for realistic ELO calculations
         _update_stats_for_completed_match(sim_session, target_match, team1_wins)
         
-        # Run matching algorithm to see what assignments happen
-        matching_results = run_matching_in_trial_mode(sim_session, track_court=court_number)
+        # CRITICAL FIX: After completing the match, populate empty courts
+        # This is what actually happens in the real application
+        from .competitive_variety import populate_empty_courts_competitive_variety
+        
+        # Track matches before population
+        initial_match_count = len(sim_session.matches)
+        
+        # Run the actual algorithm to fill empty courts
+        populate_empty_courts_competitive_variety(sim_session)
+        
+        # Track what was created
+        matching_results = []
+        for match in sim_session.matches[initial_match_count:]:
+            if match.status == 'waiting':
+                assigned_players = set(match.team1 + match.team2)
+                # Track all new matches since we're analyzing court finish scenarios
+                matching_results.append(MatchingResult(
+                    court_number=match.court_number,
+                    assigned_players=assigned_players,
+                    team1=match.team1,
+                    team2=match.team2,
+                    success=True
+                ))
+        
         results[outcome] = matching_results
     
     return results

@@ -603,6 +603,8 @@ sequence item 0: expected str instance, NoneType found
 * When I click Show Dependencies, I don't see anything, I think the font for the dependencies is not visible.
 * Dependencies aren't working: DEBUG: Dependencies for player_0_1766531262.826098: {} DEBUG: Dependencies for player_11_1766531262.826193: {} --- 
 ** Refactor the code to share the same evaluation loop as the dependencies calculation function so that when we add or remove competetive variety algorithm steps, the calculation also updates. This is a complex feature that requires deep thinking.
+* For dependencies, keep the name size large as it is, but have the courts listed as small sub text.
+* Update Export Session functionality to also include the courts that people on the waitlist are waiting for in the Waitlist section.
 =======================
 Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carroll: 11 beat Robert Dillon, SKyler
    Hensley: 0 and Ibraheem Saleh, David Laforest: 11 beat Ellie Farias, Sheila B.: 5 -- That is NOT how the balance
