@@ -55,6 +55,9 @@ class Match:
     end_time: Optional[datetime] = None
 
 
+KingOfCourtSeeding = Literal['random', 'highest_to_lowest', 'lowest_to_highest']
+
+
 @dataclass
 class KingOfCourtConfig:
     """Configuration for King of the Court mode"""
@@ -94,6 +97,10 @@ class KingOfCourtConfig:
     opponent_repeat_penalty: float = 25
     recent_overlap_penalty: float = 200
     team_balance_penalty: float = 20
+    
+    # Rounds-based King of Court settings
+    seeding_option: KingOfCourtSeeding = 'random'
+    court_ordering: List[int] = field(default_factory=list)  # Court numbers in order from kings court to bottom court
 
 
 @dataclass
@@ -126,6 +133,7 @@ class SessionConfig:
     randomize_player_order: bool = False
     advanced_config: Optional[AdvancedConfig] = None
     pre_seeded_ratings: bool = False  # Whether skill ratings were pre-seeded
+    king_of_court_config: Optional[KingOfCourtConfig] = None  # King of Court specific settings
 
 
 @dataclass
@@ -163,6 +171,10 @@ class Session:
     first_bye_used: bool = False  # Flag indicating if first bye players have been applied
     # Session timing
     session_start_time: Optional[datetime] = None  # When the session actually started playing
+    # King of Court specific tracking
+    king_of_court_round_number: int = 0  # Current round number
+    king_of_court_player_positions: Dict[str, int] = field(default_factory=dict)  # player_id -> court_number where they last played
+    king_of_court_wait_counts: Dict[str, int] = field(default_factory=dict)  # player_id -> number of times they've waited
 
 
 @dataclass

@@ -39,7 +39,8 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
         court_sliding_mode=config.court_sliding_mode,
         randomize_player_order=config.randomize_player_order,
         advanced_config=config.advanced_config,
-        pre_seeded_ratings=config.pre_seeded_ratings
+        pre_seeded_ratings=config.pre_seeded_ratings,
+        king_of_court_config=config.king_of_court_config
     )
     
     # Generate match queue for round-robin mode
@@ -85,6 +86,11 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     if final_config.mode == 'competitive-variety':
         from .competitive_variety import update_session_competitive_variety_settings
         update_session_competitive_variety_settings(session)
+    
+    # Initialize King of Court session
+    if final_config.mode == 'king-of-court':
+        from .kingofcourt import initialize_king_of_court_session
+        session = initialize_king_of_court_session(session)
     
     return session
 
@@ -541,6 +547,7 @@ def evaluate_and_create_matches(session: Session) -> Session:
     Evaluate current session state and create new matches.
     This should be called whenever state changes to potentially start new games.
     For competitive-variety mode, re-populates courts based on current settings.
+    For king-of-court mode, manages rounds-based progression.
     """
     
     if session.config.mode == 'competitive-variety':
@@ -550,8 +557,8 @@ def evaluate_and_create_matches(session: Session) -> Session:
         from python.queue_manager import populate_empty_courts
         populate_empty_courts(session)
     elif session.config.mode == 'king-of-court':
-        from python.queue_manager import populate_empty_courts
-        populate_empty_courts(session)
+        from python.kingofcourt import evaluate_king_of_court_session
+        session = evaluate_king_of_court_session(session)
     
     return session
 

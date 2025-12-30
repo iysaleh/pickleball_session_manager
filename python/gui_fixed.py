@@ -18,17 +18,17 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup
 from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen, QPixmap
 
-from python.pickleball_types import (
+from pickleball_types import (
     Player, Session, SessionConfig, GameMode, SessionType, Match,
     MatchStatus, QueuedMatch
 )
-from python.session import (
+from session import (
     create_session, add_player_to_session, remove_player_from_session,
     complete_match, forfeit_match, get_player_name, get_matches_for_court,
     get_active_matches, get_completed_matches, evaluate_and_create_matches,
     get_active_player_names
 )
-from python.time_manager import now, start_session as tm_start_session
+from time_manager import now, start_session as tm_start_session
 
 
 class DeselectableListWidget(QListWidget):
@@ -1012,7 +1012,7 @@ class SetupDialog(QDialog):
             # Create King of Court config if needed
             koc_config = None
             if mode == 'king-of-court':
-                from python.pickleball_types import KingOfCourtConfig, KingOfCourtSeeding
+                from pickleball_types import KingOfCourtConfig, KingOfCourtSeeding
                 
                 seeding_text = self.koc_seeding_combo.currentText()
                 if seeding_text == "Highest to Lowest":
@@ -1056,7 +1056,7 @@ class SetupDialog(QDialog):
                         break
             
             # Save complete player history with pre-seeded ratings and game configuration
-            from python.session_persistence import save_player_history
+            from session_persistence import save_player_history
             save_player_history(
                 player_names, 
                 bye_player_names, 
@@ -1232,7 +1232,7 @@ class CourtDisplayWidget(QWidget):
         
         # Add ranks if toggle is on
         if self.show_rank:
-            from python.competitive_variety import get_player_ranking
+            from competitive_variety import get_player_ranking
             team1_names = [f"{name} [{get_player_ranking(self.session, pid)[0]}]" 
                           for name, pid in zip(team1_names, match.team1)]
             team2_names = [f"{name} [{get_player_ranking(self.session, pid)[0]}]" 
@@ -1341,7 +1341,7 @@ class CourtDisplayWidget(QWidget):
     def _load_saved_court_name(self):
         """Load saved court name from persistent storage"""
         try:
-            from python.session_persistence import get_saved_court_name
+            from session_persistence import get_saved_court_name
             saved_name = get_saved_court_name(self.court_number, self.session.config.courts)
             if saved_name:
                 self.custom_title = saved_name
@@ -1351,7 +1351,7 @@ class CourtDisplayWidget(QWidget):
     def _save_court_name(self):
         """Save current court name to persistent storage"""
         try:
-            from python.session_persistence import save_single_court_name
+            from session_persistence import save_single_court_name
             save_single_court_name(self.court_number, self.custom_title, self.session.config.courts)
         except Exception as e:
             print(f"Error saving court name: {e}")
@@ -1445,7 +1445,7 @@ class CourtDisplayWidget(QWidget):
                         parent.animate_court_sliding(slides)
                 
                 # Save session after completing a match
-                from python.session_persistence import save_session
+                from session_persistence import save_session
                 save_session(self.session)
             else:
                 QMessageBox.warning(self, "Error", "Failed to complete match")
@@ -1466,7 +1466,7 @@ class CourtDisplayWidget(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             if forfeit_match(self.session, self.current_match.id):
                 # Save session after forfeiting a match
-                from python.session_persistence import save_session
+                from session_persistence import save_session
                 save_session(self.session)
             else:
                 QMessageBox.warning(self, "Error", "Failed to forfeit match")
@@ -1584,7 +1584,7 @@ class SessionWindow(QMainWindow):
         self.update_timer.stop()
         
         # Save session state before closing
-        from python.session_persistence import save_session, save_player_history
+        from session_persistence import save_session, save_player_history
         save_session(self.session)
         
         # Also save player history for "New Session with Previous Players"
@@ -1963,7 +1963,7 @@ class SessionWindow(QMainWindow):
         if not hasattr(self, 'waiting_list'):
             return
         
-        from python.competitive_variety import COMPETITIVENESS_PROFILES
+        from competitive_variety import COMPETITIVENESS_PROFILES
         
         # Map slider values to profile keys
         # 0=Casual, 1=Semi-Comp, 2=Comp, 3=Ultra-Comp
@@ -1987,7 +1987,7 @@ class SessionWindow(QMainWindow):
                 self.competitive_variety_slider.show()
                 
                 # Re-evaluate matches immediately
-                from python.queue_manager import populate_empty_courts
+                from queue_manager import populate_empty_courts
                 populate_empty_courts(self.session)
                 self.refresh_display()
 
@@ -2045,7 +2045,7 @@ class SessionWindow(QMainWindow):
     
     def update_variety_slider_from_settings(self):
         """Update variety slider position based on current session settings"""
-        from python.competitive_variety import VARIETY_PROFILES
+        from competitive_variety import VARIETY_PROFILES
         
         partner = self.session.competitive_variety_partner_repetition_limit
         opponent = self.session.competitive_variety_opponent_repetition_limit
@@ -2077,7 +2077,7 @@ class SessionWindow(QMainWindow):
         if not hasattr(self, 'waiting_list'):
             return
         
-        from python.competitive_variety import VARIETY_PROFILES
+        from competitive_variety import VARIETY_PROFILES
         
         # Map slider values to profile keys
         slider_map = {
@@ -2100,7 +2100,7 @@ class SessionWindow(QMainWindow):
                 self.variety_slider.show()
                 
                 # Re-evaluate matches immediately
-                from python.queue_manager import populate_empty_courts
+                from queue_manager import populate_empty_courts
                 populate_empty_courts(self.session)
                 self.refresh_display()
     
@@ -2179,7 +2179,7 @@ class SessionWindow(QMainWindow):
             self.variety_value_label.setText("Custom")
             
             # Re-evaluate matches immediately
-            from python.queue_manager import populate_empty_courts
+            from queue_manager import populate_empty_courts
             populate_empty_courts(self.session)
             self.refresh_display()
     
@@ -2190,7 +2190,7 @@ class SessionWindow(QMainWindow):
     
     def reset_variety_to_defaults(self):
         """Reset variety slider to dynamic default based on waitlist size"""
-        from python.competitive_variety import get_default_competitive_variety_settings
+        from competitive_variety import get_default_competitive_variety_settings
         
         # Get defaults based on current players
         _, partner, opponent = get_default_competitive_variety_settings(
@@ -2205,13 +2205,13 @@ class SessionWindow(QMainWindow):
         self.update_variety_slider_from_settings()
         
         # Re-evaluate matches immediately
-        from python.queue_manager import populate_empty_courts
+        from queue_manager import populate_empty_courts
         populate_empty_courts(self.session)
         self.refresh_display()
 
     def init_adaptive_constraints_slider(self, parent_layout: QHBoxLayout):
         """Initialize the adaptive constraints slider widget"""
-        from python.competitive_variety import get_adaptive_phase_info
+        from competitive_variety import get_adaptive_phase_info
         
         # Container for the adaptive constraints slider
         adaptive_container = QWidget()
@@ -2317,7 +2317,7 @@ class SessionWindow(QMainWindow):
             return
             
         try:
-            from python.competitive_variety import get_adaptive_phase_info
+            from competitive_variety import get_adaptive_phase_info
             phase_info = get_adaptive_phase_info(self.session)
             
             # Three states: Disabled, Auto, and Manual
@@ -2405,7 +2405,7 @@ class SessionWindow(QMainWindow):
                 self.update_adaptive_constraints_slider()
                 
                 # Re-evaluate matches immediately if there are waiting matches
-                from python.queue_manager import populate_empty_courts
+                from queue_manager import populate_empty_courts
                 populate_empty_courts(self.session)
                 self.refresh_display()
             
@@ -2445,7 +2445,7 @@ class SessionWindow(QMainWindow):
             self.update_adaptive_constraints_slider()
             
             # Re-evaluate matches immediately if there are waiting matches
-            from python.queue_manager import populate_empty_courts
+            from queue_manager import populate_empty_courts
             populate_empty_courts(self.session)
             self.refresh_display()
             
@@ -2535,7 +2535,7 @@ class SessionWindow(QMainWindow):
             self.competitive_variety_value_label.setText("Custom")
             
             # Re-evaluate matches immediately
-            from python.queue_manager import populate_empty_courts
+            from queue_manager import populate_empty_courts
             populate_empty_courts(self.session)
             self.refresh_display()
     
@@ -2546,7 +2546,7 @@ class SessionWindow(QMainWindow):
     
     def reset_competitive_variety_to_defaults(self):
         """Reset competitiveness slider to the dynamic default based on waitlist size"""
-        from python.competitive_variety import get_default_competitive_variety_settings
+        from competitive_variety import get_default_competitive_variety_settings
         
         # Get defaults based on current players
         roaming, _, _ = get_default_competitive_variety_settings(
@@ -2559,7 +2559,7 @@ class SessionWindow(QMainWindow):
         self.update_slider_from_settings()
         
         # Re-evaluate matches immediately
-        from python.queue_manager import populate_empty_courts
+        from queue_manager import populate_empty_courts
         populate_empty_courts(self.session)
         self.refresh_display()
 
@@ -2703,7 +2703,7 @@ class SessionWindow(QMainWindow):
                 
                 # Regenerate if Round Robin
                 if self.session.config.mode == 'round-robin':
-                    from python.roundrobin import generate_round_robin_queue
+                    from roundrobin import generate_round_robin_queue
                     
                     self.session.match_queue = generate_round_robin_queue(
                         [p for p in self.session.config.players if p.id in self.session.active_players],
@@ -2720,7 +2720,7 @@ class SessionWindow(QMainWindow):
                 self.refresh_display()
                 
                 # Save session
-                from python.session_persistence import save_session
+                from session_persistence import save_session
                 save_session(self.session)
                 
             except Exception as e:
@@ -2759,7 +2759,7 @@ class SessionWindow(QMainWindow):
             
             # Check if there are actually any waiting players to show dependencies for
             if self.session.config.mode == 'competitive-variety':
-                from python.queue_manager import get_waiting_players
+                from queue_manager import get_waiting_players
                 waiting = get_waiting_players(self.session)
                 total_players = len(self.session.active_players)
                 court_capacity = self.session.config.courts * 4
@@ -2874,11 +2874,11 @@ class SessionWindow(QMainWindow):
     def refresh_display(self):
         """Refresh court displays"""
         try:
-            from python.queue_manager import (
+            from queue_manager import (
                 populate_empty_courts, get_match_for_court, get_session_summary,
                 get_waiting_players, get_queued_matches_for_display
             )
-            from python.utils import start_player_wait_timer, stop_player_wait_timer
+            from utils import start_player_wait_timer, stop_player_wait_timer
             
             populate_empty_courts(self.session)
             
@@ -2937,16 +2937,16 @@ class SessionWindow(QMainWindow):
                     
                     # Add rank if toggle is on
                     if self.show_rank:
-                        from python.competitive_variety import get_player_ranking
+                        from competitive_variety import get_player_ranking
                         rank, _ = get_player_ranking(self.session, player_id)
                         item_text += f" [{rank}]"
                     
                     # Get current wait time and format it only if toggle is on
                     if self.show_wait_times:
-                        from python.utils import get_current_wait_time, format_duration
+                        from utils import get_current_wait_time, format_duration
                         
                         # Use relative wait priority system for display
-                        from python.wait_priority import calculate_relative_wait_priority_infos, format_wait_time_display
+                        from wait_priority import calculate_relative_wait_priority_infos, format_wait_time_display
                         
                         # Get all waiting player IDs for relative calculation
                         all_waiting_ids = [item.data(Qt.ItemDataRole.UserRole) for item in existing_items.values()]
@@ -2979,8 +2979,8 @@ class SessionWindow(QMainWindow):
                     
                     # Add deterministic court dependencies if enabled
                     if self.show_deterministic_waitlist and self.session.config.mode == 'competitive-variety':
-                        from python.deterministic_waitlist_v2 import get_court_outcome_dependencies_v2
-                        from python.queue_manager import get_waiting_players
+                        from deterministic_waitlist_v2 import get_court_outcome_dependencies_v2
+                        from queue_manager import get_waiting_players
                         
                         try:
                             # Debug: Check if this player is actually waiting
@@ -3029,14 +3029,14 @@ class SessionWindow(QMainWindow):
                 else:
                     item_text = player_name
                     if self.show_rank:
-                        from python.competitive_variety import get_player_ranking
+                        from competitive_variety import get_player_ranking
                         rank, _ = get_player_ranking(self.session, player_id)
                         item_text += f" [{rank}]"
                     
                     # Add deterministic court dependencies if enabled (even when wait times not shown)
                     if self.show_deterministic_waitlist and self.session.config.mode == 'competitive-variety':
-                        from python.deterministic_waitlist_v2 import get_court_outcome_dependencies_v2
-                        from python.queue_manager import get_waiting_players
+                        from deterministic_waitlist_v2 import get_court_outcome_dependencies_v2
+                        from queue_manager import get_waiting_players
                         
                         try:
                             # Only show dependencies for players who are actually waiting
@@ -3111,7 +3111,7 @@ class SessionWindow(QMainWindow):
             self.queue_count.setText(f"{len(queued_matches)} match{'es' if len(queued_matches) != 1 else ''} queued")
             
             # Update match history list
-            from python.session import get_completed_matches
+            from session import get_completed_matches
             completed = get_completed_matches(self.session)
             # Sort by end_time descending
             sorted_completed = sorted(completed, key=lambda m: m.end_time or '', reverse=True)
@@ -3277,7 +3277,7 @@ class SessionWindow(QMainWindow):
     def export_session(self):
         """Export session results to a file"""
         try:
-            from python.queue_manager import get_waiting_players, get_match_for_court
+            from queue_manager import get_waiting_players, get_match_for_court
             from datetime import datetime
             
             # Get current state
@@ -3316,7 +3316,7 @@ class SessionWindow(QMainWindow):
                     # Add deterministic court dependencies if enabled and in competitive-variety mode
                     if self.show_deterministic_waitlist and self.session.config.mode == 'competitive-variety':
                         try:
-                            from python.deterministic_waitlist_v2 import get_court_outcome_dependencies_v2
+                            from deterministic_waitlist_v2 import get_court_outcome_dependencies_v2
                             dependencies = get_court_outcome_dependencies_v2(self.session, player_id)
                             
                             if dependencies:
@@ -3369,11 +3369,11 @@ class SessionWindow(QMainWindow):
                 elo = 0
                 try:
                     if self.session.config.mode == 'competitive-variety':
-                        from python.competitive_variety import calculate_player_elo_rating
+                        from competitive_variety import calculate_player_elo_rating
                         elo = calculate_player_elo_rating(self.session, player.id)
                     else:
                         # For other modes, use a simple ELO-like calculation
-                        from python.kingofcourt import calculate_player_rating
+                        from kingofcourt import calculate_player_rating
                         elo = calculate_player_rating(stats)
                 except:
                     # Fallback if ELO calculation fails
@@ -3383,7 +3383,7 @@ class SessionWindow(QMainWindow):
                 win_pct = (stats.wins / stats.games_played * 100) if stats.games_played > 0 else 0
                 
                 # Include wait time (accumulated + current if waiting)
-                from python.utils import get_current_wait_time, format_duration
+                from utils import get_current_wait_time, format_duration
                 current_wait = get_current_wait_time(stats)
                 total_wait_seconds = stats.total_wait_time + current_wait
                 
@@ -3416,7 +3416,7 @@ class SessionWindow(QMainWindow):
                 export_lines.append("MATCH HISTORY:")
                 export_lines.append("-" * 70)
                 
-                from python.utils import calculate_match_duration, format_duration
+                from utils import calculate_match_duration, format_duration
                 
                 total_duration = 0
                 match_count = 0
@@ -3635,8 +3635,8 @@ class SessionWindow(QMainWindow):
                     
                     # Regenerate match queue once at the end
                     if players_to_add or players_to_remove:
-                        from python.roundrobin import generate_round_robin_queue
-                        from python.queue_manager import populate_empty_courts, get_waiting_players
+                        from roundrobin import generate_round_robin_queue
+                        from queue_manager import populate_empty_courts, get_waiting_players
                         
                         if self.session.config.mode == 'round-robin':
                             self.session.match_queue = generate_round_robin_queue(
@@ -3812,7 +3812,7 @@ class SessionWindow(QMainWindow):
                 self.last_known_matches = {}
                 
                 # Load the state
-                from python.session import load_session_from_snapshot
+                from session import load_session_from_snapshot
                 success = load_session_from_snapshot(self.session, snapshot)
                 
                 if success:
@@ -3931,7 +3931,7 @@ class SessionWindow(QMainWindow):
                 
                 # Calculate ELO rating if in competitive variety mode
                 if is_competitive_variety:
-                    from python.competitive_variety import calculate_player_elo_rating
+                    from competitive_variety import calculate_player_elo_rating
                     elo = calculate_player_elo_rating(self.session, player.id)
                 else:
                     elo = 0
@@ -3946,7 +3946,7 @@ class SessionWindow(QMainWindow):
                 win_pct = (stats.wins / stats.games_played * 100) if stats.games_played > 0 else 0
                 
                 # Get current wait time (in case player is currently waiting)
-                from python.utils import get_current_wait_time
+                from utils import get_current_wait_time
                 current_wait = get_current_wait_time(stats)
                 total_wait_seconds = stats.total_wait_time + current_wait
                 
@@ -3978,7 +3978,7 @@ class SessionWindow(QMainWindow):
             for row, data in enumerate(player_data):
                 table.insertRow(row)
                 
-                from python.utils import format_duration
+                from utils import format_duration
                 
                 if is_competitive_variety:
                     items = [
@@ -4033,8 +4033,8 @@ class SessionWindow(QMainWindow):
     def make_court(self):
         """Open dialog to manually create a match on an empty court"""
         try:
-            from python.queue_manager import get_empty_courts, get_waiting_players
-            from python.session import create_manual_match
+            from queue_manager import get_empty_courts, get_waiting_players
+            from session import create_manual_match
             
             empty_courts = get_empty_courts(self.session)
             waiting_ids = get_waiting_players(self.session)
@@ -4057,7 +4057,7 @@ class SessionWindow(QMainWindow):
             
             try:
                 # Sort waiting players using sophisticated wait time priority system
-                from python.wait_priority import sort_players_by_wait_priority
+                from wait_priority import sort_players_by_wait_priority
                 
                 sorted_waiting = sort_players_by_wait_priority(self.session, waiting_ids, reverse=True)
                 
@@ -4072,7 +4072,7 @@ class SessionWindow(QMainWindow):
                         best_team2 = [candidates[1]]
                     else:
                         # Doubles: find best balanced combination among top 4
-                        from python.competitive_variety import score_potential_match
+                        from competitive_variety import score_potential_match
                         
                         best_score = -float('inf')
                         p0 = candidates[0]
@@ -4309,8 +4309,8 @@ class SessionWindow(QMainWindow):
     def edit_court_match(self, court_number: int, match_id: str):
         """Edit a court's match (swap players or change orientation)"""
         try:
-            from python.queue_manager import get_waiting_players
-            from python.session import update_match_teams
+            from queue_manager import get_waiting_players
+            from session import update_match_teams
             
             # Find the match
             match = None
@@ -4634,7 +4634,7 @@ class SessionWindow(QMainWindow):
         dialog = CourtOrderingDialog(self.session, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             # Update session with new court ordering
-            from python.kingofcourt import set_court_ordering
+            from kingofcourt import set_court_ordering
             self.session = set_court_ordering(self.session, dialog.get_court_ordering())
 
 
@@ -4750,7 +4750,7 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(new_session_btn)
         
         # Check if we have a saved session
-        from python.session_persistence import has_saved_session, load_player_history
+        from session_persistence import has_saved_session, load_player_history
         
         if has_saved_session():
             resume_btn = QPushButton("Resume Last Session")
@@ -4831,7 +4831,7 @@ class MainWindow(QMainWindow):
     def resume_last_session(self):
         """Resume the last saved session"""
         try:
-            from python.session_persistence import load_last_session
+            from session_persistence import load_last_session
             
             session = load_last_session()
             if not session:
@@ -4844,7 +4844,7 @@ class MainWindow(QMainWindow):
             tm_start_session(session.session_start_time)
             
             # Adjust wait times now that time manager is properly initialized
-            from python.session_persistence import adjust_wait_times_after_time_manager_start
+            from session_persistence import adjust_wait_times_after_time_manager_start
             adjust_wait_times_after_time_manager_start(session)
             
             try:
@@ -4867,7 +4867,7 @@ class MainWindow(QMainWindow):
     def new_session_with_previous_players(self):
         """Create a new session with players and configuration from previous sessions"""
         try:
-            from python.session_persistence import load_player_history_with_ratings
+            from session_persistence import load_player_history_with_ratings
             
             player_history_data = load_player_history_with_ratings()
             player_names = player_history_data["players"]

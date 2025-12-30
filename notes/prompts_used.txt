@@ -616,6 +616,18 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
    aren't being balanced. Be precise in your fix, and assume the role of a staff level export developer.
 
 
+# Rounds based King of the Court
+* We want to implement the king of the court algorithm using a rounds based mechanism -- courts do not populate until all currently scheduled games are finished.
+* The algorithm is simple, When a game finishes, the team that won move up a court and split (unless they're already at the top kings court, in which case they they stay there and split), and the team that lost move down a court and split (unless they're already at the bottom court, in which case they stay there and split). When the winners from the lower court are joined with the losers from the previous upper court to make the court in the next round, the only thing to prioritize when making the match and choosing who teams with who between those groups is avoiding repeat partnerships whenever it is possible. 
+* If there is a waitlist, we primarily choose people to be on the waitlist from the middle courts first, then the bottom court, then (and only if everybody on all the other courts have waited once already) do we choose people from the kings court to wait. We never have anybody wait again until everybody else in the session has waited atleast once. When people come off the waitlist after having waited, try to put them in the same position they were before. If they are the first byes or happen to be the first ones who waited, try to place them anywhere in the middle courts.
+* Courts need to have a sense of direction for players moving up and down after winning and losing. By default, the courts can have the direction starting with Court 1 being the kings court and the last court being the bottom court.
+* Add a button to the active session page to be able to modify the court ordering. It should be an ordered list, where we can move courts (via their court name) up and down on the list. Similar to court names, court ordering should persist between sessions.
+* For the initial seeding of players, we want 3 options -- Random, Highest to Lowest, Lowest to Highest. Add an option to the Session Setup page for the user to select these options when game mode is set to "King of the Court". If Random is selected, players are randomly placed across the court; If "Highest to Lowest" is selected, top players are placed in the Kings court and lowest players are put in the bottom court; if "Lowest to Highest" is selected, the lowest ranked players are put in the kings court, and the highest ranked players are put in the bottom court. Note that we still pay attention to selected First Byes in all configurations!!!
+## Tweaks
+* Update the @CLAUDE.md file documenting the new King of the Court implementation.
+* When all the courts finish, the next round is not being automatically made (courts are stuck at "Waitin for Players".)
+* Since Highest to Lowest and Lowest to Highest configs require skill rating inputs, we need to support that like we do for Competetive Variety with "Pre-seeded Sklil Ratings"
+* Round advancement has a match tracking bug where completed matches from different courts are being stored with the same court number. This prevents proper winner/loser movement between courts. The issue has been identified but deferred since the basic King of Court functionality works perfectly.
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts
