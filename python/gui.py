@@ -3450,6 +3450,35 @@ class SessionWindow(QMainWindow):
                 export_lines.append("  (No players waiting)")
             export_lines.append("")
             
+            # King of Court specific information
+            if self.session.config.mode == 'king-of-court':
+                export_lines.append("KING OF COURT STATE:")
+                export_lines.append("-" * 70)
+                export_lines.append(f"Round Number: {self.session.king_of_court_round_number}")
+                
+                # Court ordering
+                court_ordering = getattr(self.session.config, 'court_ordering', list(range(1, self.session.config.courts + 1)))
+                court_ordering_names = [get_court_name(self.session, court_num) for court_num in court_ordering]
+                export_lines.append(f"Court Order (Kings to Bottom): {' > '.join(court_ordering_names)}")
+                
+                # Wait counts
+                if self.session.king_of_court_wait_counts:
+                    export_lines.append("")
+                    export_lines.append("Wait Counts:")
+                    for player in self.session.config.players:
+                        if player.id in self.session.active_players:
+                            count = self.session.king_of_court_wait_counts.get(player.id, 0)
+                            export_lines.append(f"  {player.name}: {count} times")
+                
+                # Waitlist history
+                if hasattr(self.session, 'king_of_court_waitlist_history') and self.session.king_of_court_waitlist_history:
+                    export_lines.append("")
+                    export_lines.append("Waitlist History (oldest to newest):")
+                    history_names = [get_player_name(self.session, pid) for pid in self.session.king_of_court_waitlist_history]
+                    export_lines.append(f"  {' -> '.join(history_names)}")
+                
+                export_lines.append("")
+            
             # Player statistics sorted by ELO
             export_lines.append("PLAYER STATISTICS (sorted by ELO):")
             export_lines.append("-" * 70)

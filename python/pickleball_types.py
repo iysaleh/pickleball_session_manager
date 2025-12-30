@@ -175,6 +175,7 @@ class Session:
     king_of_court_round_number: int = 0  # Current round number
     king_of_court_player_positions: Dict[str, int] = field(default_factory=dict)  # player_id -> court_number where they last played
     king_of_court_wait_counts: Dict[str, int] = field(default_factory=dict)  # player_id -> number of times they've waited
+    king_of_court_waitlist_history: List[str] = field(default_factory=list)  # ordered list of players who have waited (first = longest ago)
 
 
 @dataclass

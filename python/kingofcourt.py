@@ -496,19 +496,24 @@ def apply_waitlist_rotation(session: Session, court_assignments: Dict[int, List[
                 waited_once = wait_counts[1]
                 players_to_wait.extend(waited_once[:remaining_needed])
     else:
-        # Everyone has waited at least once - use fair rotation
-        # Prefer those who have waited the most
-        max_wait_count = max(wait_counts.keys()) if wait_counts else 0
-        if max_wait_count in wait_counts:
-            most_waited = wait_counts[max_wait_count]
-            players_to_wait = most_waited[:excess_players]
+        # Everyone has waited at least once - use fair rotation based on waitlist history
+        # Choose players who waited longest ago (first in history) to ensure long gaps between waits
+        players_to_wait = select_players_for_fair_rotation(session, all_active_players, excess_players)
     
     # Update waitlist
     session.waiting_players = players_to_wait
     
-    # Update wait counts for those waiting
+    # Update waitlist history and counts
     for player_id in players_to_wait:
+        # Update wait count
         session.king_of_court_wait_counts[player_id] = session.king_of_court_wait_counts.get(player_id, 0) + 1
+        
+        # Update waitlist history - add to end (most recent)
+        if player_id in session.king_of_court_waitlist_history:
+            # Remove from previous position
+            session.king_of_court_waitlist_history.remove(player_id)
+        session.king_of_court_waitlist_history.append(player_id)
+        
         # CRITICAL: Remove waiters from court position data
         if player_id in session.king_of_court_player_positions:
             del session.king_of_court_player_positions[player_id]
@@ -534,6 +539,33 @@ def apply_waitlist_rotation(session: Session, court_assignments: Dict[int, List[
                 session.king_of_court_player_positions[player_id] = court_num
     
     return court_assignments
+
+
+def select_players_for_fair_rotation(session: Session, all_active_players: List[str], excess_players: int) -> List[str]:
+    """
+    When everyone has waited at least once, select players for waitlist based on fair rotation.
+    Players who waited longest ago (first in history) get priority to wait again.
+    This ensures maximum time between waits for each player.
+    """
+    players_to_wait = []
+    
+    # Get all players ordered by when they last waited (oldest first)
+    waitlist_order = []
+    
+    # Start with players who have waited (in order they waited - oldest first)
+    for player_id in session.king_of_court_waitlist_history:
+        if player_id in all_active_players:
+            waitlist_order.append(player_id)
+    
+    # Add any players who somehow aren't in history (shouldn't happen, but safety)
+    for player_id in all_active_players:
+        if player_id not in waitlist_order:
+            waitlist_order.append(player_id)
+    
+    # Take the players who waited longest ago
+    players_to_wait = waitlist_order[:excess_players]
+    
+    return players_to_wait
 
 
 def create_matches_from_final_assignments(session: Session, court_assignments: Dict[int, List[str]], 
