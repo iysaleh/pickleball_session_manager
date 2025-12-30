@@ -537,11 +537,9 @@ def apply_waitlist_rotation(session: Session, court_assignments: Dict[int, List[
         # Update wait count
         session.king_of_court_wait_counts[player_id] = session.king_of_court_wait_counts.get(player_id, 0) + 1
         
-        # Update waitlist history - add to end (most recent)
-        if player_id in session.king_of_court_waitlist_history:
-            # Remove from previous position
-            session.king_of_court_waitlist_history.remove(player_id)
-        session.king_of_court_waitlist_history.append(player_id)
+        # Update waitlist history - ONLY add new players, never move existing ones
+        if player_id not in session.king_of_court_waitlist_history:
+            session.king_of_court_waitlist_history.append(player_id)
         
         # CRITICAL: Remove waiters from court position data
         if player_id in session.king_of_court_player_positions:
@@ -573,26 +571,34 @@ def apply_waitlist_rotation(session: Session, court_assignments: Dict[int, List[
 def select_players_for_fair_rotation(session: Session, all_active_players: List[str], excess_players: int) -> List[str]:
     """
     When everyone has waited at least once, select players for waitlist based on fair rotation.
-    Players who waited longest ago (first in history) get priority to wait again.
+    Uses the waitlist history as an immutable ordered list and rotates through it cyclically.
     This ensures maximum time between waits for each player.
     """
     players_to_wait = []
     
-    # Get all players ordered by when they last waited (oldest first)
-    waitlist_order = []
+    if not session.king_of_court_waitlist_history:
+        # Safety fallback - should not happen
+        return all_active_players[:excess_players]
     
-    # Start with players who have waited (in order they waited - oldest first)
-    for player_id in session.king_of_court_waitlist_history:
-        if player_id in all_active_players:
-            waitlist_order.append(player_id)
+    # Create a list of active players from the waitlist history (maintaining order)
+    active_history_players = [p for p in session.king_of_court_waitlist_history if p in all_active_players]
     
-    # Add any players who somehow aren't in history (shouldn't happen, but safety)
-    for player_id in all_active_players:
-        if player_id not in waitlist_order:
-            waitlist_order.append(player_id)
-    
-    # Take the players who waited longest ago
-    players_to_wait = waitlist_order[:excess_players]
+    if len(active_history_players) < excess_players:
+        # Not enough players in history - take all + any missing players
+        players_to_wait = active_history_players.copy()
+        remaining_needed = excess_players - len(players_to_wait)
+        for player_id in all_active_players:
+            if player_id not in active_history_players and remaining_needed > 0:
+                players_to_wait.append(player_id)
+                remaining_needed -= 1
+    else:
+        # Normal case: cycle through history starting from rotation index
+        for i in range(excess_players):
+            player_index = (session.king_of_court_waitlist_rotation_index + i) % len(active_history_players)
+            players_to_wait.append(active_history_players[player_index])
+        
+        # Advance the rotation index for next time
+        session.king_of_court_waitlist_rotation_index = (session.king_of_court_waitlist_rotation_index + excess_players) % len(active_history_players)
     
     return players_to_wait
 

@@ -3467,14 +3467,29 @@ class SessionWindow(QMainWindow):
                     court_ordering_names.append(court_name)
                 export_lines.append(f"Court Order (Kings to Bottom): {' > '.join(court_ordering_names)}")
                 
-                # Wait counts
+                # Wait counts (ordered by waitlist history)
                 if self.session.king_of_court_wait_counts:
                     export_lines.append("")
                     export_lines.append("Wait Counts:")
+                    
+                    # Order by waitlist history first, then remaining players
+                    ordered_players = []
+                    
+                    # Add players in waitlist history order
+                    for player_id in self.session.king_of_court_waitlist_history:
+                        if player_id in self.session.active_players:
+                            ordered_players.append(player_id)
+                    
+                    # Add any remaining active players not in history
                     for player in self.session.config.players:
-                        if player.id in self.session.active_players:
-                            count = self.session.king_of_court_wait_counts.get(player.id, 0)
-                            export_lines.append(f"  {player.name}: {count} times")
+                        if player.id in self.session.active_players and player.id not in ordered_players:
+                            ordered_players.append(player.id)
+                    
+                    # Export in order
+                    for player_id in ordered_players:
+                        player_name = get_player_name(self.session, player_id)
+                        count = self.session.king_of_court_wait_counts.get(player_id, 0)
+                        export_lines.append(f"  {player_name}: {count} times")
                 
                 # Waitlist history
                 if self.session.king_of_court_waitlist_history:
@@ -3482,6 +3497,10 @@ class SessionWindow(QMainWindow):
                     export_lines.append("Waitlist History (oldest to newest):")
                     history_names = [get_player_name(self.session, pid) for pid in self.session.king_of_court_waitlist_history]
                     export_lines.append(f"  {' -> '.join(history_names)}")
+                    
+                    # Show rotation index for debugging
+                    if hasattr(self.session, 'king_of_court_waitlist_rotation_index'):
+                        export_lines.append(f"  Current rotation index: {self.session.king_of_court_waitlist_rotation_index}")
                 
                 export_lines.append("")
             
