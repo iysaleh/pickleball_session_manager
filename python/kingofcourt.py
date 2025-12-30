@@ -480,8 +480,17 @@ def apply_waitlist_rotation(session: Session, court_assignments: Dict[int, List[
     # Apply rule: Nobody waits twice until everyone has waited once
     players_to_wait = []
     
-    if 0 in wait_counts and len(wait_counts[0]) > 0:
-        # Prioritize players who have never waited
+    # Check if we should use fair rotation:
+    # 1. If everyone has waited at least once (no one with 0 waits), OR
+    # 2. If everyone is already in the waitlist history (no new players to initialize)
+    all_players_in_history = all(player in session.king_of_court_waitlist_history for player in all_active_players)
+    everyone_waited = not (0 in wait_counts and len(wait_counts[0]) > 0)
+    
+    if everyone_waited or all_players_in_history:
+        # Use fair rotation based on waitlist history
+        players_to_wait = select_players_for_fair_rotation(session, all_active_players, excess_players)
+    elif 0 in wait_counts and len(wait_counts[0]) > 0:
+        # Prioritize players who have never waited (initial rounds only)
         never_waited = wait_counts[0]
         
         if len(never_waited) >= excess_players:
@@ -524,10 +533,7 @@ def apply_waitlist_rotation(session: Session, court_assignments: Dict[int, List[
             if 1 in wait_counts:
                 waited_once = wait_counts[1]
                 players_to_wait.extend(waited_once[:remaining_needed])
-    else:
-        # Everyone has waited at least once - use fair rotation based on waitlist history
-        # Choose players who waited longest ago (first in history) to ensure long gaps between waits
-        players_to_wait = select_players_for_fair_rotation(session, all_active_players, excess_players)
+    
     
     # Update waitlist
     session.waiting_players = players_to_wait
@@ -573,6 +579,16 @@ def select_players_for_fair_rotation(session: Session, all_active_players: List[
     When everyone has waited at least once, select players for waitlist based on fair rotation.
     Uses the waitlist history as an immutable ordered list and rotates through it cyclically.
     This ensures maximum time between waits for each player.
+    
+    CRITICAL: We want to select players who waited LONGEST AGO first to maximize time between waits.
+    The rotation_index tracks which player should wait next in the fair rotation cycle.
+    
+    IMPORTANT: The rotation_index is maintained relative to the ACTIVE history players list,
+    not the original full history, to handle players joining/leaving correctly.
+    
+    LOGIC FIX: When all players have waited once, we should start from the BEGINNING of the 
+    waitlist history (index 0) and work forward, not continue from some arbitrary rotation index.
+    This ensures players who waited first (longest ago) get to wait again first.
     """
     players_to_wait = []
     
@@ -592,7 +608,21 @@ def select_players_for_fair_rotation(session: Session, all_active_players: List[
                 players_to_wait.append(player_id)
                 remaining_needed -= 1
     else:
+        # Check if this is the first time everyone has waited - start from beginning
+        min_wait_count = min(session.king_of_court_wait_counts.get(p, 0) for p in all_active_players)
+        max_wait_count = max(session.king_of_court_wait_counts.get(p, 0) for p in all_active_players)
+        
+        # If this is the transition point where min wait count went from 0 to 1,
+        # reset rotation index to start from the beginning
+        if min_wait_count >= 1 and max_wait_count == 1:
+            session.king_of_court_waitlist_rotation_index = 0
+        
+        # Ensure rotation index is valid for current active player count
+        if session.king_of_court_waitlist_rotation_index >= len(active_history_players):
+            session.king_of_court_waitlist_rotation_index = 0
+        
         # Normal case: cycle through history starting from rotation index
+        # rotation_index points to the NEXT player who should wait (oldest first)
         for i in range(excess_players):
             player_index = (session.king_of_court_waitlist_rotation_index + i) % len(active_history_players)
             players_to_wait.append(active_history_players[player_index])

@@ -8,6 +8,286 @@
 - Tests built should have a make target added for them in the Makefile (Do not create new makefiles just for new tests, use the existing Makefile). Always run tests from their make targets, do not tail the output of tests that are run, just parse the entire output (or grep for what you care about!)
 - Do not prompt me to run the tests, always run the tests without prompting me. Run the tests without the tail command.
 
+## KING OF THE COURT ALGORITHM (python/kingofcourt.py)
+
+### Core Purpose
+Implements rounds-based King of the Court where all courts finish before the next round begins. Winners move up and split, losers move down and split. Includes sophisticated fair waitlist rotation system and automatic session advancement.
+
+### Key Features
+
+**Rounds-Based Architecture**
+- All courts must complete before advancing to next round
+- No immediate match generation after individual court completion
+- Clear round boundaries with automatic advancement detection
+- Round number tracking: `session.king_of_court_round_number`
+
+**King of Court Movement Rules**
+- **Winners**: Move up one court and SPLIT (unless already at kings court)
+- **Losers**: Move down one court and SPLIT (unless already at bottom court)
+- **Kings Court Winners**: Stay at kings court and SPLIT
+- **Bottom Court Losers**: Stay at bottom court and SPLIT
+- **Court Ordering**: Configurable via GUI, persists between sessions in user preferences
+- **Team Splitting**: Previous teammates MUST be on opposite teams in next round
+
+**Fair Waitlist Rotation System** 
+- **Phase 1**: Nobody waits twice until everyone has waited once
+- **Initial Priority**: Middle courts → Bottom courts → Kings court (only if all others waited)
+- **Phase 2**: Fair rotation using immutable waitlist history order
+- **Waitlist History**: `session.king_of_court_waitlist_history` - ordered list of first wait times
+- **Rotation Index**: `session.king_of_court_waitlist_rotation_index` - cycles through history
+- **Maximum Wait Gap**: Ensures longest time between repeated waits for each player
+- **Wait Counts**: `session.king_of_court_wait_counts` - tracks total waits per player
+
+**Initial Seeding Options** (Session Setup Page)
+- **Random**: Players randomly distributed across courts (default)
+- **Highest to Lowest**: Top ELO rated players start at kings court, lowest at bottom
+- **Lowest to Highest**: Lowest ELO rated players start at kings court, highest at bottom  
+- **Pre-seeded Ratings**: Required for ELO-based seeding options (like Competitive Variety)
+- **First Bye Respect**: All seeding modes respect manually selected First Bye players
+
+**Court Management & Persistence**
+- **Court Ordering GUI**: Drag-and-drop reordering interface in Active Session
+- **Persistent Settings**: Court names and ordering saved in user preferences
+- **Direction Convention**: Court 1 (default kings) → Last court number (default bottom)
+- **Export Integration**: Court ordering included in session export files
+
+### Critical Functions
+
+**apply_king_of_court_advancement(session, completed_matches) → bool**
+- **Purpose**: Main advancement function called from GUI when matches finish
+- **Logic**: Only advances if ALL current round matches are completed
+- **Returns**: True if advancement occurred, False if waiting for more matches
+- **Integration**: Called from GUI but contains NO GUI logic itself
+
+**advance_round(session) → Session**
+- **Core Algorithm**: Implements the 3-step King of Court advancement:
+  1. **Movement**: Apply winner/loser court movement and team splitting
+  2. **Waitlist**: Handle fair waitlist rotation while preserving court assignments
+  3. **Matches**: Create new matches from final court assignments
+- **Round Tracking**: Increments `king_of_court_round_number`
+- **Match Detection**: Uses `get_matches_from_current_round()` to identify completed matches
+
+**apply_king_of_court_movement(session, court_ordering, court_winners, court_losers) → Dict**
+- **Step 1**: Pure King of Court movement logic
+- **Winners**: Move up one court (or stay at kings), update player positions
+- **Losers**: Move down one court (or stay at bottom), update player positions  
+- **Returns**: `court_number → [individual_player_ids]` after movement
+- **Position Tracking**: Updates `session.king_of_court_player_positions`
+
+**apply_waitlist_rotation(session, court_assignments, court_ordering, players_per_court) → Dict**
+- **Step 2**: Handle waitlist while preserving King of Court court assignments
+- **Rule Enforcement**: Nobody waits twice until everyone waits once
+- **Fair Rotation**: After Phase 1, uses `select_players_for_fair_rotation()`
+- **Capacity Management**: Handles player overflow/underflow scenarios
+- **History Updates**: Maintains `king_of_court_waitlist_history` and wait counts
+
+**select_players_for_fair_rotation(session, all_active_players, excess_players) → List[str]**
+- **Purpose**: Selects players for Phase 2 waitlist rotation (after everyone waited once)
+- **Fairness**: Uses immutable waitlist history to ensure maximum time between waits
+- **Cycle Logic**: Rotation index starts from beginning when transitioning to fair rotation
+- **Reset Detection**: Automatically detects when everyone has waited once and resets rotation
+- **Order Preservation**: Maintains chronological order from `king_of_court_waitlist_history`
+
+**create_matches_from_final_assignments(session, court_assignments, players_per_court)**
+- **Step 3**: Generate new matches from final court player assignments
+- **Team Formation**: Uses `enforce_king_of_court_team_splitting()` for doubles
+- **Anti-Partnership**: Ensures previous teammates are on opposite teams
+- **Match Creation**: Creates Match objects with proper IDs and court assignments
+
+**enforce_king_of_court_team_splitting(players, session) → Tuple[List[str], List[str]]**
+- **Core Rule**: Previous teammates MUST be split onto opposite teams
+- **Partnership Avoidance**: Uses recent match history to avoid repeated partnerships
+- **Fallback Logic**: If no recent partnerships found, optimizes for lowest total partnerships
+- **Integration**: Works with session match history to determine previous teams
+
+### Important Invariants & Rules
+
+1. **NO GUI LOGIC IN ALGORITHMS**: All session advancement logic moved out of GUI into testable functions
+2. **ROUNDS-BASED ENFORCEMENT**: Courts never populate individually - only after all courts finish
+3. **TEAM SPLITTING MANDATORY**: Winners and losers ALWAYS split - never stay as teams
+4. **WAITLIST HISTORY IMMUTABLE**: Once established, waitlist history order never changes
+5. **FAIR ROTATION RESET**: When everyone has waited once, rotation starts from history beginning
+6. **COURT ORDERING RESPECT**: Movement always follows user-configured court ordering
+7. **POSITION TRACKING**: `king_of_court_player_positions` maintains where each player last played
+8. **WAIT COUNT ACCURACY**: `king_of_court_wait_counts` incremented for each wait instance
+9. **EXPORT COMPLETENESS**: Session export includes all King of Court state for resumption
+
+### Integration Points
+
+**GUI System (python/gui.py)**
+- **Session Setup**: Seeding option selection and pre-seeded ratings integration
+- **Active Session**: Court ordering management UI with drag-and-drop
+- **Match Completion**: Calls `apply_king_of_court_advancement()` when matches finish
+- **Status Display**: Shows current round number and waitlist state
+- **Export Integration**: Includes King of Court state in session export files
+
+**Session Management (python/pickleball_types.py)**
+- **King of Court Fields**: Round number, player positions, wait counts, waitlist history
+- **Persistence**: All state fields included in session serialization
+- **Court Ordering**: Stored in user preferences, loaded on session creation
+
+**Testing Framework**
+- **Comprehensive Tests**: `test_king_of_court_comprehensive.py` validates full 6-round scenarios
+- **Waitlist Tests**: `test_waitlist_rotation_fix.py` and `test_waitlist_exact_rotation.py`
+- **Movement Tests**: Validate winner/loser movement and team splitting rules
+- **Integration Tests**: End-to-end testing of GUI + algorithm integration
+
+### Fixed Issues & Improvements
+
+**RESOLVED: Rounds-Based Implementation**
+- ✅ Eliminated continuous match generation after individual court completion
+- ✅ Implemented proper round boundaries with advancement detection
+- ✅ All courts now wait for complete round before next matches start
+
+**RESOLVED: Team Splitting Algorithm**
+- ✅ Winners and losers now properly split in all scenarios  
+- ✅ Previous teammates correctly placed on opposite teams
+- ✅ Partnership history tracking prevents immediate re-partnering
+
+**RESOLVED: Court Movement Logic**
+- ✅ Winners move up one court (or stay at kings court)
+- ✅ Losers move down one court (or stay at bottom court)
+- ✅ Court ordering properly respected and configurable
+- ✅ Player position tracking maintains accurate state
+
+**RESOLVED: Fair Waitlist Rotation**
+- ✅ Nobody waits twice until everyone waits once (Phase 1)
+- ✅ Fair rotation using waitlist history after Phase 1 complete  
+- ✅ Rotation index resets when transitioning to fair rotation
+- ✅ Maximum time gaps between repeated waits for each player
+- ✅ Waitlist history immutable and chronologically ordered
+
+**RESOLVED: GUI Logic Separation**
+- ✅ Moved all session advancement logic out of GUI into testable functions
+- ✅ GUI only handles UI events and calls algorithm functions
+- ✅ Comprehensive test coverage for all algorithm components
+- ✅ Clean separation of concerns for maintainability
+
+**RESOLVED: Session Export & Persistence**
+- ✅ King of Court state fully included in export files
+- ✅ Waitlist history exported in correct chronological order  
+- ✅ Court ordering persistence implemented in user preferences
+- ✅ Round number and player positions included in exports
+
+### Testing & Validation
+
+**Comprehensive Test Suite**
+- `test_king_of_court_comprehensive.py`: End-to-end 6-round validation with 19 players
+- `test_waitlist_rotation_fix.py`: Fair rotation algorithm validation
+- `test_waitlist_exact_rotation.py`: Specific rotation scenario from session files
+- `test_debug_waitlist_issue.py`: Waitlist stuck bug reproduction and fix
+
+**Test Coverage Includes**
+- ✅ Winner/loser movement validation across all courts
+- ✅ Team splitting enforcement in every round
+- ✅ Waitlist rotation fairness (nobody waits twice until all wait once)
+- ✅ Fair rotation using waitlist history (Phase 2)
+- ✅ Court ordering respect and persistence
+- ✅ Session state export and import accuracy
+- ✅ Edge cases: insufficient players, court overflow, etc.
+
+**Run King of Court Tests**
+```bash
+make test_king_of_court_comprehensive  # Full 6-round validation
+python test_waitlist_exact_rotation.py  # Specific rotation scenarios
+python test_waitlist_rotation_fix.py    # Fair rotation algorithm
+```
+- Main advancement function - processes all completed matches
+- STEP 1: Move winners up/losers down and split teams
+- STEP 2: Apply waitlist rotation while preserving court assignments
+- STEP 3: Create new matches from final assignments with proper splitting
+- Returns True if advancement successful, False if not ready
+
+**apply_court_movement_and_splitting(session, completed_matches, court_ordering) → Dict**
+- Handles the core King of Court movement logic
+- Winners move up and split, losers move down and split
+- Maintains court position tracking in session.king_of_court_player_positions
+- Returns court assignments after movement (before waitlist rotation)
+
+**apply_waitlist_rotation(session, court_assignments, court_ordering, players_per_court) → Dict**
+- Manages fair waitlist rotation while preserving court assignments from movement
+- Phase 1 (initial): Priority-based selection (middle→bottom→kings)  
+- Phase 2 (ongoing): Fair rotation using immutable waitlist history
+- Updates wait counts and maintains rotation index for cyclical fairness
+- Critical fix: Uses fair rotation when all players are in history OR everyone has waited
+
+**select_players_for_fair_rotation(session, all_active_players, excess_players) → List**
+- Core fair rotation algorithm using waitlist history
+- Rotates through players cyclically to maximize time between waits
+- Handles active player filtering and rotation index bounds checking
+- Ensures rotation index is relative to active players, not full history
+
+**create_matches_from_final_assignments(session, court_assignments, players_per_court)**
+- Creates new matches after movement and waitlist rotation
+- Handles team formation with King of Court splitting rules
+- Uses partnership history minimization when possible (not strict constraint)
+- Fills courts in court ordering sequence
+
+**seed_initial_king_of_court_players(session, seeding_option)**
+- Sets up initial court assignments based on seeding choice
+- Integrates with ELO system for skill-based seeding
+- Handles First Bye players correctly in all seeding modes
+
+### Important Invariants & Design Principles
+
+1. **Round-Based Operation**: 
+   - All matches must complete before next round begins
+   - No partial advancement or individual court repopulation
+   - Session.can_advance_to_next_round() controls advancement timing
+
+2. **Fair Waitlist Rotation**:
+   - Phase detection: Initial (priority-based) vs Ongoing (fair rotation)
+   - Waitlist history is immutable once established - never reordered
+   - Rotation index tracks position in active players, handles dropouts
+   - Nobody waits twice until everyone waits once (fundamental fairness rule)
+
+3. **Court Movement Priority**:
+   - King of Court movement rules ALWAYS take priority over partnership constraints
+   - Partnership history used for tiebreaking, not hard constraints
+   - Court assignments from movement are preserved through waitlist rotation
+
+4. **Persistence & State Management**:
+   - Court ordering persists between sessions
+   - Waitlist history and rotation index maintained across rounds
+   - Player position tracking handles movement and waitlist transitions
+
+5. **GUI Integration**:
+   - Session advancement logic moved from GUI to algorithm files
+   - GUI only triggers advancement, doesn't manage logic
+   - Court ordering UI reflects actual court names (not internal IDs)
+
+### Testing & Validation
+
+**Comprehensive Tests**:
+- test_king_of_court_comprehensive.py: Full 19-player, 6-round validation
+- test_king_of_court_rounds.py: Basic setup and seeding validation
+- test_waitlist_rotation_fix.py: Fair rotation algorithm validation
+- All tests validate movement rules, splitting, and waitlist fairness
+
+**Key Test Scenarios**:
+- Winners move up and split correctly
+- Losers move down and split correctly  
+- Court boundary conditions (kings/bottom courts)
+- Fair waitlist rotation after everyone waits once
+- Partnership history minimization when possible
+- Court ordering and persistence
+
+### Recent Fixes (Dec 30, 2024)
+
+**Critical Waitlist Rotation Fix**:
+- Fixed bug where same players kept waiting instead of fair rotation
+- Root cause: Algorithm wasn't detecting when to switch to fair rotation mode
+- Solution: Check if all players are in waitlist history OR everyone has waited
+- Ensures fair rotation activates properly after initial phase
+- Waitlist rotation now works correctly for long sessions
+
+**GUI Logic Refactoring**:
+- Moved session advancement logic from GUI to algorithm files
+- Improved testability and maintainability
+- GUI now only triggers advancement, doesn't manage complex logic
+
+The King of Court algorithm now provides fair, predictable gameplay with proper team movement and balanced wait times for all participants.
+
 ## COMPETITIVE VARIETY ALGORITHM (python/competitive_variety.py)
 
 ### Core Purpose
@@ -696,8 +976,11 @@ This module implements a rounds-based King of the Court algorithm where courts d
 **Waitlist Management**
 - **Primary Rule**: Nobody waits twice until everyone has waited once
 - **Waitlist Priority**: Choose waiters from middle courts first, then bottom court, then kings court (only if everyone else waited)
-- **Waitlist History Tracking**: Maintains ordered list of who has waited (oldest to newest)
-- **Fair Rotation**: After everyone waits once, select players who waited longest ago for next wait
+- **Waitlist History Tracking**: Maintains immutable ordered list of who has waited (oldest to newest)
+- **Fair Rotation**: After everyone waits once, cycles through waitlist history using rotation index
+- **Rotation Logic**: Uses `king_of_court_waitlist_rotation_index` to track current position in history
+- **No Re-ordering**: Players are never moved within history - only added when waiting for first time
+- **Guaranteed Fairness**: Ensures maximum time between waits for each player via cyclical selection
 - **Capacity Management**: With C courts and 4 players per court, exactly max(0, total_players - C*4) players wait
 
 **Initial Seeding Options**
@@ -731,9 +1014,11 @@ This module implements a rounds-based King of the Court algorithm where courts d
 
 **select_players_for_fair_rotation(session, all_active_players, excess_players) → List[str]**
 - Implements fair rotation after everyone has waited once
-- Selects players who waited longest ago (first in waitlist history)
-- Ensures maximum time between waits for each player
-- Prevents players from getting back-to-back waits
+- Uses `king_of_court_waitlist_rotation_index` to cycle through waitlist history
+- Selects consecutive players from current rotation position, wrapping around list
+- Advances rotation index to ensure next selection starts from different position  
+- **FIXED**: Never re-orders history - players maintain original waitlist position
+- **FIXED**: Guarantees truly fair distribution with maximum time between individual waits
 
 **enforce_king_of_court_team_splitting(players: List[str], session: Session) → Tuple[List[str], List[str]]**
 - Enforces team splitting rule: previous teammates must be on opposite teams
@@ -751,7 +1036,8 @@ This module implements a rounds-based King of the Court algorithm where courts d
 - `session.king_of_court_round_number`: Current round number
 - `session.king_of_court_player_positions`: Dict[player_id, court_number] tracking where players last played
 - `session.king_of_court_wait_counts`: Dict[player_id, int] tracking how many times each player has waited
-- `session.king_of_court_waitlist_history`: List[player_id] ordered history of who has waited (oldest first)
+- `session.king_of_court_waitlist_history`: List[player_id] immutable ordered history of who has waited (oldest first)
+- `session.king_of_court_waitlist_rotation_index`: int tracking current position for fair rotation through history
 
 **Configuration**
 - `session.config.king_of_court_config.court_ordering`: List[int] defining court hierarchy
@@ -761,8 +1047,9 @@ This module implements a rounds-based King of the Court algorithm where courts d
 The session export includes King of Court specific information:
 - Current round number
 - Court ordering (Kings to Bottom)
-- Wait counts for all players
+- Wait counts for all players (ordered by waitlist history)
 - Waitlist history showing progression of who has waited
+- Current rotation index for debugging waitlist fairness
 
 ### GUI Integration
 - **Active Session**: Shows current matches, waitlist, and round number
@@ -779,8 +1066,21 @@ Comprehensive test suite validates:
 - Court ordering is respected
 - Team splitting occurs correctly
 - Waitlist history tracking works properly
+- Fair rotation cycles correctly through history without bias
 
-Key test: `test_king_of_court_comprehensive.py` runs 6 rounds with 19 players, 4 courts and validates all rules.
+Key tests: 
+- `test_king_of_court_comprehensive.py` runs 6 rounds with 19 players, 4 courts and validates all rules
+- `test_waitlist_rotation_fix.py` validates fair rotation logic and ensures proper cycling
+
+### Recent Fixes & Improvements
+
+**Waitlist Rotation Bug Fix (December 2025)**
+- **Problem**: Players were getting stuck on waitlist after everyone waited once, leading to unfair distribution
+- **Root Cause**: Waitlist history was being re-ordered when players waited again, causing rotation logic to malfunction
+- **Solution**: Made waitlist history immutable - players never change position once added
+- **Implementation**: Added `king_of_court_waitlist_rotation_index` to track cycling through fixed history
+- **Result**: Guaranteed fair rotation with maximum time between waits for each player
+- **Validation**: `test_waitlist_rotation_fix.py` confirms rotation index advances correctly and produces fair distribution
 
 ### Known Limitations & Design Decisions
 
