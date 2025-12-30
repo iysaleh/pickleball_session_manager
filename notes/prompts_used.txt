@@ -638,6 +638,8 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
 * It is probably better the algorithm works by first moving all the players that played in the previous round and splitting them per the king of the court algorithm, and then doing a swap action with waitlist players AFTER the king of the court algorithm has been applied.
 * Do not apply competetive-variety specific constraints to king of the court, they are different algorithms!!!!
 * Bug -- after everybody has waited exactly 1 time, the waitlist becomes stuck and people that are on it never get off again. See @pickleball_session_20251230_142508.txt for a real example, Ibraheem Greg and Brock are on the waitlist for 3 rounds in a row at that point... Instead, we need to continue the logic so that once everybody has waited once, we start swapping out players for the waitlist starting from the first people that waited to the last people that waited (that way there is a long time between waits, and people don't get back to back waits) -- to achieve this, we will need to keep track of a waitlist history. Update the export session logic to also include the waitlist history.
+* Court Order updates are not persistent between sessions, update Court Order so that any user specific changes to court order in king of the court persist between sessions, the same way that Court Name Labels persist between sessions.
+* "Export Session" needs to also update the waitlist history in king of the court matches.
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts

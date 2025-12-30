@@ -3458,7 +3458,13 @@ class SessionWindow(QMainWindow):
                 
                 # Court ordering
                 court_ordering = getattr(self.session.config, 'court_ordering', list(range(1, self.session.config.courts + 1)))
-                court_ordering_names = [get_court_name(self.session, court_num) for court_num in court_ordering]
+                from python.session_persistence import get_saved_court_name
+                court_ordering_names = []
+                for court_num in court_ordering:
+                    court_name = get_saved_court_name(court_num, self.session.config.courts)
+                    if not court_name:
+                        court_name = f"Court {court_num}"
+                    court_ordering_names.append(court_name)
                 export_lines.append(f"Court Order (Kings to Bottom): {' > '.join(court_ordering_names)}")
                 
                 # Wait counts
@@ -3471,7 +3477,7 @@ class SessionWindow(QMainWindow):
                             export_lines.append(f"  {player.name}: {count} times")
                 
                 # Waitlist history
-                if hasattr(self.session, 'king_of_court_waitlist_history') and self.session.king_of_court_waitlist_history:
+                if self.session.king_of_court_waitlist_history:
                     export_lines.append("")
                     export_lines.append("Waitlist History (oldest to newest):")
                     history_names = [get_player_name(self.session, pid) for pid in self.session.king_of_court_waitlist_history]
@@ -4802,14 +4808,11 @@ class CourtOrderingDialog(QDialog):
         
         # Populate list with current ordering using actual court names
         for court_num in current_ordering:
-            # Get the actual court name from the parent session window
-            court_name = f"Court {court_num}"  # Default
-            if hasattr(self.parent(), 'court_widgets') and court_num in self.parent().court_widgets:
-                court_widget = self.parent().court_widgets[court_num]
-                if hasattr(court_widget, 'custom_title') and court_widget.custom_title:
-                    court_name = court_widget.custom_title
-                elif hasattr(court_widget, 'title') and hasattr(court_widget.title, 'text'):
-                    court_name = court_widget.title.text()
+            # Get the actual court name using the same method as CourtWidget
+            from python.session_persistence import get_saved_court_name
+            court_name = get_saved_court_name(court_num, self.session.config.courts)
+            if not court_name:
+                court_name = f"Court {court_num}"
             
             item = QListWidgetItem(court_name)
             item.setData(Qt.ItemDataRole.UserRole, court_num)
@@ -4842,14 +4845,11 @@ class CourtOrderingDialog(QDialog):
         """Reset court ordering to default (Court 1 = Kings, Court N = Bottom)"""
         self.court_list.clear()
         for court_num in range(1, self.session.config.courts + 1):
-            # Get the actual court name from the parent session window
-            court_name = f"Court {court_num}"  # Default
-            if hasattr(self.parent(), 'court_widgets') and court_num in self.parent().court_widgets:
-                court_widget = self.parent().court_widgets[court_num]
-                if hasattr(court_widget, 'custom_title') and court_widget.custom_title:
-                    court_name = court_widget.custom_title
-                elif hasattr(court_widget, 'title') and hasattr(court_widget.title, 'text'):
-                    court_name = court_widget.title.text()
+            # Get the actual court name using the same method as CourtWidget
+            from python.session_persistence import get_saved_court_name
+            court_name = get_saved_court_name(court_num, self.session.config.courts)
+            if not court_name:
+                court_name = f"Court {court_num}"
                     
             item = QListWidgetItem(court_name)
             item.setData(Qt.ItemDataRole.UserRole, court_num)

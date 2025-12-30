@@ -73,8 +73,37 @@ def get_court_ordering(session: Session) -> List[int]:
     if session.config.king_of_court_config and session.config.king_of_court_config.court_ordering:
         return session.config.king_of_court_config.court_ordering
     else:
-        # Default ordering: Court 1 = kings, Court N = bottom
-        return list(range(1, session.config.courts + 1))
+        # Try to load from persistent storage first
+        from .session_persistence import load_court_ordering
+        saved_ordering = load_court_ordering(session.config.courts)
+        
+        if saved_ordering:
+            # Update the session config with loaded ordering
+            if session.config.king_of_court_config:
+                session.config.king_of_court_config.court_ordering = saved_ordering
+            else:
+                koc_config = KingOfCourtConfig(court_ordering=saved_ordering)
+                # Need to update the session config properly
+                from .pickleball_types import SessionConfig
+                new_config = SessionConfig(
+                    mode=session.config.mode,
+                    session_type=session.config.session_type,
+                    players=session.config.players,
+                    courts=session.config.courts,
+                    banned_pairs=session.config.banned_pairs,
+                    locked_teams=session.config.locked_teams,
+                    first_bye_players=session.config.first_bye_players,
+                    court_sliding_mode=getattr(session.config, 'court_sliding_mode', False),
+                    randomize_player_order=session.config.randomize_player_order,
+                    advanced_config=getattr(session.config, 'advanced_config', None),
+                    pre_seeded_ratings=getattr(session.config, 'pre_seeded_ratings', {}),
+                    king_of_court_config=koc_config
+                )
+                session.config = new_config
+            return saved_ordering
+        else:
+            # Use default ordering: Court 1 = Kings, Court N = Bottom
+            return list(range(1, session.config.courts + 1))
 
 
 def initialize_king_of_court_session(session: Session) -> Session:
@@ -732,5 +761,9 @@ def set_court_ordering(session: Session, court_ordering: List[int]) -> Session:
         king_of_court_config=new_koc_config
     )
     session.config = new_config
+    
+    # Save to persistent storage
+    from .session_persistence import save_court_ordering
+    save_court_ordering(court_ordering, session.config.courts)
     
     return session

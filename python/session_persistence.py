@@ -15,6 +15,7 @@ SESSIONS_DIR = Path.home() / ".pickleball"
 LAST_SESSION_FILE = SESSIONS_DIR / "last_session.json"
 PLAYER_HISTORY_FILE = SESSIONS_DIR / "player_history.json"
 COURT_NAMES_FILE = SESSIONS_DIR / "court_names.json"
+COURT_ORDERING_FILE = SESSIONS_DIR / "court_ordering.json"
 
 
 def ensure_session_dir():
@@ -682,3 +683,60 @@ def save_single_court_name(court_number: int, custom_name: Optional[str], num_co
     
     # Save back to file
     return save_court_names(court_names, num_courts)
+
+
+def save_court_ordering(court_ordering: List[int], num_courts: int) -> bool:
+    """
+    Save court ordering to persistent storage for King of Court mode.
+    
+    Args:
+        court_ordering: List of court numbers in order from kings court to bottom court
+        num_courts: Total number of courts in session
+    
+    Returns:
+        True if saved successfully, False otherwise
+    """
+    ensure_session_dir()
+    
+    ordering_data = {
+        "num_courts": num_courts,
+        "court_ordering": court_ordering,
+        "saved_at": now().isoformat()
+    }
+    
+    try:
+        with open(COURT_ORDERING_FILE, 'w') as f:
+            json.dump(ordering_data, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"Error saving court ordering: {e}")
+        return False
+
+
+def load_court_ordering(num_courts: int) -> Optional[List[int]]:
+    """
+    Load court ordering from persistent storage for King of Court mode.
+    
+    Args:
+        num_courts: Number of courts in current session
+        
+    Returns:
+        List of court numbers in order from kings to bottom, 
+        or None if no saved ordering or court count mismatch.
+    """
+    if not COURT_ORDERING_FILE.exists():
+        return None
+    
+    try:
+        with open(COURT_ORDERING_FILE, 'r') as f:
+            data = json.load(f)
+        
+        # Only load if the number of courts matches
+        if data.get("num_courts") == num_courts:
+            return data.get("court_ordering")
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"Error loading court ordering: {e}")
+        return None

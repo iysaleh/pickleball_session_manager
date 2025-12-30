@@ -285,3 +285,6 @@ test_deterministic_waitlist:
 
 test_deterministic_waitlist_v2:
 	python test_deterministic_waitlist_v2.py
+
+test_court_ordering_persistence:
+	python test_court_ordering_persistence.py
