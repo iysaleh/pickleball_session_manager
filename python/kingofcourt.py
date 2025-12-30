@@ -113,6 +113,9 @@ def initialize_king_of_court_session(session: Session) -> Session:
     court_ordering = get_court_ordering(session)
     seed_players_across_courts(session, available_players, court_ordering, koc_config.seeding_option)
     
+    # Mark that the first round has been initialized
+    session.king_of_court_round_number = 1
+    
     return session
 
 
@@ -148,11 +151,21 @@ def seed_players_across_courts(session: Session, players: List[Player],
     
     # Sort players based on seeding option
     if seeding == 'highest_to_lowest':
-        # Sort by rating (highest first)
-        players.sort(key=lambda p: calculate_player_rating(session.player_stats.get(p.id, PlayerStats(p.id))), reverse=True)
+        # Sort by rating (highest first) - use pre-seeded skill rating if available
+        def get_rating(player):
+            if player.skill_rating is not None and session.config.pre_seeded_ratings:
+                return player.skill_rating
+            else:
+                return calculate_player_rating(session.player_stats.get(player.id, PlayerStats(player.id)))
+        players.sort(key=get_rating, reverse=True)
     elif seeding == 'lowest_to_highest':
-        # Sort by rating (lowest first)
-        players.sort(key=lambda p: calculate_player_rating(session.player_stats.get(p.id, PlayerStats(p.id))))
+        # Sort by rating (lowest first) - use pre-seeded skill rating if available  
+        def get_rating(player):
+            if player.skill_rating is not None and session.config.pre_seeded_ratings:
+                return player.skill_rating
+            else:
+                return calculate_player_rating(session.player_stats.get(player.id, PlayerStats(player.id)))
+        players.sort(key=get_rating)
     else:  # random
         import random
         random.shuffle(players)
@@ -334,107 +347,155 @@ def create_next_round_matches(session: Session, court_ordering: List[int],
                             court_losers: Dict[int, List[str]], 
                             players_per_court: int):
     """Create matches for the next round based on winners and losers"""
-    new_court_assignments = {}  # court_number -> [player_ids]
+    
+    # KING OF COURT CORE ALGORITHM:
+    # 1. All winners split and move up one court (or stay if at kings court)
+    # 2. All losers split and move down one court (or stay if at bottom court)  
+    # 3. New teams are randomly formed from players now at each court level
+    
+    # Collect all individual players and their target court levels
+    player_movements = {}  # player_id -> target_court_number
     
     for i, court_num in enumerate(court_ordering):
         if court_num in court_winners and court_num in court_losers:
-            winners = court_winners[court_num]
+            winners = court_winners[court_num] 
             losers = court_losers[court_num]
             
-            # Update player positions
-            for player_id in winners:
-                session.king_of_court_player_positions[player_id] = court_num
-            for player_id in losers:
-                session.king_of_court_player_positions[player_id] = court_num
-            
-            # Move winners up a court (unless at top)
-            if i > 0:  # Not the kings court
+            # INDIVIDUAL WINNERS: Move up one court (or stay if at kings court)
+            if i > 0:  # Not the kings court - winners move up
                 target_court = court_ordering[i - 1]
-                if target_court not in new_court_assignments:
-                    new_court_assignments[target_court] = []
-                new_court_assignments[target_court].extend(winners)
+                for winner_id in winners:
+                    player_movements[winner_id] = target_court
+                    session.king_of_court_player_positions[winner_id] = target_court
             else:  # Kings court - winners stay
-                if court_num not in new_court_assignments:
-                    new_court_assignments[court_num] = []
-                new_court_assignments[court_num].extend(winners)
+                for winner_id in winners:
+                    player_movements[winner_id] = court_num
+                    session.king_of_court_player_positions[winner_id] = court_num
             
-            # Move losers down a court (unless at bottom)
-            if i < len(court_ordering) - 1:  # Not the bottom court
+            # INDIVIDUAL LOSERS: Move down one court (or stay if at bottom court)
+            if i < len(court_ordering) - 1:  # Not the bottom court - losers move down
                 target_court = court_ordering[i + 1]
-                if target_court not in new_court_assignments:
-                    new_court_assignments[target_court] = []
-                new_court_assignments[target_court].extend(losers)
+                for loser_id in losers:
+                    player_movements[loser_id] = target_court
+                    session.king_of_court_player_positions[loser_id] = target_court
             else:  # Bottom court - losers stay
-                if court_num not in new_court_assignments:
-                    new_court_assignments[court_num] = []
-                new_court_assignments[court_num].extend(losers)
+                for loser_id in losers:
+                    player_movements[loser_id] = court_num
+                    session.king_of_court_player_positions[loser_id] = court_num
+    
+    # Group players by their target court
+    new_court_assignments = {}  # court_number -> [player_ids]
+    for player_id, target_court in player_movements.items():
+        if target_court not in new_court_assignments:
+            new_court_assignments[target_court] = []
+        new_court_assignments[target_court].append(player_id)
     
     # Handle waitlist integration
     handle_waitlist_for_round(session, new_court_assignments, court_ordering, players_per_court)
     
-    # Create new matches
+    # Create new matches with randomized teams (winners and losers are now split)
     create_matches_from_assignments(session, new_court_assignments, players_per_court)
 
 
 def handle_waitlist_for_round(session: Session, new_court_assignments: Dict[int, List[str]], 
                             court_ordering: List[int], players_per_court: int):
     """Handle waitlist logic for the new round"""
-    # Count current players on courts
-    total_court_players = sum(len(players) for players in new_court_assignments.values())
     total_court_capacity = len(court_ordering) * players_per_court
+    total_active_players = len(session.active_players)
     
-    # Bring players from waitlist if there's room
-    while len(session.waiting_players) > 0 and total_court_players < total_court_capacity:
-        # Find a court that needs players
-        for court_num in court_ordering:
-            if court_num not in new_court_assignments:
-                new_court_assignments[court_num] = []
+    if total_active_players <= total_court_capacity:
+        # Everyone can play - bring everyone from waitlist
+        while session.waiting_players:
+            player_id = session.waiting_players.pop(0)
+            # Find a court that needs players
+            for court_num in court_ordering:
+                if court_num not in new_court_assignments:
+                    new_court_assignments[court_num] = []
+                if len(new_court_assignments[court_num]) < players_per_court:
+                    new_court_assignments[court_num].append(player_id)
+                    session.king_of_court_player_positions[player_id] = court_num
+                    break
+        return
+    
+    # We have more players than court spots - need waitlist rotation
+    excess_players = total_active_players - total_court_capacity
+    
+    # Get all players currently assigned to courts
+    court_players = []
+    for court_num, players in new_court_assignments.items():
+        court_players.extend(players)
+    
+    # KING OF COURT WAITLIST RULE: Nobody waits twice until everyone has waited once
+    
+    # Find who should wait this round
+    all_players = court_players + session.waiting_players
+    
+    # Check wait count distribution
+    wait_counts = {}
+    for player_id in all_players:
+        count = session.king_of_court_wait_counts.get(player_id, 0)
+        if count not in wait_counts:
+            wait_counts[count] = []
+        wait_counts[count].append(player_id)
+    
+    # Apply King of Court rule
+    if 0 in wait_counts and len(wait_counts[0]) > 0:
+        # There are players who have never waited - they should be prioritized for waiting
+        never_waited = wait_counts[0]
+        
+        if len(never_waited) >= excess_players:
+            # Choose from never-waited players, prefer middle court players for fairness
+            middle_courts = court_ordering[1:-1] if len(court_ordering) > 2 else []
+            courts_to_check = middle_courts + [court_ordering[-1]]
             
-            if len(new_court_assignments[court_num]) < players_per_court:
-                # Add a waiting player
-                player_id = session.waiting_players.pop(0)
+            candidates_by_court = []
+            for court_num in courts_to_check:
+                if court_num in new_court_assignments:
+                    court_candidates = [p for p in new_court_assignments[court_num] if p in never_waited]
+                    candidates_by_court.extend(court_candidates)
+            
+            # If not enough middle court candidates, add others
+            if len(candidates_by_court) < excess_players:
+                remaining_candidates = [p for p in never_waited if p not in candidates_by_court]
+                candidates_by_court.extend(remaining_candidates)
+            
+            should_wait = candidates_by_court[:excess_players]
+        else:
+            # Not enough never-waited players - take all of them plus some who waited once
+            should_wait = never_waited.copy()
+            remaining_needed = excess_players - len(should_wait)
+            
+            # Take from players who waited once (if any)
+            if 1 in wait_counts:
+                should_wait.extend(wait_counts[1][:remaining_needed])
+    else:
+        # Everyone has waited at least once - use normal rotation
+        # Prefer those who have waited the most
+        max_wait_count = max(wait_counts.keys())
+        should_wait = wait_counts[max_wait_count][:excess_players]
+    
+    should_play = [player_id for player_id in all_players if player_id not in should_wait]
+    
+    # Update waitlist
+    session.waiting_players = should_wait
+    
+    # Update wait counts for those waiting
+    for player_id in should_wait:
+        session.king_of_court_wait_counts[player_id] = session.king_of_court_wait_counts.get(player_id, 0) + 1
+    
+    # Rebuild court assignments with only players who should play
+    new_court_assignments.clear()
+    
+    # Distribute playing players across courts
+    player_index = 0
+    for court_num in court_ordering:
+        new_court_assignments[court_num] = []
+        for _ in range(players_per_court):
+            if player_index < len(should_play):
+                player_id = should_play[player_index]
                 new_court_assignments[court_num].append(player_id)
                 session.king_of_court_player_positions[player_id] = court_num
-                total_court_players += 1
-                break
-    
-    # If courts are full, move players to waitlist from middle courts first
-    if total_court_players > total_court_capacity:
-        # Prioritize middle courts for sending to waitlist
-        middle_courts = court_ordering[1:-1] if len(court_ordering) > 2 else []
-        courts_to_check = middle_courts + [court_ordering[-1]]  # Middle first, then bottom
-        
-        excess_players = total_court_players - total_court_capacity
-        players_to_wait = []
-        
-        for court_num in courts_to_check:
-            if court_num in new_court_assignments and len(new_court_assignments[court_num]) > 0:
-                while excess_players > 0 and len(new_court_assignments[court_num]) > 0:
-                    # Check if this player has waited before
-                    court_players = new_court_assignments[court_num]
-                    
-                    # Find player who has waited least
-                    min_wait_count = min(session.king_of_court_wait_counts.get(p, 0) for p in court_players)
-                    
-                    # Only send to waitlist if everyone else has waited at least once
-                    global_min_wait = min(session.king_of_court_wait_counts.get(p, 0) 
-                                        for p in session.active_players if p not in session.waiting_players)
-                    
-                    if min_wait_count <= global_min_wait:
-                        # Find a player with minimum wait count
-                        for player_id in court_players:
-                            if session.king_of_court_wait_counts.get(player_id, 0) == min_wait_count:
-                                new_court_assignments[court_num].remove(player_id)
-                                players_to_wait.append(player_id)
-                                session.king_of_court_wait_counts[player_id] = session.king_of_court_wait_counts.get(player_id, 0) + 1
-                                excess_players -= 1
-                                break
-                        break
-                    else:
-                        break
-        
-        # Add to waitlist
-        session.waiting_players.extend(players_to_wait)
+                player_index += 1
 
 
 def create_matches_from_assignments(session: Session, court_assignments: Dict[int, List[str]], 
@@ -442,17 +503,13 @@ def create_matches_from_assignments(session: Session, court_assignments: Dict[in
     """Create new matches from court assignments"""
     for court_num, players in court_assignments.items():
         if len(players) == players_per_court:
-            # Form teams avoiding recent partnerships
+            # KING OF COURT RULE: Always randomize teams to ensure winners split
             if players_per_court == 4:
-                team_assignment = can_form_teams_avoiding_repetition(players, session)
-                if team_assignment:
-                    team1, team2 = team_assignment
-                else:
-                    # Fallback to random assignment
-                    import random
-                    random.shuffle(players)
-                    team1 = players[:2]
-                    team2 = players[2:]
+                import random
+                shuffled_players = players.copy()
+                random.shuffle(shuffled_players)
+                team1 = shuffled_players[:2]
+                team2 = shuffled_players[2:]
             else:  # singles
                 team1 = [players[0]]
                 team2 = [players[1]]
@@ -475,7 +532,7 @@ def evaluate_king_of_court_session(session: Session) -> Session:
     if session.config.mode != 'king-of-court':
         return session
     
-    # Initialize if first time
+    # Initialize if first time (round 0 means not yet initialized)
     if session.king_of_court_round_number == 0:
         return initialize_king_of_court_session(session)
     

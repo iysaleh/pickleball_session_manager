@@ -43,7 +43,7 @@ def test_round_advancement():
     
     # Verify initial setup
     assert len(session.matches) == 2, "Should have 2 initial matches"
-    assert session.king_of_court_round_number == 0, "Should start at round 0"
+    assert session.king_of_court_round_number == 1, "Should start at round 1 after initialization"
     
     # Find the matches for each court
     court_1_match = None
@@ -70,19 +70,14 @@ def test_round_advancement():
     # Try to advance round
     session = advance_round(session)
     
-    print(f"DEBUG test: All matches in session:")
-    for i, match in enumerate(session.matches):
-        print(f"  Match {i}: Court {match.court_number}, Status: {match.status}, Teams: {match.team1} vs {match.team2}")
-    
     # Should have new matches
     new_matches = [m for m in session.matches if m.status == 'waiting']
-    print(f"DEBUG test: Found {len(new_matches)} waiting matches")
     assert len(new_matches) == 2, f"Expected 2 new matches after advancement, got {len(new_matches)}"
     
     # Round number should increment
-    assert session.king_of_court_round_number == 1, f"Expected round 1, got {session.king_of_court_round_number}"
+    assert session.king_of_court_round_number == 2, f"Expected round 2, got {session.king_of_court_round_number}"
     
-    print(f"Round 1 created successfully!")
+    print(f"Round 2 created successfully!")
     print(f"✓ Round advancement test passed")
 
 

@@ -446,9 +446,9 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
             print(f"Warning: Could not update waitlist predictions: {e}")
             session.advanced_config.waitlist_predictions = []
     
-    # Handle Court Sliding
+    # Handle Court Sliding (skip for King of Court mode where court positions are meaningful)
     slides = []
-    if session.config.court_sliding_mode != 'None':
+    if session.config.court_sliding_mode != 'None' and session.config.mode != 'king-of-court':
         finished_court = match.court_number
         
         # Calculate row parity (assuming 2 columns per row)

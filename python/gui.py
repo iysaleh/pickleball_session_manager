@@ -861,12 +861,27 @@ class SetupDialog(QDialog):
         is_competitive_variety = mode_text == "Competitive Variety"
         is_king_of_court = mode_text == "King of the Court"
         
-        self.pre_seed_checkbox.setVisible(is_competitive_variety)
+        self.pre_seed_checkbox.setVisible(is_competitive_variety or is_king_of_court)
         self.koc_seeding_combo.setVisible(is_king_of_court)
         
+        # Connect KoC seeding change to update pre-seed visibility
+        if is_king_of_court:
+            self.koc_seeding_combo.currentTextChanged.connect(self.on_koc_seeding_changed)
+            self.on_koc_seeding_changed(self.koc_seeding_combo.currentText())  # Update immediately
+        
         # If switching away from competitive variety, uncheck pre-seed
-        if not is_competitive_variety:
+        if not is_competitive_variety and not is_king_of_court:
             self.pre_seed_checkbox.setChecked(False)
+    
+    def on_koc_seeding_changed(self, seeding_text):
+        """Handle King of Court seeding option change"""
+        # Show pre-seed checkbox for seeding options that need skill ratings
+        needs_ratings = seeding_text in ["Highest to Lowest", "Lowest to Highest"]
+        self.pre_seed_checkbox.setVisible(needs_ratings)
+        
+        if needs_ratings and not self.pre_seed_checkbox.isChecked():
+            # Auto-enable pre-seeding for rating-based seeding
+            self.pre_seed_checkbox.setChecked(True)
 
     def on_pre_seed_changed(self, state):
         """Handle pre-seed checkbox change"""
@@ -1444,9 +1459,17 @@ class CourtDisplayWidget(QWidget):
                     if hasattr(parent, 'animate_court_sliding'):
                         parent.animate_court_sliding(slides)
                 
+                # Evaluate and create new matches (important for King of Court round advancement)
+                evaluate_and_create_matches(self.session)
+                
                 # Save session after completing a match
                 from python.session_persistence import save_session
                 save_session(self.session)
+                
+                # Refresh parent display to show new matches
+                parent = self.window()
+                if hasattr(parent, 'refresh_display'):
+                    parent.refresh_display()
             else:
                 QMessageBox.warning(self, "Error", "Failed to complete match")
     
@@ -1465,9 +1488,17 @@ class CourtDisplayWidget(QWidget):
         
         if reply == QMessageBox.StandardButton.Yes:
             if forfeit_match(self.session, self.current_match.id):
+                # Evaluate and create new matches (important for King of Court round advancement)
+                evaluate_and_create_matches(self.session)
+                
                 # Save session after forfeiting a match
                 from python.session_persistence import save_session
                 save_session(self.session)
+                
+                # Refresh parent display to show new matches
+                parent = self.window()
+                if hasattr(parent, 'refresh_display'):
+                    parent.refresh_display()
             else:
                 QMessageBox.warning(self, "Error", "Failed to forfeit match")
     
@@ -1987,8 +2018,8 @@ class SessionWindow(QMainWindow):
                 self.competitive_variety_slider.show()
                 
                 # Re-evaluate matches immediately
-                from python.queue_manager import populate_empty_courts
-                populate_empty_courts(self.session)
+                from python.session import evaluate_and_create_matches
+                evaluate_and_create_matches(self.session)
                 self.refresh_display()
 
     def init_variety_slider(self, parent_layout: QHBoxLayout):
@@ -2100,8 +2131,8 @@ class SessionWindow(QMainWindow):
                 self.variety_slider.show()
                 
                 # Re-evaluate matches immediately
-                from python.queue_manager import populate_empty_courts
-                populate_empty_courts(self.session)
+                from python.session import evaluate_and_create_matches
+                evaluate_and_create_matches(self.session)
                 self.refresh_display()
     
     def show_variety_custom_dialog(self):
@@ -2179,8 +2210,8 @@ class SessionWindow(QMainWindow):
             self.variety_value_label.setText("Custom")
             
             # Re-evaluate matches immediately
-            from python.queue_manager import populate_empty_courts
-            populate_empty_courts(self.session)
+            from python.session import evaluate_and_create_matches
+            evaluate_and_create_matches(self.session)
             self.refresh_display()
     
     def handle_variety_reset(self, dialog):
@@ -2205,8 +2236,8 @@ class SessionWindow(QMainWindow):
         self.update_variety_slider_from_settings()
         
         # Re-evaluate matches immediately
-        from python.queue_manager import populate_empty_courts
-        populate_empty_courts(self.session)
+        from python.session import evaluate_and_create_matches
+        evaluate_and_create_matches(self.session)
         self.refresh_display()
 
     def init_adaptive_constraints_slider(self, parent_layout: QHBoxLayout):
@@ -2405,8 +2436,8 @@ class SessionWindow(QMainWindow):
                 self.update_adaptive_constraints_slider()
                 
                 # Re-evaluate matches immediately if there are waiting matches
-                from python.queue_manager import populate_empty_courts
-                populate_empty_courts(self.session)
+                from python.session import evaluate_and_create_matches
+                evaluate_and_create_matches(self.session)
                 self.refresh_display()
             
         except Exception as e:
@@ -2445,8 +2476,8 @@ class SessionWindow(QMainWindow):
             self.update_adaptive_constraints_slider()
             
             # Re-evaluate matches immediately if there are waiting matches
-            from python.queue_manager import populate_empty_courts
-            populate_empty_courts(self.session)
+            from python.session import evaluate_and_create_matches
+            evaluate_and_create_matches(self.session)
             self.refresh_display()
             
         except Exception as e:
@@ -2535,8 +2566,8 @@ class SessionWindow(QMainWindow):
             self.competitive_variety_value_label.setText("Custom")
             
             # Re-evaluate matches immediately
-            from python.queue_manager import populate_empty_courts
-            populate_empty_courts(self.session)
+            from python.session import evaluate_and_create_matches
+            evaluate_and_create_matches(self.session)
             self.refresh_display()
     
     def handle_competitiveness_reset(self, dialog):
@@ -2559,8 +2590,8 @@ class SessionWindow(QMainWindow):
         self.update_slider_from_settings()
         
         # Re-evaluate matches immediately
-        from python.queue_manager import populate_empty_courts
-        populate_empty_courts(self.session)
+        from python.session import evaluate_and_create_matches
+        evaluate_and_create_matches(self.session)
         self.refresh_display()
 
     def re_evaluate_competitive_variety_matches(self):
@@ -2875,12 +2906,12 @@ class SessionWindow(QMainWindow):
         """Refresh court displays"""
         try:
             from python.queue_manager import (
-                populate_empty_courts, get_match_for_court, get_session_summary,
+                get_match_for_court, get_session_summary,
                 get_waiting_players, get_queued_matches_for_display
             )
             from python.utils import start_player_wait_timer, stop_player_wait_timer
             
-            populate_empty_courts(self.session)
+            evaluate_and_create_matches(self.session)
             
             # Update court displays and stop wait timers for players in matches
             players_in_matches = set()
@@ -3636,7 +3667,7 @@ class SessionWindow(QMainWindow):
                     # Regenerate match queue once at the end
                     if players_to_add or players_to_remove:
                         from python.roundrobin import generate_round_robin_queue
-                        from python.queue_manager import populate_empty_courts, get_waiting_players
+                        from python.session import evaluate_and_create_matches, get_waiting_players
                         
                         if self.session.config.mode == 'round-robin':
                             self.session.match_queue = generate_round_robin_queue(
@@ -3665,7 +3696,7 @@ class SessionWindow(QMainWindow):
                                 self.session.match_queue = waiting_matches + other_matches
                         
                         # Populate any empty courts with the newly regenerated queue
-                        populate_empty_courts(self.session)
+                        evaluate_and_create_matches(self.session)
                         self.refresh_display()
                     
                     dialog.accept()
@@ -4674,9 +4705,18 @@ class CourtOrderingDialog(QDialog):
         else:
             current_ordering = list(range(1, self.session.config.courts + 1))
         
-        # Populate list with current ordering
+        # Populate list with current ordering using actual court names
         for court_num in current_ordering:
-            item = QListWidgetItem(f"Court {court_num}")
+            # Get the actual court name from the parent session window
+            court_name = f"Court {court_num}"  # Default
+            if hasattr(self.parent(), 'court_widgets') and court_num in self.parent().court_widgets:
+                court_widget = self.parent().court_widgets[court_num]
+                if hasattr(court_widget, 'custom_title') and court_widget.custom_title:
+                    court_name = court_widget.custom_title
+                elif hasattr(court_widget, 'title') and hasattr(court_widget.title, 'text'):
+                    court_name = court_widget.title.text()
+            
+            item = QListWidgetItem(court_name)
             item.setData(Qt.ItemDataRole.UserRole, court_num)
             self.court_list.addItem(item)
         
@@ -4707,7 +4747,16 @@ class CourtOrderingDialog(QDialog):
         """Reset court ordering to default (Court 1 = Kings, Court N = Bottom)"""
         self.court_list.clear()
         for court_num in range(1, self.session.config.courts + 1):
-            item = QListWidgetItem(f"Court {court_num}")
+            # Get the actual court name from the parent session window
+            court_name = f"Court {court_num}"  # Default
+            if hasattr(self.parent(), 'court_widgets') and court_num in self.parent().court_widgets:
+                court_widget = self.parent().court_widgets[court_num]
+                if hasattr(court_widget, 'custom_title') and court_widget.custom_title:
+                    court_name = court_widget.custom_title
+                elif hasattr(court_widget, 'title') and hasattr(court_widget.title, 'text'):
+                    court_name = court_widget.title.text()
+                    
+            item = QListWidgetItem(court_name)
             item.setData(Qt.ItemDataRole.UserRole, court_num)
             self.court_list.addItem(item)
     

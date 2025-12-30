@@ -415,3 +415,172 @@ Critical test files:
 - test_both_sided_gap.py: tests both-sided gap requirements for pattern prevention
 - test_partner_opponent_partner_prevention.py: social dynamic constraint testing
 - test_roaming_range_preservation.py: verifies roaming range preservation across all adaptive phases
+
+## KING OF THE COURT ALGORITHM (python/kingofcourt.py)
+
+### Core Purpose
+Implements a rounds-based King of the Court system where players move between courts based on match results. Winners advance up the court hierarchy while losers move down, creating a natural skill-based tournament structure.
+
+### Key Features
+
+**Rounds-Based Progression**
+- Courts populate only after ALL current matches complete (no partial round starts)
+- Winners move up one court level (unless already at kings court)
+- Losers move down one court level (unless already at bottom court)  
+- Kings court winners stay and split, bottom court losers stay and split
+- New matches formed by mixing winners/losers from adjacent court levels
+
+**Court Hierarchy System**
+- Configurable court ordering: which court is "kings court" vs "bottom court"
+- Default: Court 1 = Kings Court, Court N = Bottom Court
+- Drag-and-drop court ordering management via GUI dialog
+- Court ordering persists between sessions
+
+**Initial Seeding Options**
+- **Random**: Players randomly distributed across courts
+- **Highest to Lowest**: Top-rated players start on kings court, lowest on bottom court
+- **Lowest to Highest**: Lowest-rated players start on kings court (skill development mode)
+- **Pre-seeded Ratings Required**: Highest/Lowest seeding modes auto-enable skill rating input
+
+**Waitlist Management (Smart Priority)**
+- Waitlist selection prioritizes middle courts first, then bottom court
+- Kings court players only wait after everyone else has waited once
+- Fair rotation: no player waits twice until all players have waited once
+- Returning players placed back in similar court position when possible
+
+**Team Formation (True King of Court Rules)**
+- **Winners Always Split**: Winning teams are automatically split and individual winners move up
+- **Losers Always Split**: Losing teams are automatically split and individual losers move down  
+- **Random Team Formation**: New teams formed by randomly pairing players at each court level
+- **No Partnership Preservation**: Unlike other modes, King of Court always breaks up winning teams
+- **Integrates with existing ban/lock systems**: Still respects banned pairs and locked teams
+
+### Core Functions
+
+**Session Management**
+- `initialize_king_of_court_session()`: Initial player seeding and match creation
+- `evaluate_king_of_court_session()`: Main evaluation loop (called after match completion)
+- `advance_round()`: Processes completed matches and creates next round
+
+**Court Movement Logic**  
+- `create_next_round_matches()`: Handles winner/loser movement between courts
+- `handle_waitlist_for_round()`: Smart waitlist management with court priority
+- `create_matches_from_assignments()`: Forms teams avoiding recent partnerships
+
+**Configuration Management**
+- `get_court_ordering()`: Returns current court hierarchy
+- `set_court_ordering()`: Updates court ordering configuration  
+- `seed_players_across_courts()`: Distributes players based on seeding option
+
+**Match Analysis**
+- `get_matches_from_current_round()`: Identifies matches from same round
+- `can_form_teams_avoiding_repetition()`: Smart team formation with variety
+
+### Integration Points
+
+**Session Creation**
+- Automatic initialization when `mode = 'king-of-court'`
+- Integrates with first bye players (automatically go to waitlist)
+- Compatible with singles/doubles, locked teams, banned pairs
+
+**GUI Integration**
+- Setup dialog: Seeding option dropdown (appears for King of Court mode)
+- Active session: "⚖️ Court Order" button for court hierarchy management
+- Court ordering dialog: drag-and-drop reordering with visual instructions
+
+**Match Completion**
+- Auto-triggers round advancement via `evaluate_and_create_matches()`
+- Disables court sliding (court positions are meaningful in King of Court)
+- Maintains proper court number tracking throughout match lifecycle
+
+### Critical Design Decisions
+
+**Court Sliding Disabled**
+- Court sliding logic disabled for King of Court mode (`session.py` line 451)
+- Prevents court number corruption during match completion
+- Court positions have specific meaning (hierarchy) unlike other game modes
+
+**Round Synchronization** 
+- All courts must finish before next round starts
+- Prevents partial rounds and maintains fair progression
+- Round number tracking via `session.king_of_court_round_number`
+
+**Skill-Based Seeding Integration**
+- Highest/Lowest seeding options automatically enable pre-seeded skill ratings
+- Uses same ELO calculation as Competitive Variety mode
+- GUI automatically shows/hides skill rating inputs based on seeding choice
+
+**Waitlist Priority Algorithm**
+- Middle courts preferred for waitlist (balanced skill mixing)
+- Bottom court next priority (keeps beginners playing)  
+- Kings court last resort (preserves competitive play)
+- Prevents double-waiting until global fairness achieved
+
+### Testing & Validation
+
+**Comprehensive Test Suite**
+- `test_king_of_court_rounds.py`: Core functionality (seeding, court ordering, byes)
+- `test_king_of_court_advancement.py`: Round progression and winner/loser movement
+- All seeding options tested (random, highest-to-lowest, lowest-to-highest)
+- Singles and doubles mode validation
+- Court ordering management verification
+
+**Run King of Court Tests**
+```bash
+make test_king_of_court_rounds
+make test_king_of_court_advancement  
+```
+
+**Critical Bug Fix Applied**
+- Fixed court sliding interference causing match tracking corruption
+- Court numbers now properly maintained throughout match completion
+- Round advancement correctly identifies winners/losers by court position
+
+### Architecture Benefits
+
+**Clean Separation**
+- Pure business logic in `kingofcourt.py`  
+- Session integration in `session.py`
+- GUI components in `gui.py`
+- Reusable configuration types in `pickleball_types.py`
+
+**Extensible Design**
+- Easy to add new seeding algorithms
+- Configurable court hierarchies (any number of courts)
+- Compatible with all existing session features
+- Maintains backward compatibility
+
+**Production Ready**
+- Comprehensive error handling and validation
+- Proper persistence and session restoration
+- Integration with wait time priority system
+- Full GUI support with intuitive controls
+
+### Critical Bug Fixes Applied
+
+**Court Sliding Interference (FIXED)**
+- Disabled court sliding for King of Court mode in `session.py` line 451
+- Court positions have specific hierarchical meaning in King of Court
+- Prevents match tracking corruption during completion
+
+**Round Number Initialization (FIXED)**  
+- `initialize_king_of_court_session()` now sets `king_of_court_round_number = 1`
+- Prevents system from re-initializing after first match completion
+- Ensures proper rounds-based evaluation logic
+
+**GUI Match Creation Bypass (FIXED)**
+- Replaced all direct `populate_empty_courts()` calls with `evaluate_and_create_matches()`
+- GUI events (sliders, buttons) now properly route through game mode logic
+- Prevents immediate match creation that bypasses King of Court rules
+
+**Rounds-Based Behavior Enforced**
+- Matches only created when ALL current matches complete
+- Individual match completion properly waits for round completion  
+- Round advancement follows proper winner/loser movement logic
+
+**King of Court Algorithm Fixed (CRITICAL)**
+- **Individual Player Movement**: Winners and losers now split and move individually, not as intact teams
+- **Correct Court Movement**: Winners move up one court level, losers move down one court level
+- **Team Splitting Enforced**: All winning teams automatically split (core King of Court rule)
+- **Random Team Formation**: New matches formed by randomly pairing players at each court level
+- **Proper Court Hierarchy**: Court ordering correctly determines kings court vs bottom court progression

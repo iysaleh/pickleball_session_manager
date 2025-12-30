@@ -628,6 +628,14 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
 * When all the courts finish, the next round is not being automatically made (courts are stuck at "Waitin for Players".)
 * Since Highest to Lowest and Lowest to Highest configs require skill rating inputs, we need to support that like we do for Competetive Variety with "Pre-seeded Sklil Ratings"
 * Round advancement has a match tracking bug where completed matches from different courts are being stored with the same court number. This prevents proper winner/loser movement between courts. The issue has been identified but deferred since the basic King of Court functionality works perfectly.
+* I just finished a match in @pickleball_session_20251230_111559.txt and immediately court 1 was automatically filled with the next match! That is wrong, we need to have king of the court be round based!!! Only schedule matches after all matches have finished, and use the string moving-up and moving-down logic that king of the court expects!!!
+* Manage Court is using internal name for the ordering which makes it confusing -- the user sees the name on the label in the Active Session GUI. We need to have the court name reflected be the same name that is on the visible label.
+* Look at @pickleball_session_20251230_112402.txt, Kimberly and Leah won a match, and moved up a court, but then stayed together as a team! The King of the Court algorithm is simple, win a game, move up and split, lose a game, move down and split... Also Brock and Sheila won, but then moved down instead of moving up. Assume the role of a staff level export developer and fix the algorithm to properly be a king of the court algorithm!
+* Look at @pickleball_session_20251230_113316.txt , players are splitting after winning together, but they are not moving up in the court ordering, they are staying there. After the first round, Ibraheem stayed on the waitlist, which means he waited twice -- nobody should ever wait more than once in round based king of the court!!!! David & Jeremy lost on court 1, then moved to court 4! They should have moved to Court 2 and split!!! The algorithm is still very much not working as intended!!!
+
+# TODO 
+* Refactor the GUI code so that it doesn't manage session advancement logic itself anywhere -- that is bad organization since the GUI code is hard to test, and we need to be able to test this logic wherever it lives! Court population, session advancement logic, etc should be defined in the algorithm or session files, not in the GUI code.
+
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts

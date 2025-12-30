@@ -51,7 +51,7 @@ def test_king_of_court_basic_setup():
         session = create_session(config)
         
         # Verify initialization
-        assert session.king_of_court_round_number == 0
+        assert session.king_of_court_round_number == 1  # First round is now numbered as 1
         assert len(session.matches) == 2  # Should create matches for 2 courts
         assert len(session.waiting_players) == 0  # 8 players, 2 courts * 4 players = 8 (no waiting)
         
