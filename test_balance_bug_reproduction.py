@@ -11,12 +11,12 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from python.session import Session
-from python.types import SessionConfig, PlayerStats
+from python.pickleball_types import SessionConfig, PlayerStats
 from python.competitive_variety import populate_empty_courts_competitive_variety, score_potential_match
 
 def create_test_session():
     """Create a session that reproduces the balance bug."""
-    from python.types import Player
+    from python.pickleball_types import Player
     from python.session import create_session
     
     # Add players with exact ELOs from the problematic session

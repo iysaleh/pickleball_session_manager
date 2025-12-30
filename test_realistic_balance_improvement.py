@@ -8,7 +8,7 @@ import sys
 sys.path.append('.')
 
 from python.time_manager import initialize_time_manager
-from python.types import Player, SessionConfig, Match
+from python.pickleball_types import Player, SessionConfig, Match
 from python.session import create_session
 from python.competitive_variety import (
     calculate_elo_rating, populate_empty_courts_competitive_variety,

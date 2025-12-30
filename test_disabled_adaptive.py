@@ -7,7 +7,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from python.session import create_session
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.competitive_variety import get_adaptive_constraints, get_adaptive_phase_info
 from python.time_manager import initialize_time_manager
 

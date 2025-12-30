@@ -5,7 +5,7 @@ Test script for pre-seeded ratings feature
 
 import sys
 import random
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session
 from python.competitive_variety import calculate_player_elo_rating, get_adaptive_constraints
 
@@ -66,7 +66,7 @@ def test_pre_seeded_ratings():
     print(f"  Early phase constraints: Partner={constraints_early['partner_repetition']}, Opponent={constraints_early['opponent_repetition']}, Balance={constraints_early['balance_weight']}")
     
     # Simulate some completed matches
-    from python.types import Match
+    from python.pickleball_types import Match
     from python.time_manager import now
     
     # Add 2 completed matches (should trigger adaptive constraints for pre-seeded)

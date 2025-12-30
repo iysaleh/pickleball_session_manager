@@ -11,7 +11,7 @@ that tracks assignments without persisting changes.
 
 from typing import List, Dict, Set, Optional, Tuple, Any
 from dataclasses import dataclass
-from .types import Session, Match, Player
+from .pickleball_types import Session, Match, Player
 from .competitive_variety import populate_empty_courts_competitive_variety
 from .queue_manager import get_waiting_players
 from .session import get_player_name

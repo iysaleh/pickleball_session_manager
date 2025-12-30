@@ -3,7 +3,7 @@
 import sys
 sys.path.insert(0, '.')
 
-from python.types import Session, SessionConfig, Player, PlayerStats, Match
+from python.pickleball_types import Session, SessionConfig, Player, PlayerStats, Match
 from python.inter_court_matching import (
     should_wait_for_more_courts_before_mixing,
     check_bracket_compatibility_for_waitlist,

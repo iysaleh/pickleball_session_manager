@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup
 from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen, QPixmap
 
-from python.types import (
+from python.pickleball_types import (
     Player, Session, SessionConfig, GameMode, SessionType, Match,
     MatchStatus, QueuedMatch
 )

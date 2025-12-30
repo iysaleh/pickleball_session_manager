@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session
 
 try:

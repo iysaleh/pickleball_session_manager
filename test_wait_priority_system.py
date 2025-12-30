@@ -17,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from datetime import datetime, timedelta
 from python.session import Session, create_session
-from python.types import SessionConfig, Player, PlayerStats
+from python.pickleball_types import SessionConfig, Player, PlayerStats
 from python.wait_priority import (
     calculate_wait_priority_info, 
     calculate_relative_wait_priority_infos,

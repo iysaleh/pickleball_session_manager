@@ -7,7 +7,7 @@ import os
 import tempfile
 sys.path.insert(0, os.path.dirname(__file__))
 
-from python.types import Player, Session, SessionConfig, Match
+from python.pickleball_types import Player, Session, SessionConfig, Match
 from python.session import create_session, complete_match
 from datetime import datetime
 

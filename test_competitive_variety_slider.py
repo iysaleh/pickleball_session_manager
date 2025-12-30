@@ -2,7 +2,7 @@
 Test the competitive variety slider UI and match re-evaluation
 """
 import sys
-from python.types import Player, SessionConfig, Match, PlayerStats
+from python.pickleball_types import Player, SessionConfig, Match, PlayerStats
 from python.session import create_session, evaluate_and_create_matches
 from python.competitive_variety import can_play_with_player, get_player_ranking
 

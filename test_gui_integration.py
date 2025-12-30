@@ -4,7 +4,7 @@ Quick test of GUI pre-seeded functionality (without actually running GUI)
 """
 
 import sys
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session
 from python.time_manager import initialize_time_manager
 

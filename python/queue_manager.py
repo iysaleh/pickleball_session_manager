@@ -4,7 +4,7 @@ Match queue management - handles distributing queued matches to courts
 
 from typing import List, Optional, Dict
 from datetime import datetime
-from .types import Session, Match, QueuedMatch, MatchStatus
+from .pickleball_types import Session, Match, QueuedMatch, MatchStatus
 from .utils import generate_id
 from .time_manager import now
 
@@ -193,7 +193,7 @@ def generate_dynamic_matches(session: Session) -> List['QueuedMatch']:
     Avoids excessive repetition by not pairing players who have just played together.
     """
     from python.roundrobin import generate_combinations
-    from .types import QueuedMatch
+    from .pickleball_types import QueuedMatch
     
     # Get players who are waiting (not in active matches)
     waiting_ids = get_waiting_players(session)

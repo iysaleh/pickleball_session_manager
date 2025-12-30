@@ -1,7 +1,7 @@
 """
 Test that moving the competitiveness slider re-evaluates matches
 """
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session, evaluate_and_create_matches
 
 def test_slider_reevaluation_with_relaxed_roaming():

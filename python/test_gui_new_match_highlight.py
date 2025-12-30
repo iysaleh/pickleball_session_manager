@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from PyQt6.QtWidgets import QApplication, QFrame
-from python.types import Player, Session, SessionConfig, GameMode, SessionType, Match, MatchStatus
+from python.pickleball_types import Player, Session, SessionConfig, GameMode, SessionType, Match, MatchStatus
 from python.gui import CourtDisplayWidget
 
 # Initialize QApplication only once

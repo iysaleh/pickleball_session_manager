@@ -6,7 +6,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 
-from python.types import Player, Session, SessionConfig, Match
+from python.pickleball_types import Player, Session, SessionConfig, Match
 from python.session import create_session, create_manual_match, update_match_teams, complete_match
 from python.queue_manager import get_empty_courts, get_waiting_players, get_match_for_court
 from datetime import datetime

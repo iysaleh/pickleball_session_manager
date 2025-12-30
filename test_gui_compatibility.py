@@ -7,7 +7,7 @@ import sys
 sys.path.append('.')
 
 from python.time_manager import initialize_time_manager
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session
 
 def test_gui_compatibility():

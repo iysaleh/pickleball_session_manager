@@ -4,7 +4,7 @@ Session management for pickleball games
 
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
-from .types import (
+from .pickleball_types import (
     Session, SessionConfig, Player, Match, MatchStatus, PlayerStats, 
     QueuedMatch, AdvancedConfig, MatchSnapshot
 )

@@ -1,7 +1,7 @@
 
 import unittest
 from python.roundrobin import generate_round_robin_queue
-from python.types import Player, PlayerStats, QueuedMatch
+from python.pickleball_types import Player, PlayerStats, QueuedMatch
 from python.utils import create_player_stats
 
 class TestRoundRobinStrictness(unittest.TestCase):

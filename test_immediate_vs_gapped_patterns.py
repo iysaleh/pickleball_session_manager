@@ -10,7 +10,7 @@ import sys
 sys.path.append('.')
 
 from python.time_manager import initialize_time_manager
-from python.types import Player, SessionConfig, Match
+from python.pickleball_types import Player, SessionConfig, Match
 from python.session import create_session
 from python.competitive_variety import check_partner_opponent_partner_pattern, apply_adaptive_constraints
 from datetime import datetime

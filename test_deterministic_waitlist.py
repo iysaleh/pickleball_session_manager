@@ -12,7 +12,7 @@ import sys
 sys.path.append('.')
 
 from python.session import create_session
-from python.types import SessionConfig, Player, Match
+from python.pickleball_types import SessionConfig, Player, Match
 from python.deterministic_waitlist import (
     PredictedMatch, WaitlistPrediction, calculate_waitlist_predictions,
     format_prediction_display, get_court_outcome_dependencies

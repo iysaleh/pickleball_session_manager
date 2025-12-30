@@ -13,7 +13,7 @@ Example from bug report:
 """
 
 from python.session import create_session
-from python.types import SessionConfig, Player, PlayerStats
+from python.pickleball_types import SessionConfig, Player, PlayerStats
 from python.competitive_variety import (
     populate_empty_courts_competitive_variety, 
     calculate_elo_rating, 

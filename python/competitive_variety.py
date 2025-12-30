@@ -6,7 +6,7 @@ Key feature: Constraints progressively relax as session advances to prioritize b
 
 from typing import List, Dict, Tuple, Set, Optional
 from datetime import datetime
-from .types import Player, QueuedMatch, Session, Match
+from .pickleball_types import Player, QueuedMatch, Session, Match
 from .time_manager import now
 import math
 from itertools import combinations
@@ -241,7 +241,7 @@ def calculate_player_elo_rating(session: Session, player_id: str) -> float:
     player_stats = session.player_stats.get(player_id)
     if not player_stats:
         # Create a dummy stats object for new players
-        from .types import PlayerStats
+        from .pickleball_types import PlayerStats
         player_stats = PlayerStats(player_id=player_id)
     
     pre_seeded_rating = get_player_pre_seeded_rating(session, player_id)
@@ -325,83 +325,91 @@ def calculate_elo_rating(player_stats, pre_seeded_rating: Optional[float] = None
 
 def create_skill_based_matches_for_pre_seeded(session: Session, available_players: List[str], courts_needed: int) -> List[QueuedMatch]:
     """
-    Create skill-based matches for pre-seeded sessions with deterministic court assignments.
+    Create skill-balanced matches for pre-seeded sessions.
     
-    Pattern: 
-    - Court 1: Use top 4 players → #1,#4 vs #2,#3 
-    - Court 2: Use bottom 4 players → similar pattern
-    - Court 3: Use next top 4 players → #5,#8 vs #6,#7
-    - etc.
-    
-    Respects basic constraints but prioritizes skill-based pattern for first round.
+    Uses a hybrid approach: simplified skill-based sorting with balance-weighted scoring
+    to ensure both good balance and constraint compliance.
     """
     if not session.config.pre_seeded_ratings or len(available_players) < 4:
         return []
     
-    # Sort players by skill rating (highest to lowest)
+    # Get current adaptive constraints
+    constraints = get_adaptive_constraints(session)
+    balance_weight = constraints['balance_weight']
+    
+    # Sort players by their ELO rating (highest to lowest)
     player_ratings = []
     for player_id in available_players:
-        for player in session.config.players:
-            if player.id == player_id and player.skill_rating is not None:
-                player_ratings.append((player_id, player.skill_rating))
-                break
+        rating = calculate_player_elo_rating(session, player_id)
+        player_ratings.append((player_id, rating))
     
-    if not player_ratings:
-        return []
-    
-    # Sort by skill rating (highest first) 
+    # Sort by rating (highest first)
     player_ratings.sort(key=lambda x: x[1], reverse=True)
     sorted_players = [p[0] for p in player_ratings]
-    
-    if len(sorted_players) < 4:
-        return []
     
     matches = []
     players_used = set()
     
-    # Create deterministic skill-based courts
+    # Create balanced matches
     for court_idx in range(courts_needed):
-        # Get currently available players (not yet used)
         available_sorted = [p for p in sorted_players if p not in players_used]
         
         if len(available_sorted) < 4:
             break
         
-        if court_idx % 2 == 0:
-            # Even courts: Use top 4 available players with #1,#4 vs #2,#3 pattern
-            p1, p2, p3, p4 = available_sorted[0], available_sorted[1], available_sorted[2], available_sorted[3]
-            team1 = [p1, p4]  # Best + 4th best
-            team2 = [p2, p3]  # 2nd + 3rd best
-        else:
-            # Odd courts: Use bottom 4 available players with same pattern
-            # Take bottom 4 from available
-            bottom_4 = available_sorted[-4:]
-            p1, p2, p3, p4 = bottom_4[0], bottom_4[1], bottom_4[2], bottom_4[3]
-            team1 = [p1, p4]  
-            team2 = [p2, p3]
+        best_match = None
+        best_score = -float('inf')
         
-        # Basic validation - check for locked teams and banned pairs
-        valid_match = True
+        # Try multiple player combinations, prioritizing balanced teams
+        max_combinations_to_try = min(35, len(available_sorted) // 2)  # Don't try too many
         
-        # Check banned pairs (cannot be on same team)
-        if session.config.banned_pairs:
-            for banned_pair in session.config.banned_pairs:
-                if len(banned_pair) == 2:
-                    if (set(banned_pair).issubset(set(team1)) or set(banned_pair).issubset(set(team2))):
-                        valid_match = False
-                        break
+        from itertools import combinations
+        for four_players in combinations(available_sorted, 4):
+            players_list = list(four_players)
+            
+            # Check if these 4 players can form a valid match
+            if not _can_form_valid_teams(session, players_list, allow_cross_bracket=False):
+                continue
+            
+            # Try all three possible team configurations
+            team_configs = [
+                ([players_list[0], players_list[1]], [players_list[2], players_list[3]]),
+                ([players_list[0], players_list[2]], [players_list[1], players_list[3]]),
+                ([players_list[0], players_list[3]], [players_list[1], players_list[2]])
+            ]
+            
+            for team1, team2 in team_configs:
+                # Check if this team configuration is valid
+                if not _is_team_configuration_valid(session, team1, team2):
+                    continue
+                
+                # Score this match, giving it enhanced balance weight for pre-seeded sessions
+                original_weight = getattr(session, '_effective_adaptive_balance_weight', None)
+                
+                try:
+                    # Use at least 3.0x balance weight for pre-seeded sessions (mid-level priority)
+                    session._effective_adaptive_balance_weight = max(3.0, balance_weight)
+                    score = score_potential_match(session, team1, team2)
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_match = QueuedMatch(team1=list(team1), team2=list(team2))
+                finally:
+                    # Restore original weight
+                    if original_weight is not None:
+                        session._effective_adaptive_balance_weight = original_weight
+                    else:
+                        if hasattr(session, '_effective_adaptive_balance_weight'):
+                            delattr(session, '_effective_adaptive_balance_weight')
+            
+            # Limit combinations tried to avoid performance issues
+            max_combinations_to_try -= 1
+            if max_combinations_to_try <= 0:
+                break
         
-        # Check locked teams (must be on same team if present)
-        if valid_match and session.config.locked_teams:
-            for locked_team in session.config.locked_teams:
-                if len(locked_team) == 2 and set(locked_team).issubset(set(team1 + team2)):
-                    if not (set(locked_team).issubset(set(team1)) or set(locked_team).issubset(set(team2))):
-                        valid_match = False
-                        break
-        
-        if valid_match:
-            matches.append(QueuedMatch(team1=team1, team2=team2))
-            players_used.update(team1 + team2)
+        if best_match:
+            matches.append(best_match)
+            players_used.update(best_match.team1 + best_match.team2)
     
     return matches
 
@@ -895,7 +903,9 @@ def score_potential_match(session: Session, team1: List[str], team2: List[str]) 
     score = 0.0
     
     # Get effective adaptive balance weight (increases as session progresses)
-    balance_weight = getattr(session, '_effective_adaptive_balance_weight', 1.0)
+    # For pre-seeded sessions, use the temporary pre-seed weight if set
+    balance_weight = getattr(session, '_pre_seed_balance_weight', 
+                           getattr(session, '_effective_adaptive_balance_weight', 1.0))
     
     # Calculate team ratings (total, not average, for better balance) using pre-seeded ratings
     team1_rating = sum(calculate_player_elo_rating(session, p) for p in team1)
@@ -1024,6 +1034,26 @@ def _can_form_valid_teams(session: Session, players: List[str], allow_cross_brac
     return False
 
 
+def _is_team_configuration_valid(session: Session, team1: List[str], team2: List[str]) -> bool:
+    """
+    Check if a specific team configuration is valid according to variety constraints.
+    """
+    # Check within-team partnerships
+    if not can_play_with_player(session, team1[0], team1[1], 'partner'):
+        return False
+    
+    if not can_play_with_player(session, team2[0], team2[1], 'partner'):
+        return False
+    
+    # Check cross-team opponents
+    for p1 in team1:
+        for p2 in team2:
+            if not can_play_with_player(session, p1, p2, 'opponent'):
+                return False
+    
+    return True
+
+
 def populate_empty_courts_competitive_variety(session: Session) -> None:
     """
     Populate empty courts using competitive variety matchmaking with adaptive balance weighting.
@@ -1047,7 +1077,7 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
     apply_adaptive_constraints(session)
     
     from .utils import generate_id
-    from .types import Match, PlayerStats, QueuedMatch
+    from .pickleball_types import Match, PlayerStats, QueuedMatch
     
     # Find empty courts
     occupied_courts = set()
@@ -1156,8 +1186,8 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
             # Get available players
             available_players = [p for p in session.active_players if p not in players_in_matches and p not in first_bye_players_set]
             
-            # For pre-seeded sessions in first round, use skill-based court filling
-            if is_first_round and session.config.pre_seeded_ratings and len(available_players) >= 4:
+            # For pre-seeded sessions, ALWAYS use skill-based court filling (not just first round)
+            if session.config.pre_seeded_ratings and len(available_players) >= 4:
                 # Calculate how many courts we can still fill
                 remaining_courts = len(empty_courts) - court_idx
                 skill_matches = create_skill_based_matches_for_pre_seeded(

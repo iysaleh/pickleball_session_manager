@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional, List, Dict
 from pathlib import Path
 from .time_manager import now
-from .types import Player
+from .pickleball_types import Player
 
 # Session files locations
 SESSIONS_DIR = Path.home() / ".pickleball"
@@ -125,7 +125,7 @@ def load_first_bye_players() -> List[str]:
 
 def serialize_session(session) -> Dict:
     """Convert session object to JSON-serializable dictionary"""
-    from python.types import Session, Match
+    from python.pickleball_types import Session, Match
     
     # Serialize matches
     matches_data = []
@@ -218,7 +218,7 @@ def serialize_session(session) -> Dict:
 
 def deserialize_session(data: Dict):
     """Convert JSON-serialized dictionary back to session object"""
-    from python.types import Session, SessionConfig, Player, Match, PlayerStats, QueuedMatch
+    from python.pickleball_types import Session, SessionConfig, Player, Match, PlayerStats, QueuedMatch
     from python.utils import generate_id
     
     # Reconstruct config
@@ -300,7 +300,7 @@ def deserialize_session(data: Dict):
     
 def deserialize_session(data: Dict):
     """Convert JSON-serialized dictionary back to session object"""
-    from python.types import Session, SessionConfig, Player, Match, PlayerStats, QueuedMatch, MatchSnapshot
+    from python.pickleball_types import Session, SessionConfig, Player, Match, PlayerStats, QueuedMatch, MatchSnapshot
     from python.utils import generate_id
     
     # Reconstruct config

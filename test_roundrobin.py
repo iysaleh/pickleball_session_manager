@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import unittest
 from datetime import datetime
-from python.types import (
+from python.pickleball_types import (
     Player, Session, SessionConfig, GameMode, SessionType,
     Match, MatchStatus, PlayerStats, QueuedMatch
 )

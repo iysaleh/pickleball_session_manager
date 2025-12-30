@@ -1,7 +1,7 @@
 
 import unittest
 from python.session import create_session, forfeit_match
-from python.types import SessionConfig, Player, SessionType, GameMode
+from python.pickleball_types import SessionConfig, Player, SessionType, GameMode
 from python.competitive_variety import populate_empty_courts_competitive_variety, update_variety_tracking_after_match
 from datetime import datetime
 

@@ -5,7 +5,7 @@ Ensures maximum player variety by tracking court history and enforcing mixing ru
 
 from typing import List, Dict, Tuple, Set, Optional
 from datetime import datetime
-from .types import Session, Match, PlayerStats
+from .pickleball_types import Session, Match, PlayerStats
 from .queue_manager import get_match_for_court, get_waiting_players
 from .competitive_variety import (
     can_play_with_player, is_provisional, 

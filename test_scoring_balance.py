@@ -10,7 +10,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from python.session import create_session
-from python.types import SessionConfig, PlayerStats, Player
+from python.pickleball_types import SessionConfig, PlayerStats, Player
 from python.competitive_variety import score_potential_match, calculate_elo_rating
 
 def create_test_session():

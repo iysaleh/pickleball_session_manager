@@ -1,6 +1,6 @@
 import unittest
 from python.session import create_session, complete_match, load_session_from_snapshot
-from python.types import SessionConfig, Player, Match
+from python.pickleball_types import SessionConfig, Player, Match
 from python.session_persistence import serialize_session, deserialize_session
 from python.utils import generate_id
 from datetime import datetime

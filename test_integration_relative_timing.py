@@ -21,7 +21,7 @@ sys.path.append('{Path.cwd()}')
 
 from python.time_manager import initialize_time_manager, start_session, now, pause_session, resume_session
 from python.session import create_session
-from python.types import SessionConfig, Player
+from python.pickleball_types import SessionConfig, Player
 from python.session_persistence import serialize_session, deserialize_session
 import time
 

@@ -6,7 +6,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 
-from python.types import Player, Session, SessionConfig, GameMode, SessionType
+from python.pickleball_types import Player, Session, SessionConfig, GameMode, SessionType
 from python.session import create_session, create_manual_match, update_match_teams
 from python.queue_manager import get_empty_courts, get_waiting_players, get_match_for_court
 from python.competitive_variety import calculate_elo_rating
@@ -204,7 +204,7 @@ def test_update_match_teams():
 
 def test_elo_calculation():
     """Test ELO rating calculation"""
-    from python.types import PlayerStats
+    from python.pickleball_types import PlayerStats
     
     # New player
     new_player = PlayerStats(player_id="p1", games_played=0, wins=0)
@@ -231,7 +231,7 @@ def test_elo_calculation():
 
 def test_elo_with_point_differential():
     """Test ELO calculation with point differential"""
-    from python.types import PlayerStats
+    from python.pickleball_types import PlayerStats
     
     # High point differential
     high_diff = PlayerStats(

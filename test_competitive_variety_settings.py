@@ -2,7 +2,7 @@
 Test competitive variety slider settings and dynamic adjustment
 """
 import sys
-from python.types import Player, SessionConfig, Session
+from python.pickleball_types import Player, SessionConfig, Session
 from python.session import create_session
 from python.competitive_variety import (
     get_default_competitive_variety_settings,

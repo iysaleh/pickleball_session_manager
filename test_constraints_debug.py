@@ -11,7 +11,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from python.session import create_session
-from python.types import SessionConfig, PlayerStats, Player
+from python.pickleball_types import SessionConfig, PlayerStats, Player
 from python.competitive_variety import can_play_with_player, score_potential_match
 
 def create_session_with_history():

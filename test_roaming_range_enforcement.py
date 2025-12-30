@@ -2,7 +2,7 @@
 Test roaming range enforcement for competitive variety mode
 """
 from python.session import Session
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.competitive_variety import (
     get_roaming_rank_range,
     can_all_players_play_together,

@@ -1,7 +1,7 @@
 """
 Test that partner and opponent repetition limits are respected dynamically
 """
-from python.types import Player, SessionConfig, Match, PlayerStats
+from python.pickleball_types import Player, SessionConfig, Match, PlayerStats
 from python.session import create_session
 from python.competitive_variety import can_play_with_player
 

@@ -4,7 +4,7 @@ Round Robin matchmaking engine - maximizes partner and opponent diversity
 
 from typing import List, Dict, Tuple, Optional, Set
 from itertools import combinations
-from .types import Player, PlayerStats, Match, QueuedMatch, SessionType
+from .pickleball_types import Player, PlayerStats, Match, QueuedMatch, SessionType
 from .utils import is_pair_banned, generate_combinations
 
 

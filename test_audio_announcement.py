@@ -9,7 +9,7 @@ from datetime import datetime
 # We'll rely on it being installed.
 from PyQt6.QtWidgets import QApplication
 
-from python.types import Session, SessionConfig, Player, Match
+from python.pickleball_types import Session, SessionConfig, Player, Match
 from python.gui import SessionWindow
 from python.session import create_session
 

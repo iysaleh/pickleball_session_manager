@@ -1,5 +1,5 @@
 import unittest
-from python.types import Player, Session, SessionConfig, PlayerStats
+from python.pickleball_types import Player, Session, SessionConfig, PlayerStats
 from python.roundrobin import generate_round_robin_queue
 from python.competitive_variety import can_play_with_player, populate_empty_courts_competitive_variety
 from python.session import create_session

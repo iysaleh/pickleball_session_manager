@@ -11,7 +11,7 @@ import sys
 sys.path.append('.')
 
 from python.session import create_session
-from python.types import SessionConfig, Player, Match
+from python.pickleball_types import SessionConfig, Player, Match
 from python.deterministic_waitlist_v2 import get_court_outcome_dependencies_v2
 from python.time_manager import initialize_time_manager
 from python.queue_manager import get_waiting_players

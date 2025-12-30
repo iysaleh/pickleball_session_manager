@@ -9,7 +9,7 @@ The feature should:
 4. Work with Competitive Variety matchmaking
 """
 
-from python.types import SessionConfig, Player
+from python.pickleball_types import SessionConfig, Player
 from python.session import create_session, evaluate_and_create_matches
 from python.session_persistence import serialize_session, deserialize_session
 

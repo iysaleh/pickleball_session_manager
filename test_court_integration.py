@@ -9,7 +9,7 @@ sys.path.append('.')
 from pathlib import Path
 from python.time_manager import initialize_time_manager
 from python.gui import CourtDisplayWidget
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session
 from python.session_persistence import COURT_NAMES_FILE
 from PyQt6.QtWidgets import QApplication

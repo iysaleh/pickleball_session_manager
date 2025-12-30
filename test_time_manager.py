@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timedelta
 from python.time_manager import initialize_time_manager, now, start_session, pause_session, resume_session, get_session_start_time, get_elapsed_session_time
 from python.session import create_session
-from python.types import SessionConfig, Player
+from python.pickleball_types import SessionConfig, Player
 from python.session_persistence import serialize_session, deserialize_session
 
 def test_time_manager_basic():

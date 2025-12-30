@@ -1,7 +1,7 @@
 """
 Test the Variety slider functionality
 """
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session
 
 def test_variety_slider_positions():

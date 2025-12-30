@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session, complete_match, forfeit_match
 from python.session_persistence import (
     save_session, load_last_session, clear_saved_session, serialize_session
@@ -42,7 +42,7 @@ def test_session_saves_after_complete_match():
     session = create_session(config)
     
     # Manually create a match since we're not running full logic
-    from python.types import Match
+    from python.pickleball_types import Match
     match = Match(
         id="m1",
         court_number=1,
@@ -113,7 +113,7 @@ def test_session_saves_after_forfeit():
     session = create_session(config)
     
     # Manually create a match
-    from python.types import Match
+    from python.pickleball_types import Match
     match = Match(
         id="m2",
         court_number=1,
@@ -179,7 +179,7 @@ def test_multiple_matches_persisted():
     session = create_session(config)
     
     # Create and complete multiple matches
-    from python.types import Match
+    from python.pickleball_types import Match
     
     match1 = Match(
         id="m1",

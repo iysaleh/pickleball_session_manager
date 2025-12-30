@@ -7,7 +7,7 @@ import sys
 sys.path.append('.')
 
 from python.time_manager import initialize_time_manager
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session
 from python.competitive_variety import get_adaptive_phase_info
 
@@ -246,7 +246,7 @@ def test_auto_state_behavior():
     session.adaptive_balance_weight = None
     
     # Test different session phases
-    from python.types import Match
+    from python.pickleball_types import Match
     
     phases_to_test = [
         (0, "Early"),

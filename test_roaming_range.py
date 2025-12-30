@@ -1,7 +1,7 @@
 
 import unittest
 from python.session import Session, SessionConfig
-from python.types import Match, Player, PlayerStats
+from python.pickleball_types import Match, Player, PlayerStats
 from python.competitive_variety import can_play_with_player, ROAMING_RANK_PERCENTAGE, get_player_ranking
 
 class TestRoamingRange(unittest.TestCase):

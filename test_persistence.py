@@ -6,7 +6,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session, create_manual_match, complete_match
 from python.session_persistence import (
     save_session, load_last_session, has_saved_session,
@@ -95,7 +95,7 @@ def test_session_with_completed_matches():
     session = create_session(config)
     
     # Create and complete a match
-    from python.types import Match
+    from python.pickleball_types import Match
     from datetime import datetime
     
     match = Match(

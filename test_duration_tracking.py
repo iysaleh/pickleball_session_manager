@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from python.types import Player, SessionConfig, Match
+from python.pickleball_types import Player, SessionConfig, Match
 from python.session import create_session, complete_match
 from python.utils import calculate_match_duration, format_duration
 from python.session_persistence import save_session, load_last_session, clear_saved_session

@@ -1,7 +1,7 @@
 """
 Test the Show Rank button functionality in the waitlist
 """
-from python.types import Player, SessionConfig, Match
+from python.pickleball_types import Player, SessionConfig, Match
 from python.session import create_session
 from python.competitive_variety import get_player_ranking
 

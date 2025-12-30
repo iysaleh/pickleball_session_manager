@@ -14,7 +14,7 @@ similar wait times.
 from typing import List, Tuple, Dict, Set
 from datetime import datetime, timedelta
 from dataclasses import dataclass
-from .types import Session, PlayerStats
+from .pickleball_types import Session, PlayerStats
 from .utils import get_current_wait_time
 
 # Configuration constants for wait priority thresholds

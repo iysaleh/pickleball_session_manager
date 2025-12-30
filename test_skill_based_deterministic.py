@@ -6,7 +6,7 @@ Test to verify the skill-based court filling fix addresses the reported issue
 import sys
 from python.time_manager import initialize_time_manager
 from python.session import create_session
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.competitive_variety import populate_empty_courts_competitive_variety
 from PyQt6.QtWidgets import QApplication
 

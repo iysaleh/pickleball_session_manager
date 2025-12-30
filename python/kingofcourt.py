@@ -5,7 +5,7 @@ King of the Court matchmaking engine - ELO-based ranking system
 
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
-from .types import Player, Session, PlayerStats, Match
+from .pickleball_types import Player, Session, PlayerStats, Match
 from .utils import generate_id
 from .time_manager import now
 

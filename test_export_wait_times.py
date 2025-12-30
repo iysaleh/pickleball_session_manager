@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session
 from python.utils import start_player_wait_timer, stop_player_wait_timer, format_duration
 

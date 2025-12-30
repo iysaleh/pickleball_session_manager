@@ -8,7 +8,7 @@ sys.path.append('.')
 
 from python.time_manager import initialize_time_manager
 from python.gui import CourtDisplayWidget
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session, create_manual_match
 from PyQt6.QtWidgets import QApplication
 

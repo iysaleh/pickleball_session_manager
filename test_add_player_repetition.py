@@ -1,7 +1,7 @@
 
 import unittest
 from python.session import create_session, complete_match
-from python.types import SessionConfig, Player
+from python.pickleball_types import SessionConfig, Player
 from python.competitive_variety import populate_empty_courts_competitive_variety
 from python.roundrobin import generate_round_robin_queue
 import datetime
@@ -42,7 +42,7 @@ class TestAddPlayerRepetition(unittest.TestCase):
         session.active_players.add(new_player.id)
         
         # Initialize stats for new player
-        from python.types import PlayerStats
+        from python.pickleball_types import PlayerStats
         session.player_stats[new_player.id] = PlayerStats(player_id=new_player.id)
         
         # 2. THE BAD LOGIC: Blindly regenerate round robin queue

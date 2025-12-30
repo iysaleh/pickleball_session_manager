@@ -17,7 +17,7 @@ a valid matchmaking opportunity for them.
 
 from typing import List, Dict, Set, Optional, Tuple, Any
 from dataclasses import dataclass
-from .types import Session, Match, Player
+from .pickleball_types import Session, Match, Player
 from .competitive_variety import (
     calculate_elo_rating, get_player_ranking, get_roaming_rank_range,
     can_play_with_player, is_provisional, populate_empty_courts_competitive_variety

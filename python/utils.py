@@ -6,7 +6,7 @@ import uuid
 import random
 from typing import List, Dict, Set, Tuple, Optional
 from datetime import datetime
-from .types import Player, PlayerStats, AdvancedConfig, KingOfCourtConfig, RoundRobinConfig, Match
+from .pickleball_types import Player, PlayerStats, AdvancedConfig, KingOfCourtConfig, RoundRobinConfig, Match
 from .time_manager import now
 
 

@@ -8,7 +8,7 @@ from python.time_manager import initialize_time_manager
 from python.session_persistence import save_player_history, load_player_history_with_ratings
 from python.gui import SetupDialog, SessionWindow
 from python.session import create_session
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from PyQt6.QtWidgets import QApplication
 
 def test_real_user_workflow():

@@ -9,7 +9,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from python.session import create_session
-from python.types import SessionConfig, PlayerStats, Player
+from python.pickleball_types import SessionConfig, PlayerStats, Player
 from python.competitive_variety import populate_empty_courts_competitive_variety
 
 def create_problematic_session():

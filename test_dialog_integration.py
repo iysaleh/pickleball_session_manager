@@ -5,7 +5,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from PyQt6.QtWidgets import QApplication
-from python.types import Player, SessionConfig, Match, PlayerStats
+from python.pickleball_types import Player, SessionConfig, Match, PlayerStats
 from python.session import create_session
 from python.gui import SessionWindow
 

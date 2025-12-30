@@ -2,7 +2,7 @@
 Test to verify that dynamic threshold prevents queueing lockup
 """
 from python.roundrobin import generate_round_robin_queue
-from python.types import Player, PlayerStats
+from python.pickleball_types import Player, PlayerStats
 from python.utils import create_player_stats
 
 def test_dynamic_threshold_prevents_lockup():

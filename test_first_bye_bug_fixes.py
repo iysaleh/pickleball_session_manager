@@ -6,7 +6,7 @@ Test fixes for first bye feature bugs:
 3. Validation should prevent too many bye players for given court count
 """
 
-from python.types import SessionConfig, Player
+from python.pickleball_types import SessionConfig, Player
 from python.session import create_session, evaluate_and_create_matches, complete_match
 from python.session_persistence import (
     save_player_history, load_player_history, load_first_bye_players

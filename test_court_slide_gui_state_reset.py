@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import Mock, patch, MagicMock
-from python.types import SessionConfig, Player, Match
+from python.pickleball_types import SessionConfig, Player, Match
 from python.session import create_session, complete_match
 
 

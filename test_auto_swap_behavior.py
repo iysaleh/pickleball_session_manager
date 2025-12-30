@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PyQt6.QtWidgets import QApplication, QComboBox, QDialog, QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt
 
-from python.types import Player, SessionConfig, Match, PlayerStats
+from python.pickleball_types import Player, SessionConfig, Match, PlayerStats
 from python.session import create_session
 
 

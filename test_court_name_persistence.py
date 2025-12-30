@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 from python.time_manager import initialize_time_manager
 from python.gui import CourtDisplayWidget
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session
 from python.session_persistence import (
     save_court_names, load_court_names, get_saved_court_name, 

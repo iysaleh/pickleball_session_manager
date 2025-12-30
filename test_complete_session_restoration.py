@@ -7,7 +7,7 @@ import sys
 from python.time_manager import initialize_time_manager
 from python.session_persistence import save_player_history, load_player_history_with_ratings
 from python.gui import SetupDialog, MainWindow
-from python.types import Player
+from python.pickleball_types import Player
 from PyQt6.QtWidgets import QApplication
 
 def test_complete_session_restoration():

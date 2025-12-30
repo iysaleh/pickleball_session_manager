@@ -8,7 +8,7 @@ import sys
 sys.path.append('/home/isaleh/dev/pickleball')
 
 from python.session import create_session
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.gui import SessionWindow
 from python.time_manager import initialize_time_manager
 from PyQt6.QtWidgets import QApplication

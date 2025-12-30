@@ -11,7 +11,7 @@ With 20 players and 50% roaming range, Amanda can only play with ranks 1-10,
 so Carolyn (rank 19) and Dan (rank 18) should NEVER be allowed in a match with Amanda.
 """
 from python.session import Session
-from python.types import Player, SessionConfig, Match
+from python.pickleball_types import Player, SessionConfig, Match
 from python.competitive_variety import (
     get_player_ranking,
     get_roaming_rank_range,

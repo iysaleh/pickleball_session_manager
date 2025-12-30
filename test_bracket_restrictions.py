@@ -1,7 +1,7 @@
 
 import unittest
 from python.session import Session, SessionConfig
-from python.types import Match, Player, PlayerStats
+from python.pickleball_types import Match, Player, PlayerStats
 from python.competitive_variety import populate_empty_courts_competitive_variety, get_player_ranking, calculate_elo_rating
 
 class TestBracketRestrictions(unittest.TestCase):

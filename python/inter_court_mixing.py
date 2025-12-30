@@ -4,7 +4,7 @@ Ensures players across different courts mix and swap to create variety
 """
 
 from typing import List, Dict, Tuple, Set, Optional
-from .types import Session, Match
+from .pickleball_types import Session, Match
 from .queue_manager import get_match_for_court
 
 # Constants for inter-court mixing

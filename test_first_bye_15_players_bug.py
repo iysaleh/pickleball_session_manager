@@ -7,7 +7,7 @@ This test reproduces the exact scenario reported by the user.
 """
 
 from python.session import create_session
-from python.types import SessionConfig, Player
+from python.pickleball_types import SessionConfig, Player
 from python.competitive_variety import populate_empty_courts_competitive_variety
 
 

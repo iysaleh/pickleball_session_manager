@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timedelta
 from python.time_manager import initialize_time_manager, now, start_session
 from python.session import create_session
-from python.types import SessionConfig, Player
+from python.pickleball_types import SessionConfig, Player
 from python.session_persistence import serialize_session, deserialize_session, adjust_wait_times_after_time_manager_start
 from python.utils import start_player_wait_timer, get_current_wait_time, stop_player_wait_timer
 

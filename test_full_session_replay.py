@@ -15,7 +15,7 @@ This test verifies:
 4. Verify the fix prevents it
 """
 from python.session import Session
-from python.types import Player, SessionConfig, Match
+from python.pickleball_types import Player, SessionConfig, Match
 from python.competitive_variety import (
     get_player_ranking,
     get_roaming_rank_range,

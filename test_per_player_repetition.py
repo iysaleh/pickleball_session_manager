@@ -2,7 +2,7 @@
 import unittest
 from datetime import datetime
 from python.session import Session, SessionConfig
-from python.types import Match, Player, PlayerStats
+from python.pickleball_types import Match, Player, PlayerStats
 from python.competitive_variety import can_play_with_player
 
 class TestPerPlayerRepetition(unittest.TestCase):

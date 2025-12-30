@@ -1,6 +1,6 @@
 
 from python.roundrobin import generate_round_robin_queue
-from python.types import Player, PlayerStats
+from python.pickleball_types import Player, PlayerStats
 from python.session import Session
 
 def test_round_robin_partnership_variety():

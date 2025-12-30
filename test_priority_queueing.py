@@ -2,7 +2,7 @@
 import unittest
 from datetime import datetime, timedelta
 from python.session import Session, SessionConfig
-from python.types import Match, Player, PlayerStats
+from python.pickleball_types import Match, Player, PlayerStats
 from python.competitive_variety import populate_empty_courts_competitive_variety, _get_last_played_info
 
 class TestPriorityQueueing(unittest.TestCase):

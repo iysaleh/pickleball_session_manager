@@ -1,5 +1,5 @@
 import unittest
-from python.types import SessionConfig, Player, Match
+from python.pickleball_types import SessionConfig, Player, Match
 from python.session import create_session, complete_match, load_session_from_snapshot
 
 

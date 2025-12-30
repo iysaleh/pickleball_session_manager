@@ -2,7 +2,7 @@
 import unittest
 from datetime import datetime
 from python.session import create_session, add_player_to_session, remove_player_from_session, get_player_name, complete_match
-from python.types import SessionConfig, Player, Match
+from python.pickleball_types import SessionConfig, Player, Match
 
 class TestGuiCrash(unittest.TestCase):
     def test_remove_player_breaks_history(self):

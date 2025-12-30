@@ -2,7 +2,7 @@
 Integration test: Can populate_empty_courts_competitive_variety form the bad match?
 """
 from python.session import Session
-from python.types import Player, SessionConfig, Match
+from python.pickleball_types import Player, SessionConfig, Match
 from python.competitive_variety import (
     get_player_ranking,
     populate_empty_courts_competitive_variety,

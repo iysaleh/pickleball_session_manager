@@ -13,7 +13,7 @@ try:
     print("="*70)
     
     print("\n1. Testing session creation...")
-    from python.types import Player, SessionConfig
+    from python.pickleball_types import Player, SessionConfig
     from python.session import create_session
     
     players = [

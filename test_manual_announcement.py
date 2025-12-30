@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 from datetime import datetime
 from PyQt6.QtWidgets import QApplication, QPushButton
 
-from python.types import Session, SessionConfig, Player, Match
+from python.pickleball_types import Session, SessionConfig, Player, Match
 from python.gui import SessionWindow
 from python.session import create_session
 

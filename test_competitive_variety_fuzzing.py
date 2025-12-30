@@ -27,7 +27,7 @@ from python.competitive_variety import (
     BASE_RATING,
     PROVISIONAL_GAMES,
 )
-from python.types import (
+from python.pickleball_types import (
     Session, SessionConfig, Player, PlayerStats, Match, 
     MatchStatus, GameMode, SessionType
 )

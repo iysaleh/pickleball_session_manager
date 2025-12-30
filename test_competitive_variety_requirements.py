@@ -1,7 +1,7 @@
 """
 Comprehensive test for all competitive variety slider requirements
 """
-from python.types import Player, SessionConfig
+from python.pickleball_types import Player, SessionConfig
 from python.session import create_session
 from python.competitive_variety import get_default_competitive_variety_settings
 
