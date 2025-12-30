@@ -9,6 +9,9 @@ test_gui_integration:
 test_session_manager:
 	python test_session_manager.py
 
+test_king_of_court_comprehensive:
+	python test_king_of_court_comprehensive.py
+
 test_koc_preseeded_ratings:
 	python test_koc_preseeded_ratings.py
 

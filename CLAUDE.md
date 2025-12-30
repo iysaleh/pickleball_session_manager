@@ -416,6 +416,139 @@ Critical test files:
 - test_partner_opponent_partner_prevention.py: social dynamic constraint testing
 - test_roaming_range_preservation.py: verifies roaming range preservation across all adaptive phases
 
+## ROUNDS-BASED KING OF THE COURT ALGORITHM (python/kingofcourt.py)
+
+### Core Purpose
+Implements a rounds-based King of the Court tournament system where courts populate simultaneously after all current matches complete. Winners move up courts and split, losers move down courts and split, with intelligent waitlist rotation.
+
+### Key Features
+
+**Rounds-Based Execution**
+- Courts do not populate until ALL currently scheduled matches finish
+- Prevents individual match advancement that breaks court hierarchy
+- Ensures synchronized round progression across all courts
+
+**Core King of Court Rules**
+- **Winners**: Move up one court and split (or stay at Kings court if already there)
+- **Losers**: Move down one court and split (or stay at bottom court if already there)
+- **Team Splitting**: Previous teammates MUST be on opposite teams in new matches
+- **Court Movement Priority**: Court assignments are determined by win/loss, not partnership constraints
+
+**Court Ordering & Direction**
+- Configurable court ordering with Court 1 as Kings court (top) by default
+- Court ordering persists between sessions via `set_court_ordering()`
+- Movement direction: Kings court ← Winners | Losers → Bottom court
+- GUI interface for reordering courts by dragging court names up/down
+
+**Waitlist Management (King of Court Rules)**
+- **Priority**: Nobody waits twice until everyone has waited once
+- **Selection Order**: Middle courts first → Bottom court → Kings court (only if everyone else waited)
+- **Capacity Management**: Always maintain exactly 16 players on 4 courts, 3 waiting (19 players)
+- **Return Placement**: Try to place returning waiters in middle courts when possible
+
+**Initial Seeding Options**
+- **Random**: Players randomly distributed across courts
+- **Highest to Lowest**: Top skill players on Kings court, lowest on bottom court  
+- **Lowest to Highest**: Lowest skill players on Kings court, highest on bottom court
+- **First Byes Respected**: Selected first bye players always start on waitlist regardless of seeding
+- **Pre-seeded Ratings**: Uses skill ratings when available for H→L and L→H seeding
+
+### Critical Functions
+
+**evaluate_king_of_court_session(session) → Session**
+- Main entry point for King of Court sessions
+- Handles initialization on first call
+- Advances rounds when all matches completed
+
+**advance_round(session) → Session**
+- **STEP 1**: Apply King of Court movement (winners up & split, losers down & split)
+- **STEP 2**: Handle waitlist rotation using KoC waitlist rules  
+- **STEP 3**: Create matches with enforced team splitting
+- Only advances when ALL active matches are completed
+
+**apply_king_of_court_movement(session, court_ordering, court_winners, court_losers) → Dict**
+- Pure King of Court movement logic - winners up, losers down
+- Updates `session.king_of_court_player_positions` for court tracking
+- Maintains court hierarchy determined by match results
+
+**apply_waitlist_rotation(session, court_assignments, court_ordering, players_per_court) → Dict**
+- Implements KoC waitlist rules while preserving court assignments from movement
+- Selects waiters from middle courts first, respecting wait count fairness
+- Fills gaps with returning waiters while maintaining exact court capacity
+- **CRITICAL**: Removes waiters from `king_of_court_player_positions` to prevent display issues
+
+**enforce_king_of_court_team_splitting(players, session) → Tuple[List[str], List[str]]**
+- Ensures previous teammates are placed on OPPOSITE teams
+- Uses recently completed matches to identify teammate relationships
+- Finds optimal arrangement with minimum violations when perfect splitting impossible
+- **King of Court Priority**: Team splitting enforced over partnership variety constraints
+
+**initialize_king_of_court_session(session) → Session**
+- Seeds players according to selected seeding option (Random/H→L/L→H)
+- Handles first bye players and excess players via waitlist
+- Creates initial matches with randomized teams for variety
+- Sets `king_of_court_round_number = 1`
+
+### Important Data Structures
+
+**session.king_of_court_player_positions: Dict[str, int]**
+- Maps player_id → current_court_number
+- Updated by movement algorithm, cleared for waiters
+- Used by GUI for court assignment display
+
+**session.king_of_court_wait_counts: Dict[str, int]**
+- Tracks how many times each player has waited
+- Enforces "nobody waits twice until everyone waits once" rule
+- Incremented when player goes to waitlist
+
+**session.king_of_court_round_number: int**
+- Current round number (0 = not initialized, 1+ = active rounds)
+- Used to detect first-time initialization vs. round advancement
+
+### Algorithm Invariants & Design Principles
+
+1. **Rounds-Based Execution**: Never advance individual courts - wait for ALL matches to complete
+2. **Movement Hierarchy**: Court assignments determined by wins/losses, not partnership constraints  
+3. **Exact Capacity**: Always maintain exactly `courts × 4` players on courts, excess on waitlist
+4. **Team Splitting**: Previous teammates MUST split - this overrides partnership variety preferences
+5. **Waitlist Fairness**: Middle court players chosen for waitlist first to ensure fairness
+6. **Wait Count Enforcement**: Algorithm guarantees nobody waits twice until everyone waits once
+7. **Court Position Tracking**: Waiters have no court position - prevents GUI display inconsistencies
+
+### Integration Points
+
+**Session Management**
+- Called from `populate_session()` when mode = 'king-of-court'  
+- Returns updated session with new matches or advanced round state
+- Works with existing session persistence and match management
+
+**GUI Integration**
+- Court reordering via dragging interface in active session
+- Court assignments displayed via `king_of_court_player_positions` 
+- Waitlist display shows current waiters with wait count indicators
+- Initial seeding options integrated into Session Setup page
+
+**Configuration**
+- `KingOfCourtConfig` dataclass stores seeding option and court ordering
+- Court ordering persists between sessions like court names
+- Pre-seeded ratings option enables H→L and L→H seeding modes
+
+### Testing & Validation
+
+**test_king_of_court_comprehensive.py**
+- Validates 6 rounds of 19-player King of Court
+- Ensures winners move up & split, losers move down & split
+- Validates waitlist rotation (nobody waits twice until all wait once)
+- Confirms exact court capacity maintenance (16 on courts, 3 waiting)
+- Tests team splitting with optimal violation minimization
+
+**Key Test Scenarios**
+- Court movement validation for each round
+- Wait count distribution tracking 
+- Team splitting effectiveness measurement
+- Court capacity consistency verification
+- Partnership constraint vs. movement priority resolution
+
 ## KING OF THE COURT ALGORITHM (python/kingofcourt.py)
 
 ### Core Purpose

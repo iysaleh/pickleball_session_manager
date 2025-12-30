@@ -293,7 +293,9 @@ def advance_round(session: Session) -> Session:
     
     # Process results from completed matches
     last_round_matches = get_matches_from_current_round(session)
+    
     if not last_round_matches:
+        print("DEBUG: No matches found - not advancing")
         return session
     
     # Track winners and losers by court position
@@ -317,8 +319,14 @@ def advance_round(session: Session) -> Session:
     # Create new round
     session.king_of_court_round_number += 1
     
-    # Move players between courts and create new matches
-    create_next_round_matches(session, court_ordering, court_winners, court_losers, players_per_court)
+    # STEP 1: Apply King of Court movement rules (winners up & split, losers down & split)
+    court_player_assignments = apply_king_of_court_movement(session, court_ordering, court_winners, court_losers)
+    
+    # STEP 2: Handle waitlist rotation separately 
+    court_player_assignments = apply_waitlist_rotation(session, court_player_assignments, court_ordering, players_per_court)
+    
+    # STEP 3: Create new matches from final assignments
+    create_matches_from_final_assignments(session, court_player_assignments, players_per_court)
     
     return session
 
@@ -342,175 +350,205 @@ def get_matches_from_current_round(session: Session) -> List[Match]:
     return current_round_matches
 
 
-def create_next_round_matches(session: Session, court_ordering: List[int], 
-                            court_winners: Dict[int, List[str]], 
-                            court_losers: Dict[int, List[str]], 
-                            players_per_court: int):
-    """Create matches for the next round based on winners and losers"""
+def apply_king_of_court_movement(session: Session, court_ordering: List[int], 
+                               court_winners: Dict[int, List[str]], 
+                               court_losers: Dict[int, List[str]]) -> Dict[int, List[str]]:
+    """
+    STEP 1: Apply pure King of Court movement rules
+    - Winners move up one court and split (or stay at kings court)
+    - Losers move down one court and split (or stay at bottom court)
     
-    # KING OF COURT CORE ALGORITHM:
-    # 1. All winners split and move up one court (or stay if at kings court)
-    # 2. All losers split and move down one court (or stay if at bottom court)  
-    # 3. New teams are randomly formed from players now at each court level
+    Returns: court_number -> [individual_player_ids] assignments after movement
+    """
+    court_assignments = {}  # court_number -> [player_ids]
     
-    # Collect all individual players and their target court levels
-    player_movements = {}  # player_id -> target_court_number
+    # Initialize all courts as empty
+    for court_num in court_ordering:
+        court_assignments[court_num] = []
     
     for i, court_num in enumerate(court_ordering):
-        if court_num in court_winners and court_num in court_losers:
-            winners = court_winners[court_num] 
-            losers = court_losers[court_num]
-            
-            # INDIVIDUAL WINNERS: Move up one court (or stay if at kings court)
-            if i > 0:  # Not the kings court - winners move up
-                target_court = court_ordering[i - 1]
-                for winner_id in winners:
-                    player_movements[winner_id] = target_court
-                    session.king_of_court_player_positions[winner_id] = target_court
-            else:  # Kings court - winners stay
-                for winner_id in winners:
-                    player_movements[winner_id] = court_num
-                    session.king_of_court_player_positions[winner_id] = court_num
-            
-            # INDIVIDUAL LOSERS: Move down one court (or stay if at bottom court)
-            if i < len(court_ordering) - 1:  # Not the bottom court - losers move down
-                target_court = court_ordering[i + 1]
-                for loser_id in losers:
-                    player_movements[loser_id] = target_court
-                    session.king_of_court_player_positions[loser_id] = target_court
-            else:  # Bottom court - losers stay
-                for loser_id in losers:
-                    player_movements[loser_id] = court_num
-                    session.king_of_court_player_positions[loser_id] = court_num
+        if court_num not in court_winners or court_num not in court_losers:
+            continue  # No match on this court
+        
+        winners = court_winners[court_num] 
+        losers = court_losers[court_num]
+        
+        # WINNERS: Move up one court (or stay if at kings court) AND SPLIT
+        if i > 0:  # Not the kings court - winners move up
+            target_court = court_ordering[i - 1]
+        else:  # Kings court - winners stay
+            target_court = court_num
+        
+        for winner_id in winners:
+            court_assignments[target_court].append(winner_id)
+            session.king_of_court_player_positions[winner_id] = target_court
+        
+        # LOSERS: Move down one court (or stay if at bottom court) AND SPLIT
+        if i < len(court_ordering) - 1:  # Not the bottom court - losers move down
+            target_court = court_ordering[i + 1]
+        else:  # Bottom court - losers stay
+            target_court = court_num
+        
+        for loser_id in losers:
+            court_assignments[target_court].append(loser_id)
+            session.king_of_court_player_positions[loser_id] = target_court
     
-    # Group players by their target court
-    new_court_assignments = {}  # court_number -> [player_ids]
-    for player_id, target_court in player_movements.items():
-        if target_court not in new_court_assignments:
-            new_court_assignments[target_court] = []
-        new_court_assignments[target_court].append(player_id)
-    
-    # Handle waitlist integration
-    handle_waitlist_for_round(session, new_court_assignments, court_ordering, players_per_court)
-    
-    # Create new matches with randomized teams (winners and losers are now split)
-    create_matches_from_assignments(session, new_court_assignments, players_per_court)
+    return court_assignments
 
 
-def handle_waitlist_for_round(session: Session, new_court_assignments: Dict[int, List[str]], 
-                            court_ordering: List[int], players_per_court: int):
-    """Handle waitlist logic for the new round"""
+def apply_waitlist_rotation(session: Session, court_assignments: Dict[int, List[str]], 
+                          court_ordering: List[int], players_per_court: int) -> Dict[int, List[str]]:
+    """
+    STEP 2: Handle waitlist rotation while preserving King of Court court assignments
+    
+    King of Court Waitlist Rules:
+    1. Nobody waits twice until everyone has waited once
+    2. Choose waiters from middle courts first, then bottom, then kings (only if everyone else waited)
+    3. Try to place returning players in same position they were before
+    
+    CRITICAL: This must preserve the court assignments determined by King of Court movement!
+    """
     total_court_capacity = len(court_ordering) * players_per_court
-    total_active_players = len(session.active_players)
     
-    if total_active_players <= total_court_capacity:
-        # Everyone can play - bring everyone from waitlist
-        while session.waiting_players:
-            player_id = session.waiting_players.pop(0)
-            # Find a court that needs players
-            for court_num in court_ordering:
-                if court_num not in new_court_assignments:
-                    new_court_assignments[court_num] = []
-                if len(new_court_assignments[court_num]) < players_per_court:
-                    new_court_assignments[court_num].append(player_id)
-                    session.king_of_court_player_positions[player_id] = court_num
-                    break
-        return
+    # Get all players currently assigned to courts after movement
+    all_assigned_players = []
+    for players in court_assignments.values():
+        all_assigned_players.extend(players)
     
-    # We have more players than court spots - need waitlist rotation
-    excess_players = total_active_players - total_court_capacity
+    # Get all current waiters
+    current_waiters = session.waiting_players.copy()
     
-    # Get all players currently assigned to courts
-    court_players = []
-    for court_num, players in new_court_assignments.items():
-        court_players.extend(players)
+    # Total universe of active players
+    all_active_players = all_assigned_players + current_waiters
+    total_active_count = len(all_active_players)
     
-    # KING OF COURT WAITLIST RULE: Nobody waits twice until everyone has waited once
+    if total_active_count <= total_court_capacity:
+        # Everyone can play - add all waiters to available spots
+        session.waiting_players = []
+        
+        # Fill empty spots with previous waiters
+        for court_num in court_ordering:
+            if court_num not in court_assignments:
+                court_assignments[court_num] = []
+            while len(court_assignments[court_num]) < players_per_court and current_waiters:
+                player_id = current_waiters.pop(0)
+                court_assignments[court_num].append(player_id)
+                session.king_of_court_player_positions[player_id] = court_num
+        
+        return court_assignments
     
-    # Find who should wait this round
-    all_players = court_players + session.waiting_players
+    # Need to maintain waitlist - apply King of Court waitlist rules
+    excess_players = total_active_count - total_court_capacity
     
-    # Check wait count distribution
+    # Analyze wait counts for ALL active players
     wait_counts = {}
-    for player_id in all_players:
+    for player_id in all_active_players:
         count = session.king_of_court_wait_counts.get(player_id, 0)
         if count not in wait_counts:
             wait_counts[count] = []
         wait_counts[count].append(player_id)
     
-    # Apply King of Court rule
+    # Apply rule: Nobody waits twice until everyone has waited once
+    players_to_wait = []
+    
     if 0 in wait_counts and len(wait_counts[0]) > 0:
-        # There are players who have never waited - they should be prioritized for waiting
+        # Prioritize players who have never waited
         never_waited = wait_counts[0]
         
         if len(never_waited) >= excess_players:
-            # Choose from never-waited players, prefer middle court players for fairness
+            # Choose from those assigned to middle courts first, then bottom, then kings
+            # If not enough from courts, include returning waiters
+            candidates_by_priority = []
+            
+            # Middle courts first (from assigned players)
             middle_courts = court_ordering[1:-1] if len(court_ordering) > 2 else []
-            courts_to_check = middle_courts + [court_ordering[-1]]
+            for court_num in middle_courts:
+                if court_num in court_assignments:
+                    court_candidates = [p for p in court_assignments[court_num] if p in never_waited]
+                    candidates_by_priority.extend(court_candidates)
             
-            candidates_by_court = []
-            for court_num in courts_to_check:
-                if court_num in new_court_assignments:
-                    court_candidates = [p for p in new_court_assignments[court_num] if p in never_waited]
-                    candidates_by_court.extend(court_candidates)
+            # Bottom court next (from assigned players)
+            if court_ordering:
+                bottom_court = court_ordering[-1]
+                if bottom_court in court_assignments:
+                    bottom_candidates = [p for p in court_assignments[bottom_court] if p in never_waited]
+                    candidates_by_priority.extend(bottom_candidates)
             
-            # If not enough middle court candidates, add others
-            if len(candidates_by_court) < excess_players:
-                remaining_candidates = [p for p in never_waited if p not in candidates_by_court]
-                candidates_by_court.extend(remaining_candidates)
+            # If still need more, add returning waiters (if they never waited)
+            if len(candidates_by_priority) < excess_players:
+                never_waited_waiters = [p for p in current_waiters if p in never_waited]
+                candidates_by_priority.extend(never_waited_waiters)
             
-            should_wait = candidates_by_court[:excess_players]
+            # Kings court last (only if everyone else has waited)
+            if len(candidates_by_priority) < excess_players and court_ordering:
+                kings_court = court_ordering[0]
+                if kings_court in court_assignments:
+                    kings_candidates = [p for p in court_assignments[kings_court] if p in never_waited]
+                    candidates_by_priority.extend(kings_candidates)
+            
+            players_to_wait = candidates_by_priority[:excess_players]
         else:
-            # Not enough never-waited players - take all of them plus some who waited once
-            should_wait = never_waited.copy()
-            remaining_needed = excess_players - len(should_wait)
+            # Not enough never-waited players - take all + some who waited once
+            players_to_wait = never_waited.copy()
+            remaining_needed = excess_players - len(players_to_wait)
             
-            # Take from players who waited once (if any)
             if 1 in wait_counts:
-                should_wait.extend(wait_counts[1][:remaining_needed])
+                waited_once = wait_counts[1]
+                players_to_wait.extend(waited_once[:remaining_needed])
     else:
-        # Everyone has waited at least once - use normal rotation
+        # Everyone has waited at least once - use fair rotation
         # Prefer those who have waited the most
-        max_wait_count = max(wait_counts.keys())
-        should_wait = wait_counts[max_wait_count][:excess_players]
-    
-    should_play = [player_id for player_id in all_players if player_id not in should_wait]
+        max_wait_count = max(wait_counts.keys()) if wait_counts else 0
+        if max_wait_count in wait_counts:
+            most_waited = wait_counts[max_wait_count]
+            players_to_wait = most_waited[:excess_players]
     
     # Update waitlist
-    session.waiting_players = should_wait
+    session.waiting_players = players_to_wait
     
     # Update wait counts for those waiting
-    for player_id in should_wait:
+    for player_id in players_to_wait:
         session.king_of_court_wait_counts[player_id] = session.king_of_court_wait_counts.get(player_id, 0) + 1
+        # CRITICAL: Remove waiters from court position data
+        if player_id in session.king_of_court_player_positions:
+            del session.king_of_court_player_positions[player_id]
     
-    # Rebuild court assignments with only players who should play
-    new_court_assignments.clear()
+    # Remove waiters from court assignments
+    for court_num in court_assignments.keys():
+        court_assignments[court_num] = [p for p in court_assignments[court_num] if p not in players_to_wait]
     
-    # Distribute playing players across courts
-    player_index = 0
+    # Add returning waiters who are not waiting to fill gaps
+    returning_players = [p for p in current_waiters if p not in players_to_wait]
+    
     for court_num in court_ordering:
-        new_court_assignments[court_num] = []
-        for _ in range(players_per_court):
-            if player_index < len(should_play):
-                player_id = should_play[player_index]
-                new_court_assignments[court_num].append(player_id)
+        if court_num not in court_assignments:
+            court_assignments[court_num] = []
+            
+        spots_needed = players_per_court - len(court_assignments[court_num])
+        
+        # Fill gaps with returning players
+        for _ in range(spots_needed):
+            if returning_players:
+                player_id = returning_players.pop(0)
+                court_assignments[court_num].append(player_id)
                 session.king_of_court_player_positions[player_id] = court_num
-                player_index += 1
+    
+    return court_assignments
 
 
-def create_matches_from_assignments(session: Session, court_assignments: Dict[int, List[str]], 
-                                  players_per_court: int):
-    """Create new matches from court assignments"""
+def create_matches_from_final_assignments(session: Session, court_assignments: Dict[int, List[str]], 
+                                        players_per_court: int):
+    """
+    STEP 3: Create new matches from final court assignments with King of Court team splitting
+    """
     for court_num, players in court_assignments.items():
         if len(players) == players_per_court:
-            # KING OF COURT RULE: Always randomize teams to ensure winners split
             if players_per_court == 4:
-                import random
-                shuffled_players = players.copy()
-                random.shuffle(shuffled_players)
-                team1 = shuffled_players[:2]
-                team2 = shuffled_players[2:]
+                # Apply King of Court rule: previous teammates must be on opposite teams
+                team1, team2 = enforce_king_of_court_team_splitting(players, session)
             else:  # singles
+                import random
+                random.shuffle(players)
                 team1 = [players[0]]
                 team2 = [players[1]]
             
@@ -523,6 +561,79 @@ def create_matches_from_assignments(session: Session, court_assignments: Dict[in
                 start_time=now()
             )
             session.matches.append(match)
+        elif len(players) > 0:
+            print(f"WARNING: Court {court_num} has {len(players)} players but needs {players_per_court}")
+
+
+def enforce_king_of_court_team_splitting(players: List[str], session: Session) -> Tuple[List[str], List[str]]:
+    """
+    King of Court team splitting rule: Previous teammates must be on OPPOSITE teams
+    
+    This is the ONLY constraint applied - no partnership repetition concerns,
+    just ensure recent teammates from the last match are split.
+    """
+    if len(players) != 4:
+        import random
+        random.shuffle(players)
+        return players[:2], players[2:]
+    
+    # Find who was teammates in recently completed matches
+    recent_teammates = set()
+    
+    # Check all completed matches, using the most recent batch
+    completed_matches = [m for m in session.matches if m.status == 'completed']
+    if completed_matches:
+        # Get the most recent completed matches (likely the previous round)
+        latest_completed_time = max(m.end_time for m in completed_matches if m.end_time)
+        recent_completed = [m for m in completed_matches 
+                          if m.end_time and abs((m.end_time - latest_completed_time).total_seconds()) < 60]
+        
+        for match in recent_completed:
+            # Check if any of our players were teammates in this match
+            for player in players:
+                if player in match.team1:
+                    teammate_candidates = [p for p in match.team1 if p != player and p in players]
+                    for teammate in teammate_candidates:
+                        recent_teammates.add((player, teammate))
+                        recent_teammates.add((teammate, player))  # Bidirectional
+                elif player in match.team2:
+                    teammate_candidates = [p for p in match.team2 if p != player and p in players]
+                    for teammate in teammate_candidates:
+                        recent_teammates.add((player, teammate))
+                        recent_teammates.add((teammate, player))  # Bidirectional
+    
+    # Try to arrange teams so recent teammates are on OPPOSITE teams
+    import itertools
+    import random
+    
+    best_arrangement = None
+    min_violations = float('inf')
+    
+    for team1_indices in itertools.combinations(range(4), 2):
+        team1 = [players[i] for i in team1_indices]
+        team2 = [players[i] for i in range(4) if i not in team1_indices]
+        
+        # Count violations (recent teammates on same team)
+        violations = 0
+        if len(team1) == 2 and (team1[0], team1[1]) in recent_teammates:
+            violations += 1
+        if len(team2) == 2 and (team2[0], team2[1]) in recent_teammates:
+            violations += 1
+        
+        if violations < min_violations:
+            min_violations = violations
+            best_arrangement = (team1, team2)
+        
+        # If we found perfect arrangement, use it
+        if violations == 0:
+            break
+    
+    if best_arrangement:
+        return best_arrangement
+    else:
+        # Fallback: random arrangement
+        random.shuffle(players)
+        return players[:2], players[2:]
 
 
 def evaluate_king_of_court_session(session: Session) -> Session:
