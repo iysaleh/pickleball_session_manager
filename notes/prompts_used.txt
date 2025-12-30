@@ -634,7 +634,7 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
 * Look at @pickleball_session_20251230_113316.txt , players are splitting after winning together, but they are not moving up in the court ordering, they are staying there. After the first round, Ibraheem stayed on the waitlist, which means he waited twice -- nobody should ever wait more than once in round based king of the court!!!! David & Jeremy lost on court 1, then moved to court 4! They should have moved to Court 2 and split!!! The algorithm is still very much not working as intended!!!
 
 # TODO 
-* Refactor the GUI code so that it doesn't manage session advancement logic itself anywhere -- that is bad organization since the GUI code is hard to test, and we need to be able to test this logic wherever it lives! Court population, session advancement logic, etc should be defined in the algorithm or session files, not in the GUI code.
+* Refactor the GUI code so that it doesn't manage session advancement logic itself anywhere -- that is bad organization since the GUI code is hard to test, and we need to be able to test this logic wherever it lives! Court population, session advancement logic, etc should be defined in the algorithm or session files, not in the GUI code. Make sure the tests work after the refactor. Take the mentality of a super extremely expert developer when refactoring the code to make it more maintainable.
 
 
 # Useful Commands:

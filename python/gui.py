@@ -25,9 +25,10 @@ from python.pickleball_types import (
 from python.session import (
     create_session, add_player_to_session, remove_player_from_session,
     complete_match, forfeit_match, get_player_name, get_matches_for_court,
-    get_active_matches, get_completed_matches, evaluate_and_create_matches,
+    get_active_matches, get_completed_matches,
     get_active_player_names
 )
+from python.session_manager import create_session_manager
 from python.time_manager import now, start_session as tm_start_session
 
 
@@ -1448,30 +1449,39 @@ class CourtDisplayWidget(QWidget):
         dialog.setMinimumWidth(400)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            success, slides = complete_match(self.session, self.current_match.id, team1_score, team2_score)
-            if success:
-                self.team1_score.setValue(0)
-                self.team2_score.setValue(0)
-                
-                # Handle slides
-                if slides:
-                    parent = self.window()
-                    if hasattr(parent, 'animate_court_sliding'):
-                        parent.animate_court_sliding(slides)
-                
-                # Evaluate and create new matches (important for King of Court round advancement)
-                evaluate_and_create_matches(self.session)
-                
-                # Save session after completing a match
-                from python.session_persistence import save_session
-                save_session(self.session)
-                
-                # Refresh parent display to show new matches
+                # Use session manager for match completion (handles all downstream effects)
                 parent = self.window()
-                if hasattr(parent, 'refresh_display'):
-                    parent.refresh_display()
-            else:
-                QMessageBox.warning(self, "Error", "Failed to complete match")
+                if hasattr(parent, 'session_manager'):
+                    success, slides = parent.session_manager.handle_match_completion(self.current_match.id, team1_score, team2_score)
+                else:
+                    # Fallback to direct call (shouldn't happen with proper refactoring)
+                    success, slides = complete_match(self.session, self.current_match.id, team1_score, team2_score)
+                    # Session logic moved to session manager
+                    if hasattr(parent, '_trigger_session_evaluation'):
+                        parent._trigger_session_evaluation()
+                    else:
+                        from python.session import evaluate_and_create_matches
+                        evaluate_and_create_matches(self.session)
+                
+                if success:
+                    self.team1_score.setValue(0)
+                    self.team2_score.setValue(0)
+                    
+                    # Handle slides
+                    if slides:
+                        if hasattr(parent, 'animate_court_sliding'):
+                            parent.animate_court_sliding(slides)
+                    
+                    # Save session after completing a match
+                    from python.session_persistence import save_session
+                    save_session(self.session)
+                    
+                    # Refresh parent display to show new matches
+                    parent = self.window()
+                    if hasattr(parent, 'refresh_display'):
+                        parent.refresh_display()
+                else:
+                    QMessageBox.warning(self, "Error", "Failed to complete match")
     
     def forfeit_match_clicked(self):
         """Handle forfeit button"""
@@ -1487,10 +1497,21 @@ class CourtDisplayWidget(QWidget):
         reply = msgbox.exec()
         
         if reply == QMessageBox.StandardButton.Yes:
-            if forfeit_match(self.session, self.current_match.id):
-                # Evaluate and create new matches (important for King of Court round advancement)
-                evaluate_and_create_matches(self.session)
-                
+            # Use session manager for match forfeit (handles all downstream effects)
+            parent = self.window()
+            if hasattr(parent, 'session_manager'):
+                success = parent.session_manager.handle_match_forfeit(self.current_match.id)
+            else:
+                # Fallback to direct call (shouldn't happen with proper refactoring)
+                success = forfeit_match(self.session, self.current_match.id)
+                # Session logic moved to session manager
+                if hasattr(parent, '_trigger_session_evaluation'):
+                    parent._trigger_session_evaluation()
+                else:
+                    from python.session import evaluate_and_create_matches
+                    evaluate_and_create_matches(self.session)
+            
+            if success:
                 # Save session after forfeiting a match
                 from python.session_persistence import save_session
                 save_session(self.session)
@@ -1587,6 +1608,11 @@ class SessionWindow(QMainWindow):
         try:
             self.session = session
             self.parent_window = parent_window
+            
+            # Initialize session manager for clean business logic separation
+            self.session_manager = create_session_manager(session)
+            self._setup_session_manager_callbacks()
+            
             self.court_widgets: Dict[int, CourtDisplayWidget] = {}
             self.sound_enabled = False
             self.show_wait_times = False
@@ -1609,6 +1635,46 @@ class SessionWindow(QMainWindow):
             import traceback
             traceback.print_exc()
             raise
+    
+    def _setup_session_manager_callbacks(self):
+        """Setup callbacks for session manager events"""
+        # These callbacks keep the GUI in sync with session changes
+        self.session_manager.add_event_listener('session_updated', self._on_session_updated)
+        self.session_manager.add_event_listener('matches_changed', self._on_matches_changed)
+        self.session_manager.add_event_listener('match_completed', self._on_match_completed)
+        self.session_manager.add_event_listener('match_forfeited', self._on_match_forfeited)
+    
+    def _on_session_updated(self):
+        """Handle session update events from session manager"""
+        # No need to do anything - refresh_display will pick up changes
+        pass
+    
+    def _on_matches_changed(self):
+        """Handle match changes from session manager"""
+        # Could add specific match change handling here if needed
+        pass
+    
+    def _on_match_completed(self, match_id: str, team1_score: int, team2_score: int):
+        """Handle match completion events"""
+        # Could add specific completion handling (announcements, etc.)
+        pass
+    
+    def _on_match_forfeited(self, match_id: str):
+        """Handle match forfeit events"""
+        # Could add specific forfeit handling
+        pass
+    
+    def _trigger_session_evaluation(self):
+        """
+        Trigger session evaluation through session manager.
+        This replaces all direct evaluate_and_create_matches calls.
+        """
+        if hasattr(self, 'session_manager'):
+            self.session_manager.force_session_evaluation()
+        else:
+            # Fallback for transition period
+            # Session logic moved to session manager
+            self._trigger_session_evaluation()
     
     def closeEvent(self, event):
         """Handle window close"""
@@ -2018,8 +2084,8 @@ class SessionWindow(QMainWindow):
                 self.competitive_variety_slider.show()
                 
                 # Re-evaluate matches immediately
-                from python.session import evaluate_and_create_matches
-                evaluate_and_create_matches(self.session)
+                # Session logic moved to session manager
+                self._trigger_session_evaluation()
                 self.refresh_display()
 
     def init_variety_slider(self, parent_layout: QHBoxLayout):
@@ -2131,8 +2197,8 @@ class SessionWindow(QMainWindow):
                 self.variety_slider.show()
                 
                 # Re-evaluate matches immediately
-                from python.session import evaluate_and_create_matches
-                evaluate_and_create_matches(self.session)
+                # Session logic moved to session manager
+                self._trigger_session_evaluation()
                 self.refresh_display()
     
     def show_variety_custom_dialog(self):
@@ -2210,8 +2276,8 @@ class SessionWindow(QMainWindow):
             self.variety_value_label.setText("Custom")
             
             # Re-evaluate matches immediately
-            from python.session import evaluate_and_create_matches
-            evaluate_and_create_matches(self.session)
+            # Session logic moved to session manager
+            self._trigger_session_evaluation()
             self.refresh_display()
     
     def handle_variety_reset(self, dialog):
@@ -2236,8 +2302,8 @@ class SessionWindow(QMainWindow):
         self.update_variety_slider_from_settings()
         
         # Re-evaluate matches immediately
-        from python.session import evaluate_and_create_matches
-        evaluate_and_create_matches(self.session)
+        # Session logic moved to session manager
+        self._trigger_session_evaluation()
         self.refresh_display()
 
     def init_adaptive_constraints_slider(self, parent_layout: QHBoxLayout):
@@ -2436,8 +2502,8 @@ class SessionWindow(QMainWindow):
                 self.update_adaptive_constraints_slider()
                 
                 # Re-evaluate matches immediately if there are waiting matches
-                from python.session import evaluate_and_create_matches
-                evaluate_and_create_matches(self.session)
+                # Session logic moved to session manager
+                self._trigger_session_evaluation()
                 self.refresh_display()
             
         except Exception as e:
@@ -2476,8 +2542,8 @@ class SessionWindow(QMainWindow):
             self.update_adaptive_constraints_slider()
             
             # Re-evaluate matches immediately if there are waiting matches
-            from python.session import evaluate_and_create_matches
-            evaluate_and_create_matches(self.session)
+            # Session logic moved to session manager
+            self._trigger_session_evaluation()
             self.refresh_display()
             
         except Exception as e:
@@ -2566,8 +2632,8 @@ class SessionWindow(QMainWindow):
             self.competitive_variety_value_label.setText("Custom")
             
             # Re-evaluate matches immediately
-            from python.session import evaluate_and_create_matches
-            evaluate_and_create_matches(self.session)
+            # Session logic moved to session manager
+            self._trigger_session_evaluation()
             self.refresh_display()
     
     def handle_competitiveness_reset(self, dialog):
@@ -2590,15 +2656,15 @@ class SessionWindow(QMainWindow):
         self.update_slider_from_settings()
         
         # Re-evaluate matches immediately
-        from python.session import evaluate_and_create_matches
-        evaluate_and_create_matches(self.session)
+        # Session logic moved to session manager
+        self._trigger_session_evaluation()
         self.refresh_display()
 
     def re_evaluate_competitive_variety_matches(self):
         """Re-evaluate and create new matches based on competitive variety settings"""
         try:
             # Use the evaluate_and_create_matches function from session module
-            evaluate_and_create_matches(self.session)
+            self._trigger_session_evaluation()
             self.refresh_display()
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Error re-evaluating matches:\n{str(e)}")
@@ -2911,7 +2977,7 @@ class SessionWindow(QMainWindow):
             )
             from python.utils import start_player_wait_timer, stop_player_wait_timer
             
-            evaluate_and_create_matches(self.session)
+            self._trigger_session_evaluation()
             
             # Update court displays and stop wait timers for players in matches
             players_in_matches = set()
@@ -3667,7 +3733,7 @@ class SessionWindow(QMainWindow):
                     # Regenerate match queue once at the end
                     if players_to_add or players_to_remove:
                         from python.roundrobin import generate_round_robin_queue
-                        from python.session import evaluate_and_create_matches, get_waiting_players
+                        # Session logic moved to session manager, get_waiting_players
                         
                         if self.session.config.mode == 'round-robin':
                             self.session.match_queue = generate_round_robin_queue(
@@ -3696,7 +3762,7 @@ class SessionWindow(QMainWindow):
                                 self.session.match_queue = waiting_matches + other_matches
                         
                         # Populate any empty courts with the newly regenerated queue
-                        evaluate_and_create_matches(self.session)
+                        self._trigger_session_evaluation()
                         self.refresh_display()
                     
                     dialog.accept()

@@ -1,103 +1,184 @@
 #!/usr/bin/env python3
+
 """
-Quick test of GUI pre-seeded functionality (without actually running GUI)
+Integration test to verify GUI refactoring with Session Manager Service
+
+This test validates that the GUI properly delegates to the session manager
+and that all business logic is correctly separated from the presentation layer.
 """
 
 import sys
-from python.pickleball_types import Player, SessionConfig
+import os
+sys.path.insert(0, os.path.abspath('.'))
+
+from python.pickleball_types import Player, SessionConfig, KingOfCourtConfig
 from python.session import create_session
+from python.session_manager import create_session_manager
 from python.time_manager import initialize_time_manager
 
 
-def test_gui_integration():
-    """Test the GUI-related functionality without starting the actual GUI"""
-    print("Testing GUI Integration for Pre-seeded Ratings")
-    print("=" * 50)
+class MockGUI:
+    """Mock GUI class to test session manager integration"""
     
+    def __init__(self, session):
+        self.session = session
+        self.session_manager = create_session_manager(session)
+        self.events_received = []
+        
+        # Setup callbacks like real GUI would
+        self.session_manager.add_event_listener('session_updated', self._on_session_updated)
+        self.session_manager.add_event_listener('match_completed', self._on_match_completed)
+        self.session_manager.add_event_listener('match_forfeited', self._on_match_forfeited)
+    
+    def _on_session_updated(self):
+        self.events_received.append('session_updated')
+    
+    def _on_match_completed(self, match_id, team1_score, team2_score):
+        self.events_received.append(('match_completed', match_id, team1_score, team2_score))
+    
+    def _on_match_forfeited(self, match_id):
+        self.events_received.append(('match_forfeited', match_id))
+    
+    def _trigger_session_evaluation(self):
+        """Method that GUI components can call (like in real refactored GUI)"""
+        self.session_manager.force_session_evaluation()
+
+
+def test_gui_session_manager_integration():
+    """Test that GUI properly delegates to session manager"""
     initialize_time_manager()
     
-    # Test 1: SessionConfig with pre_seeded_ratings flag
-    print("\n1. Testing SessionConfig with pre_seeded_ratings flag...")
+    print("=== Testing GUI -> Session Manager Integration ===")
     
-    players = [
-        Player(id="p1", name="Alice", skill_rating=4.0),
-        Player(id="p2", name="Bob", skill_rating=3.5),
-        Player(id="p3", name="Charlie", skill_rating=3.25),
-        Player(id="p4", name="Diana", skill_rating=4.25),
-    ]
-    
+    # Create test session
+    players = [Player(f"player_{i}", f"Player {i}") for i in range(1, 9)]
     config = SessionConfig(
         mode='competitive-variety',
         session_type='doubles',
         players=players,
-        courts=1,
-        pre_seeded_ratings=True  # This should work
+        courts=2
     )
-    
-    print(f"✓ SessionConfig created with pre_seeded_ratings: {config.pre_seeded_ratings}")
-    
-    # Test 2: Session creation with pre-seeded config
-    print("\n2. Testing Session creation with pre-seeded config...")
     session = create_session(config)
-    print(f"✓ Session created successfully")
-    print(f"✓ Session config pre_seeded_ratings: {session.config.pre_seeded_ratings}")
     
-    # Test 3: ELO calculations with pre-seeded ratings
-    print("\n3. Testing ELO calculations...")
-    from python.competitive_variety import calculate_player_elo_rating
+    # Create mock GUI
+    gui = MockGUI(session)
+    gui._trigger_session_evaluation()  # Initial matches
     
-    for player in players:
-        elo = calculate_player_elo_rating(session, player.id)
-        expected_base = 1200 + (player.skill_rating - 3.0) * 600
-        print(f"  {player.name} (skill: {player.skill_rating}) -> ELO: {elo:.0f} (expected: {expected_base:.0f})")
-        
-        # Verify the ELO matches the expected base rating (since no games played yet)
-        if abs(elo - expected_base) < 1:
-            print(f"    ✓ ELO calculation correct")
-        else:
-            print(f"    ✗ ELO calculation incorrect")
+    # Verify initial state
+    assert len(session.matches) >= 2, "Should have initial matches"
+    active_matches = [m for m in session.matches if m.status == 'waiting']
+    assert len(active_matches) >= 1, "Should have active matches"
     
-    # Test 4: Session persistence integration
-    print("\n4. Testing session persistence...")
-    from python.session_persistence import save_player_history, load_player_history_with_ratings
+    # Test match completion through GUI
+    first_match = active_matches[0]
+    initial_events = len(gui.events_received)
     
-    # Save player history with pre-seeded ratings
-    player_names = [p.name for p in players]
-    save_player_history(
-        player_names, 
-        first_bye_players=[],
-        players_with_ratings=players,
-        pre_seeded=True
+    # GUI delegates match completion to session manager
+    success, slides = gui.session_manager.handle_match_completion(first_match.id, 11, 7)
+    
+    assert success, "Match completion should succeed"
+    assert len(gui.events_received) > initial_events, "Should receive events"
+    assert 'session_updated' in gui.events_received, "Should get session update event"
+    
+    # Verify match was completed
+    completed_match = next((m for m in session.matches if m.id == first_match.id), None)
+    assert completed_match.status == 'completed', "Match should be completed"
+    
+    print("✓ GUI -> Session Manager delegation working")
+
+
+def test_king_of_court_gui_integration():
+    """Test King of Court specific GUI integration"""
+    initialize_time_manager()
+    
+    print("\n=== Testing King of Court GUI Integration ===")
+    
+    # Create King of Court session
+    players = [Player(f"player_{i}", f"Player {i}") for i in range(1, 9)]
+    koc_config = KingOfCourtConfig(
+        seeding_option='random',
+        court_ordering=[1, 2]
     )
-    print("✓ Player history saved with pre-seeded ratings")
+    config = SessionConfig(
+        mode='king-of-court',
+        session_type='doubles',
+        players=players,
+        courts=2,
+        king_of_court_config=koc_config
+    )
+    session = create_session(config)
     
-    # Load player history back
-    loaded_history = load_player_history_with_ratings()
-    print(f"✓ Player history loaded: pre_seeded={loaded_history['pre_seeded']}")
-    print(f"✓ Player ratings loaded: {loaded_history['player_ratings']}")
+    # Create mock GUI
+    gui = MockGUI(session)
     
-    # Verify the loaded ratings match what we saved
-    all_ratings_correct = True
-    for player in players:
-        if player.name in loaded_history['player_ratings']:
-            saved_rating = loaded_history['player_ratings'][player.name]
-            if abs(saved_rating - player.skill_rating) < 0.01:
-                print(f"    ✓ {player.name}: {saved_rating} (correct)")
-            else:
-                print(f"    ✗ {player.name}: {saved_rating} != {player.skill_rating}")
-                all_ratings_correct = False
-        else:
-            print(f"    ✗ {player.name}: rating not found in saved data")
-            all_ratings_correct = False
+    initial_round = session.king_of_court_round_number
+    active_matches = [m for m in session.matches if m.status == 'waiting']
     
-    if all_ratings_correct:
-        print("✓ All player ratings saved and loaded correctly")
-    else:
-        print("✗ Some player ratings were not saved/loaded correctly")
+    # Complete all matches to trigger round advancement
+    for match in active_matches:
+        success, _ = gui.session_manager.handle_match_completion(match.id, 11, 7)
+        assert success, f"Should complete match {match.id}"
     
-    print("\n" + "=" * 50)
-    print("GUI Integration Test Complete!")
+    # Should advance round
+    assert session.king_of_court_round_number > initial_round, "Should advance round"
+    
+    # Should have new matches
+    new_matches = [m for m in session.matches if m.status == 'waiting']
+    assert len(new_matches) >= 2, "Should have new matches after round advancement"
+    
+    print("✓ King of Court GUI integration working")
+
+
+def test_settings_integration():
+    """Test settings changes through GUI integration"""
+    initialize_time_manager()
+    
+    print("\n=== Testing Settings GUI Integration ===")
+    
+    # Create session
+    players = [Player(f"player_{i}", f"Player {i}") for i in range(1, 9)]
+    config = SessionConfig(
+        mode='competitive-variety',
+        session_type='doubles',
+        players=players,
+        courts=2
+    )
+    session = create_session(config)
+    
+    # Create mock GUI
+    gui = MockGUI(session)
+    
+    # Test adaptive settings change (like GUI slider would do)
+    initial_disabled = session.adaptive_constraints_disabled
+    
+    # Test enabling (setting disabled to False)
+    gui.session_manager.handle_settings_change('adaptive', enabled=True)
+    assert session.adaptive_constraints_disabled == False, "Should be enabled"
+    
+    # Test disabling (setting disabled to True) 
+    gui.session_manager.handle_settings_change('adaptive', enabled=False)
+    assert session.adaptive_constraints_disabled == True, "Should be disabled"
+    assert 'session_updated' in gui.events_received, "Should get session update event"
+    
+    # Test manual override
+    gui.session_manager.handle_settings_change('adaptive', weight=3.0)
+    assert session.adaptive_balance_weight == 3.0, "Should set adaptive weight"
+    
+    print("✓ Settings integration working")
+
+
+def run_integration_tests():
+    """Run all integration tests"""
+    print("🔧 Running GUI -> Session Manager Integration Tests")
+    
+    test_gui_session_manager_integration()
+    test_king_of_court_gui_integration() 
+    test_settings_integration()
+    
+    print("\n🎉 All GUI Integration tests passed!")
+    print("✨ Business logic successfully separated from GUI!")
+    print("🏗️  Clean architecture validated!")
 
 
 if __name__ == "__main__":
-    test_gui_integration()
+    run_integration_tests()

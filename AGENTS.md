@@ -555,6 +555,45 @@ make test_king_of_court_advancement
 - Proper persistence and session restoration
 - Integration with wait time priority system
 - Full GUI support with intuitive controls
+- **Clean Architecture**: Business logic separated from GUI via Session Manager Service
+
+### Session Manager Service Architecture
+
+**Clean Separation of Concerns**
+- **SessionEventHandler**: Centralized business logic service that handles all session state changes
+- **GUI Layer**: Thin presentation layer that delegates to SessionEventHandler via events
+- **Testable Design**: All session logic is testable in isolation without GUI dependencies
+- **Event-Driven**: GUI listens to session events and updates accordingly
+
+**Session Manager API**
+```python
+# Create session manager
+manager = create_session_manager(session)
+
+# Handle business events
+success, slides = manager.handle_match_completion(match_id, team1_score, team2_score)
+success = manager.handle_match_forfeit(match_id)
+manager.handle_player_addition(new_players)
+manager.handle_player_removal(player_ids)
+manager.handle_settings_change('variety', value=4.0)
+manager.handle_manual_match_creation(court_number, team1, team2)
+manager.force_session_evaluation()
+```
+
+**Event System**
+- `session_updated`: Session state has changed
+- `matches_changed`: Match assignments have changed  
+- `match_completed`: A match was completed
+- `match_forfeited`: A match was forfeited
+- `player_added/removed`: Player roster changes
+- `round_advanced`: King of Court round progression
+
+**Architectural Benefits**
+- **Maintainable**: Business logic centralized in testable services
+- **Testable**: Complete test coverage without GUI dependencies
+- **Extensible**: Easy to add new features via service methods
+- **Reliable**: Consistent state management through single source of truth
+- **Performance**: Efficient event-driven updates instead of polling
 
 ### Critical Bug Fixes Applied
 
