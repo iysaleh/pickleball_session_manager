@@ -643,6 +643,11 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
 * Look at @pickleball_session_20251230_145701.txt , some people have waited 3 times while others have only waited 1 time. Waitlist history should be an ordered list, once people wait once, the order is determined and we just swap out players directly using the ordering in that list.
 * When we export the wait counts, we should have the export ordered according to the ordering of the waitlist history.
 
+# Continuous flow 
+* Singles Round Robin works almost perfectly, but first bye support isn't there. Add it the specified first bye is actually the first-bye.
+* With 9 players, there should be 36 matches total. After the first bye change, I only see 24 matches queued and 4 on courts (28 matches total) -- something broke. It should be 32 matches queued and 4 on the courts -- Add a test that validates 36 total matches for 9 players single round robin.
+* Bug -- The first bye players are stuck on the waitlist! See @pickleball_session_20260101_215839.txt
+
 # Useful Commands:
 npx vitest run roundrobin.test.ts
 # Run local webserver

@@ -15,7 +15,8 @@ def generate_round_robin_queue(
     max_matches: int = 100,
     locked_teams: Optional[List[List[str]]] = None,
     player_stats: Optional[Dict[str, PlayerStats]] = None,
-    active_matches: Optional[List] = None
+    active_matches: Optional[List] = None,
+    first_bye_players: Optional[List[str]] = None
 ) -> List[QueuedMatch]:
     """
     Generate a queue of round-robin matches optimized for partner and opponent diversity.
@@ -27,6 +28,7 @@ def generate_round_robin_queue(
     - Spread play time fairly
     - Never repeat the exact same 4-player combination if possible
     - Never queue matches currently being played
+    - Respect first bye players (exclude them from initial matches)
     
     Args:
         players: List of Player objects
@@ -36,6 +38,7 @@ def generate_round_robin_queue(
         locked_teams: Pre-formed teams (if applicable)
         player_stats: Dict of player_id -> PlayerStats for session history
         active_matches: List of currently active Match objects to exclude from queue
+        first_bye_players: List of player IDs to exclude from initial matches (first bye)
     """
     
     players_per_team = 1 if session_type == 'singles' else 2
@@ -62,6 +65,12 @@ def generate_round_robin_queue(
             if pid in player_stats:
                 session_games_total += player_stats[pid].games_played
         session_games_total = session_games_total // len(player_ids) if len(player_ids) > 0 else 0
+    
+    # Determine if first bye should be applied
+    first_bye_players_set = set()
+    apply_first_bye = first_bye_players and session_games_total == 0
+    if apply_first_bye:
+        first_bye_players_set = set(first_bye_players)
     
     # Pre-populate used_matchups with currently active matches
     if active_matches:
@@ -374,6 +383,26 @@ def generate_round_robin_queue(
             used_players_this_round.clear()
         
         iterations += 1
+    
+    # Apply first bye filtering: remove matches involving first bye players from the START of the queue
+    # but keep them for later rounds (they should appear later in the queue)
+    if apply_first_bye and first_bye_players_set:
+        filtered_matches = []
+        first_round_matches = []
+        
+        # Separate first round matches (those that don't involve first bye players)
+        # and later round matches (those that do involve first bye players)
+        for match in matches:
+            match_players = set(match.team1 + match.team2)
+            if match_players & first_bye_players_set:  # Match involves first bye players
+                # Keep for later rounds
+                filtered_matches.append(match)
+            else:
+                # Can be in first round
+                first_round_matches.append(match)
+        
+        # Put first round matches at the beginning, then later round matches
+        matches = first_round_matches + filtered_matches
     
     return matches
 

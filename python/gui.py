@@ -2808,7 +2808,8 @@ class SessionWindow(QMainWindow):
                         self.session.config.banned_pairs,
                         locked_teams=self.session.config.locked_teams,
                         player_stats=self.session.player_stats,
-                        active_matches=self.session.matches
+                        active_matches=self.session.matches,
+                        first_bye_players=[]  # Empty for slider changes (mid-session)
                     )
                 
                 # For Competitive Variety, queue is usually dynamic/empty so clearing it allows
@@ -3795,7 +3796,8 @@ class SessionWindow(QMainWindow):
                                 self.session.config.session_type,
                                 self.session.config.banned_pairs,
                                 player_stats=self.session.player_stats,
-                                active_matches=self.session.matches
+                                active_matches=self.session.matches,
+                                first_bye_players=[]  # Empty for add player (mid-session)
                             )
                         else:
                             # For competitive-variety, clear the queue to let dynamic allocator handle it

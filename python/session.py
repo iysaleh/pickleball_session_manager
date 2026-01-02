@@ -52,7 +52,9 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
             final_config.banned_pairs,
             max_queue_size,
             final_config.locked_teams,
-            player_stats
+            player_stats,
+            None,  # active_matches (no active matches during session creation)
+            final_config.first_bye_players  # first_bye_players
         )
     
     # Use provided advanced config or defaults
@@ -118,7 +120,8 @@ def add_player_to_session(session: Session, player: Player) -> Session:
                     session.max_queue_size,
                     session.config.locked_teams,
                     session.player_stats,
-                    session.matches
+                    session.matches,
+                    []  # first_bye_players (empty for mid-session additions)
                 )
         return session
     
@@ -151,7 +154,8 @@ def add_player_to_session(session: Session, player: Player) -> Session:
             session.max_queue_size,
             session.config.locked_teams,
             session.player_stats,
-            session.matches
+            session.matches,
+            []  # first_bye_players (empty for mid-session additions)
         )
     
     # Update competitive variety settings if needed
