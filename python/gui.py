@@ -1242,9 +1242,9 @@ class CourtDisplayWidget(QWidget):
         self.team1_label.setStyleSheet("QLabel { color: black; background-color: #ff9999; border: 2px solid #cc0000; border-radius: 3px; padding: 10px; }")
         self.team2_label.setStyleSheet("QLabel { color: black; background-color: #99ccff; border: 2px solid #0066cc; border-radius: 3px; padding: 10px; }")
         
-        # Get player names
-        team1_names = [get_player_name(self.session, pid) for pid in match.team1]
-        team2_names = [get_player_name(self.session, pid) for pid in match.team2]
+        # Get player names and format them for display (replace & with newline)
+        team1_names = [get_player_name(self.session, pid).replace('&', '\n') for pid in match.team1]
+        team2_names = [get_player_name(self.session, pid).replace('&', '\n') for pid in match.team2]
         
         # Add ranks if toggle is on
         if self.show_rank:
