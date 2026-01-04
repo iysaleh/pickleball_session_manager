@@ -21,9 +21,11 @@ def calculate_player_rating(
     """
     Calculate ELO-style rating for a player based on match history
     
-    Rating system:
+    Rating system (enhanced to match competitive-variety algorithm):
     - New players start at base rating (1500)
-    - Ratings adjusted based on win rate with logarithmic scaling
+    - Win rate adjustment with logarithmic scaling
+    - Point differential adjustment for performance quality
+    - Consistency bonus for strong players
     - Clamped between min and max ratings
     """
     if stats.games_played == 0:
@@ -31,13 +33,22 @@ def calculate_player_rating(
     
     import math
     
-    # Start with base rating
-    rating = base_rating
+    games = stats.games_played
+    wins = stats.wins
+    win_rate = wins / games
     
-    # Adjust based on win rate with logarithmic scaling
-    win_rate = stats.wins / stats.games_played
-    win_rate_adjustment = math.log(1 + win_rate * 9) * 200  # Logarithmic scaling
-    rating += win_rate_adjustment - 200  # Center around baseRating for 50% win rate
+    # Start with base rating and apply win rate adjustment
+    rating = base_rating + math.log(1 + win_rate * 9) * 200 - 200
+    
+    # Point differential adjustment (matches competitive-variety algorithm)
+    if games > 0:
+        avg_point_diff = (stats.total_points_for - stats.total_points_against) / games
+        if avg_point_diff != 0:
+            rating += math.log(1 + abs(avg_point_diff)) * 50 * (1 if avg_point_diff > 0 else -1)
+    
+    # Consistency bonus for strong players (60%+ win rate)
+    if win_rate >= 0.6 and games > 0:
+        rating += math.log(games) * 30
     
     # Clamp to min/max
     rating = max(min_rating, min(rating, max_rating))

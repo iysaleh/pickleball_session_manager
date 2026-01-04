@@ -9,6 +9,9 @@ test_9_players_singles_validation:
 test_waitlist_exact_rotation:
 	python test_waitlist_exact_rotation.py 2>&1
 
+test_enhanced_elo_ranking:
+	python test_enhanced_elo_ranking.py 2>&1
+
 test_king_of_court_comprehensive:
 	python test_king_of_court_comprehensive.py 2>&1
 
