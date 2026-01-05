@@ -20,7 +20,7 @@ from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen, QPixmap
 
 from python.pickleball_types import (
     Player, Session, SessionConfig, GameMode, SessionType, Match,
-    MatchStatus, QueuedMatch
+    MatchStatus, QueuedMatch, ScheduledMatch, CompetitiveRoundRobinConfig
 )
 from python.session import (
     create_session, add_player_to_session, remove_player_from_session,
@@ -481,6 +481,470 @@ class ManageLocksDialog(QDialog):
             self.refresh_bans()
 
 
+class ManageMatchesDialog(QDialog):
+    """
+    Dialog for managing pre-scheduled matches in Competitive Round Robin mode.
+    
+    Allows users to:
+    - View all scheduled matches with player details and balance scores
+    - Approve or reject individual matches
+    - Swap players within matches
+    - See constraint violations and schedule statistics
+    - Regenerate rejected matches
+    """
+    
+    def __init__(self, session: Session, config, parent=None):
+        super().__init__(parent)
+        self.session = session
+        self.config = config
+        self.scheduled_matches = []
+        self.init_ui()
+        self.generate_initial_schedule()
+    
+    def init_ui(self):
+        self.setWindowTitle("Manage Scheduled Matches - Competitive Round Robin")
+        self.resize(1200, 800)
+        
+        layout = QVBoxLayout()
+        
+        # Header with summary stats
+        header_layout = QHBoxLayout()
+        
+        self.stats_label = QLabel("Loading schedule...")
+        self.stats_label.setStyleSheet("QLabel { color: #4CAF50; font-size: 14px; font-weight: bold; }")
+        header_layout.addWidget(self.stats_label)
+        
+        header_layout.addStretch()
+        
+        # Action buttons in header
+        regenerate_btn = QPushButton("🔄 Regenerate Rejected")
+        regenerate_btn.clicked.connect(self.regenerate_rejected_matches)
+        header_layout.addWidget(regenerate_btn)
+        
+        approve_all_btn = QPushButton("✅ Approve All Pending")
+        approve_all_btn.clicked.connect(self.approve_all_pending)
+        header_layout.addWidget(approve_all_btn)
+        
+        layout.addLayout(header_layout)
+        
+        # Constraint summary
+        self.constraint_label = QLabel("")
+        self.constraint_label.setStyleSheet("QLabel { color: #FFB74D; font-size: 12px; }")
+        layout.addWidget(self.constraint_label)
+        
+        # Main content: scrollable match list
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("""
+            QScrollArea { border: none; background-color: #2a2a2a; }
+            QScrollBar:vertical { background-color: #3a3a3a; width: 12px; }
+            QScrollBar::handle:vertical { background-color: #555; border-radius: 4px; min-height: 30px; }
+        """)
+        
+        self.matches_container = QWidget()
+        self.matches_layout = QVBoxLayout(self.matches_container)
+        self.matches_layout.setSpacing(10)
+        self.matches_layout.addStretch()
+        
+        scroll.setWidget(self.matches_container)
+        layout.addWidget(scroll)
+        
+        # Player games summary
+        games_group = QGroupBox("Games Per Player")
+        games_group.setStyleSheet("""
+            QGroupBox { 
+                color: white; 
+                border: 1px solid #555; 
+                border-radius: 5px; 
+                margin-top: 10px; 
+                padding: 10px;
+            }
+            QGroupBox::title { subcontrol-origin: margin; padding: 0 5px; }
+        """)
+        games_layout = QVBoxLayout()
+        self.games_summary_label = QLabel("")
+        self.games_summary_label.setWordWrap(True)
+        self.games_summary_label.setStyleSheet("QLabel { color: #aaa; font-size: 11px; }")
+        games_layout.addWidget(self.games_summary_label)
+        games_group.setLayout(games_layout)
+        layout.addWidget(games_group)
+        
+        # Bottom buttons
+        button_layout = QHBoxLayout()
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        button_layout.addStretch()
+        
+        self.finalize_btn = QPushButton("✅ Finalize Schedule")
+        self.finalize_btn.setStyleSheet("""
+            QPushButton { 
+                background-color: #4CAF50; 
+                color: white; 
+                font-size: 14px; 
+                font-weight: bold;
+                padding: 10px 20px;
+                border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #66BB6A; }
+            QPushButton:disabled { background-color: #555; color: #888; }
+        """)
+        self.finalize_btn.clicked.connect(self.finalize_schedule)
+        button_layout.addWidget(self.finalize_btn)
+        
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+        
+        # Apply dark theme
+        self.setStyleSheet("""
+            QDialog { background-color: #2a2a2a; color: white; }
+            QLabel { color: white; }
+            QPushButton { 
+                background-color: #0d47a1; 
+                color: white; 
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #1565c0; }
+            QGroupBox { color: white; }
+        """)
+    
+    def generate_initial_schedule(self):
+        """Generate the initial schedule of matches"""
+        from python.competitive_round_robin import generate_initial_schedule
+        
+        self.scheduled_matches = generate_initial_schedule(self.session, self.config)
+        self.config.scheduled_matches = self.scheduled_matches
+        
+        self.refresh_match_display()
+        self.update_stats()
+    
+    def refresh_match_display(self):
+        """Refresh the match cards in the UI"""
+        # Clear existing widgets
+        while self.matches_layout.count() > 1:  # Keep the stretch
+            item = self.matches_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Add match cards
+        for i, match in enumerate(self.scheduled_matches):
+            card = self.create_match_card(match, i)
+            self.matches_layout.insertWidget(i, card)
+    
+    def create_match_card(self, match, index: int) -> QWidget:
+        """Create a visual card for a scheduled match"""
+        from python.competitive_round_robin import get_player_display_info
+        
+        card = QFrame()
+        card.setFrameStyle(QFrame.Shape.StyledPanel)
+        
+        # Color based on status
+        if match.status == 'approved':
+            bg_color = "#1B5E20"  # Dark green
+            border_color = "#4CAF50"
+        elif match.status == 'rejected':
+            bg_color = "#B71C1C"  # Dark red
+            border_color = "#F44336"
+        else:  # pending
+            bg_color = "#37474F"  # Dark gray-blue
+            border_color = "#78909C"
+        
+        card.setStyleSheet(f"""
+            QFrame {{
+                background-color: {bg_color};
+                border: 2px solid {border_color};
+                border-radius: 8px;
+                padding: 10px;
+            }}
+        """)
+        
+        card_layout = QHBoxLayout(card)
+        
+        # Match number and status
+        left_layout = QVBoxLayout()
+        match_num = QLabel(f"Match #{match.match_number}")
+        match_num.setStyleSheet("QLabel { font-size: 14px; font-weight: bold; color: white; }")
+        left_layout.addWidget(match_num)
+        
+        status_text = match.status.upper()
+        status_label = QLabel(status_text)
+        status_color = {"approved": "#4CAF50", "rejected": "#F44336", "pending": "#FFB74D"}[match.status]
+        status_label.setStyleSheet(f"QLabel {{ color: {status_color}; font-weight: bold; }}")
+        left_layout.addWidget(status_label)
+        
+        balance_label = QLabel(f"Balance: {match.balance_score:.0f}")
+        balance_label.setStyleSheet("QLabel { color: #aaa; font-size: 11px; }")
+        left_layout.addWidget(balance_label)
+        
+        card_layout.addLayout(left_layout)
+        
+        # Team 1
+        team1_frame = QFrame()
+        team1_frame.setStyleSheet("QFrame { background-color: rgba(255,100,100,0.3); border-radius: 5px; padding: 5px; }")
+        team1_layout = QVBoxLayout(team1_frame)
+        team1_layout.setSpacing(2)
+        
+        for player_id in match.team1:
+            info = get_player_display_info(self.session, player_id)
+            rating_str = f"({info['skill_rating']})" if info['skill_rating'] else f"[{info['elo_rating']}]"
+            player_label = QLabel(f"{info['name']} {rating_str}")
+            player_label.setStyleSheet("QLabel { color: white; font-size: 12px; }")
+            team1_layout.addWidget(player_label)
+        
+        card_layout.addWidget(team1_frame)
+        
+        # VS
+        vs_label = QLabel("vs")
+        vs_label.setStyleSheet("QLabel { color: #888; font-weight: bold; font-size: 16px; }")
+        vs_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        card_layout.addWidget(vs_label)
+        
+        # Team 2
+        team2_frame = QFrame()
+        team2_frame.setStyleSheet("QFrame { background-color: rgba(100,100,255,0.3); border-radius: 5px; padding: 5px; }")
+        team2_layout = QVBoxLayout(team2_frame)
+        team2_layout.setSpacing(2)
+        
+        for player_id in match.team2:
+            info = get_player_display_info(self.session, player_id)
+            rating_str = f"({info['skill_rating']})" if info['skill_rating'] else f"[{info['elo_rating']}]"
+            player_label = QLabel(f"{info['name']} {rating_str}")
+            player_label.setStyleSheet("QLabel { color: white; font-size: 12px; }")
+            team2_layout.addWidget(player_label)
+        
+        card_layout.addWidget(team2_frame)
+        
+        card_layout.addStretch()
+        
+        # Action buttons
+        btn_layout = QVBoxLayout()
+        
+        if match.status == 'pending':
+            approve_btn = QPushButton("✅")
+            approve_btn.setToolTip("Approve this match")
+            approve_btn.setFixedSize(35, 35)
+            approve_btn.setStyleSheet("QPushButton { background-color: #4CAF50; }")
+            approve_btn.clicked.connect(lambda checked, idx=index: self.approve_match(idx))
+            btn_layout.addWidget(approve_btn)
+            
+            reject_btn = QPushButton("❌")
+            reject_btn.setToolTip("Reject this match")
+            reject_btn.setFixedSize(35, 35)
+            reject_btn.setStyleSheet("QPushButton { background-color: #F44336; }")
+            reject_btn.clicked.connect(lambda checked, idx=index: self.reject_match(idx))
+            btn_layout.addWidget(reject_btn)
+        
+        swap_btn = QPushButton("🔄")
+        swap_btn.setToolTip("Swap a player")
+        swap_btn.setFixedSize(35, 35)
+        swap_btn.setStyleSheet("QPushButton { background-color: #FF9800; }")
+        swap_btn.clicked.connect(lambda checked, idx=index: self.swap_player_dialog(idx))
+        btn_layout.addWidget(swap_btn)
+        
+        card_layout.addLayout(btn_layout)
+        
+        return card
+    
+    def approve_match(self, index: int):
+        """Approve a scheduled match"""
+        if 0 <= index < len(self.scheduled_matches):
+            self.scheduled_matches[index].status = 'approved'
+            self.refresh_match_display()
+            self.update_stats()
+    
+    def reject_match(self, index: int):
+        """Reject a scheduled match"""
+        if 0 <= index < len(self.scheduled_matches):
+            self.scheduled_matches[index].status = 'rejected'
+            self.refresh_match_display()
+            self.update_stats()
+    
+    def approve_all_pending(self):
+        """Approve all pending matches"""
+        for match in self.scheduled_matches:
+            if match.status == 'pending':
+                match.status = 'approved'
+        self.refresh_match_display()
+        self.update_stats()
+    
+    def regenerate_rejected_matches(self):
+        """Regenerate matches to replace rejected ones"""
+        from python.competitive_round_robin import regenerate_match
+        
+        # Find rejected matches
+        rejected_indices = [i for i, m in enumerate(self.scheduled_matches) if m.status == 'rejected']
+        
+        regenerated = 0
+        for idx in rejected_indices:
+            new_match = regenerate_match(
+                self.session, 
+                self.scheduled_matches, 
+                idx, 
+                self.config
+            )
+            if new_match:
+                self.scheduled_matches[idx] = new_match
+                regenerated += 1
+        
+        if regenerated > 0:
+            self.refresh_match_display()
+            self.update_stats()
+            QMessageBox.information(self, "Regenerated", f"Successfully regenerated {regenerated} matches.")
+        else:
+            QMessageBox.warning(self, "No Changes", "Could not regenerate any matches while meeting constraints.")
+    
+    def swap_player_dialog(self, match_index: int):
+        """Open dialog to swap a player in a match"""
+        if match_index < 0 or match_index >= len(self.scheduled_matches):
+            return
+        
+        match = self.scheduled_matches[match_index]
+        
+        # Create swap dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Swap Player")
+        dialog.resize(400, 300)
+        layout = QVBoxLayout()
+        
+        layout.addWidget(QLabel("Select player to replace:"))
+        
+        player_combo = QComboBox()
+        for player_id in match.get_all_players():
+            from python.competitive_round_robin import get_player_display_info
+            info = get_player_display_info(self.session, player_id)
+            player_combo.addItem(f"{info['name']} ({info['skill_rating'] or info['elo_rating']})", player_id)
+        layout.addWidget(player_combo)
+        
+        layout.addWidget(QLabel("Select replacement:"))
+        
+        replacement_combo = QComboBox()
+        replacement_combo.addItem("(Select a player)", None)
+        
+        # Add available players (not in this match)
+        match_players = set(match.get_all_players())
+        for player in self.session.config.players:
+            if player.id not in match_players:
+                from python.competitive_round_robin import get_player_display_info
+                info = get_player_display_info(self.session, player.id)
+                replacement_combo.addItem(f"{info['name']} ({info['skill_rating'] or info['elo_rating']})", player.id)
+        layout.addWidget(replacement_combo)
+        
+        # Result label
+        result_label = QLabel("")
+        result_label.setStyleSheet("QLabel { color: #FFB74D; }")
+        layout.addWidget(result_label)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(dialog.reject)
+        btn_layout.addWidget(cancel_btn)
+        
+        swap_btn = QPushButton("Swap")
+        
+        def do_swap():
+            old_id = player_combo.currentData()
+            new_id = replacement_combo.currentData()
+            if not old_id or not new_id:
+                result_label.setText("Please select both players")
+                return
+            
+            from python.competitive_round_robin import swap_player_in_match
+            success, new_match, error = swap_player_in_match(
+                self.session, match, old_id, new_id, 
+                self.scheduled_matches, self.config
+            )
+            
+            if success:
+                self.scheduled_matches[match_index] = new_match
+                self.refresh_match_display()
+                self.update_stats()
+                dialog.accept()
+            else:
+                result_label.setText(f"Cannot swap: {error}")
+        
+        swap_btn.clicked.connect(do_swap)
+        btn_layout.addWidget(swap_btn)
+        layout.addLayout(btn_layout)
+        
+        dialog.setLayout(layout)
+        dialog.setStyleSheet("""
+            QDialog { background-color: #2a2a2a; color: white; }
+            QLabel { color: white; }
+            QComboBox { background-color: #3a3a3a; color: white; padding: 5px; }
+            QPushButton { background-color: #0d47a1; color: white; padding: 8px; border-radius: 4px; }
+        """)
+        dialog.exec()
+    
+    def update_stats(self):
+        """Update the statistics display"""
+        from python.competitive_round_robin import get_schedule_summary, validate_schedule
+        
+        summary = get_schedule_summary(self.session, self.scheduled_matches, self.config)
+        
+        self.stats_label.setText(
+            f"Total: {summary['total_matches']} matches | "
+            f"✅ Approved: {summary['approved']} | "
+            f"⏳ Pending: {summary['pending']} | "
+            f"❌ Rejected: {summary['rejected']}"
+        )
+        
+        # Constraint summary
+        validation = validate_schedule(self.session, self.scheduled_matches, self.config)
+        if validation.violations:
+            violation_text = f"⚠️ {len(validation.violations)} constraint violations found"
+            self.constraint_label.setText(violation_text)
+            self.constraint_label.setStyleSheet("QLabel { color: #F44336; }")
+        else:
+            self.constraint_label.setText("✅ All constraints satisfied")
+            self.constraint_label.setStyleSheet("QLabel { color: #4CAF50; }")
+        
+        # Games per player summary
+        games_text = []
+        for player in sorted(self.session.config.players, key=lambda p: p.name):
+            games = summary['games_per_player'].get(player.id, 0)
+            target = summary['target_games_per_player']
+            status = "✅" if games == target else ("⚠️" if games < target else "❗")
+            games_text.append(f"{player.name}: {games}/{target} {status}")
+        
+        self.games_summary_label.setText(" | ".join(games_text))
+        
+        # Enable/disable finalize button
+        approved_count = summary['approved']
+        target_count = len(self.session.config.players) * self.config.games_per_player // 4
+        self.finalize_btn.setEnabled(approved_count >= target_count * 0.8)  # At least 80% of target
+    
+    def finalize_schedule(self):
+        """Finalize the schedule and close dialog"""
+        approved_count = len([m for m in self.scheduled_matches if m.status == 'approved'])
+        
+        if approved_count == 0:
+            QMessageBox.warning(self, "No Matches", "Please approve at least some matches before finalizing.")
+            return
+        
+        reply = QMessageBox.question(
+            self,
+            "Finalize Schedule",
+            f"Finalize schedule with {approved_count} approved matches?\n\n"
+            "You will not be able to modify matches after starting the session.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.config.scheduled_matches = self.scheduled_matches
+            self.config.schedule_finalized = True
+            self.accept()
+    
+    def get_finalized_config(self):
+        """Return the finalized configuration"""
+        return self.config
+
+
 class ManageByesDialog(QDialog):
     """Dialog for managing first bye players"""
     
@@ -632,7 +1096,7 @@ class SetupDialog(QDialog):
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel("Game Mode:"))
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Round Robin", "King of the Court", "Competitive Variety"])
+        self.mode_combo.addItems(["Round Robin", "King of the Court", "Competitive Variety", "Competitive Round Robin"])
         # Set default to 'Competitive Variety'
         self.mode_combo.setCurrentIndex(self.mode_combo.findText("Competitive Variety"))
         mode_layout.addWidget(self.mode_combo)
@@ -702,6 +1166,12 @@ class SetupDialog(QDialog):
         byes_btn = QPushButton("📋 Manage Byes")
         byes_btn.clicked.connect(self.manage_byes)
         layout.addWidget(byes_btn)
+        
+        # Manage Matches Button (only for Competitive Round Robin)
+        self.manage_matches_btn = QPushButton("📅 Manage Matches")
+        self.manage_matches_btn.clicked.connect(self.manage_matches)
+        self.manage_matches_btn.setVisible(False)  # Hidden by default
+        layout.addWidget(self.manage_matches_btn)
         
         # Add previous players if available
         if self.previous_players:
@@ -830,7 +1300,8 @@ class SetupDialog(QDialog):
             mode_mapping = {
                 'competitive-variety': 'Competitive Variety',
                 'round-robin': 'Round Robin',
-                'king-of-court': 'King of the Court'
+                'king-of-court': 'King of the Court',
+                'competitive-round-robin': 'Competitive Round Robin'
             }
             display_mode = mode_mapping.get(self.previous_game_mode, 'Competitive Variety')
             
@@ -861,9 +1332,18 @@ class SetupDialog(QDialog):
         """Handle game mode change to show/hide pre-seed checkbox and KoC seeding"""
         is_competitive_variety = mode_text == "Competitive Variety"
         is_king_of_court = mode_text == "King of the Court"
+        is_competitive_round_robin = mode_text == "Competitive Round Robin"
         
-        self.pre_seed_checkbox.setVisible(is_competitive_variety or is_king_of_court)
+        self.pre_seed_checkbox.setVisible(is_competitive_variety or is_king_of_court or is_competitive_round_robin)
         self.koc_seeding_combo.setVisible(is_king_of_court)
+        
+        # Show Manage Matches button only for Competitive Round Robin
+        if hasattr(self, 'manage_matches_btn'):
+            self.manage_matches_btn.setVisible(is_competitive_round_robin)
+        
+        # Auto-enable pre-seeding for Competitive Round Robin (skill ratings required)
+        if is_competitive_round_robin:
+            self.pre_seed_checkbox.setChecked(True)
         
         # Connect KoC seeding change to update pre-seed visibility
         if is_king_of_court:
@@ -871,7 +1351,7 @@ class SetupDialog(QDialog):
             self.on_koc_seeding_changed(self.koc_seeding_combo.currentText())  # Update immediately
         
         # If switching away from competitive variety, uncheck pre-seed
-        if not is_competitive_variety and not is_king_of_court:
+        if not is_competitive_variety and not is_king_of_court and not is_competitive_round_robin:
             self.pre_seed_checkbox.setChecked(False)
     
     def on_koc_seeding_changed(self, seeding_text):
@@ -942,6 +1422,65 @@ class SetupDialog(QDialog):
              return
         dialog = ManageByesDialog(players, self.first_bye_players, self)
         dialog.exec()
+    
+    def manage_matches(self):
+        """Open the Manage Matches dialog for Competitive Round Robin mode"""
+        players = self.player_widget.get_players()
+        if len(players) < 4:
+            QMessageBox.warning(self, "Error", "Need at least 4 players to manage matches")
+            return
+        
+        # Check if pre-seeded ratings are enabled (required for this mode)
+        if not self.pre_seed_checkbox.isChecked():
+            QMessageBox.warning(
+                self, 
+                "Pre-Seeding Required", 
+                "Competitive Round Robin requires pre-seeded skill ratings.\n\n"
+                "Please enable 'Pre-Seed Skill Ratings' and add player ratings."
+            )
+            return
+        
+        # Check that all players have skill ratings
+        players_without_ratings = [p.name for p in players if p.skill_rating is None]
+        if players_without_ratings:
+            QMessageBox.warning(
+                self,
+                "Missing Skill Ratings",
+                f"The following players need skill ratings:\n\n" +
+                "\n".join(players_without_ratings[:10]) +
+                ("\n..." if len(players_without_ratings) > 10 else "")
+            )
+            return
+        
+        # Create temporary session for schedule generation
+        from python.pickleball_types import SessionConfig, CompetitiveRoundRobinConfig
+        from python.session import create_session
+        
+        config = CompetitiveRoundRobinConfig()
+        temp_session_config = SessionConfig(
+            mode='competitive-round-robin',
+            session_type='doubles',
+            players=players,
+            courts=self.courts_spin.value(),
+            banned_pairs=self.banned_pairs,
+            locked_teams=self.locked_teams,
+            first_bye_players=self.first_bye_players,
+            pre_seeded_ratings=True,
+            competitive_round_robin_config=config
+        )
+        temp_session = create_session(temp_session_config)
+        
+        # Open manage matches dialog
+        dialog = ManageMatchesDialog(temp_session, config, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Store the finalized config
+            self._competitive_round_robin_config = dialog.get_finalized_config()
+            QMessageBox.information(
+                self,
+                "Matches Scheduled",
+                f"Successfully scheduled {len([m for m in self._competitive_round_robin_config.scheduled_matches if m.status == 'approved'])} matches.\n\n"
+                "Click 'Start Session' to begin playing."
+            )
 
     def add_test_players(self):
         """Add 18 test players with optional random skill ratings"""
@@ -1019,6 +1558,8 @@ class SetupDialog(QDialog):
                 mode: GameMode = 'round-robin'
             elif mode_text == "King of the Court":
                 mode: GameMode = 'king-of-court'
+            elif mode_text == "Competitive Round Robin":
+                mode: GameMode = 'competitive-round-robin'
             else:
                 mode: GameMode = 'competitive-variety'
             
@@ -1046,6 +1587,14 @@ class SetupDialog(QDialog):
                     court_ordering=court_ordering
                 )
             
+            # Create Competitive Round Robin config if needed
+            crr_config = None
+            if mode == 'competitive-round-robin':
+                from python.pickleball_types import CompetitiveRoundRobinConfig
+                crr_config = getattr(self, '_competitive_round_robin_config', None)
+                if crr_config is None:
+                    crr_config = CompetitiveRoundRobinConfig()
+            
             config = SessionConfig(
                 mode=mode,
                 session_type=session_type,
@@ -1057,7 +1606,8 @@ class SetupDialog(QDialog):
                 court_sliding_mode=self.sliding_combo.currentText(),
                 randomize_player_order=False,
                 pre_seeded_ratings=self.pre_seed_checkbox.isChecked(),
-                king_of_court_config=koc_config
+                king_of_court_config=koc_config,
+                competitive_round_robin_config=crr_config
             )
             
             self.session = create_session(config)

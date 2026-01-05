@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import List, Set, Dict, Optional, Literal, Any
 from datetime import datetime
 
-GameMode = Literal['king-of-court', 'round-robin', 'competitive-variety']
+GameMode = Literal['king-of-court', 'round-robin', 'competitive-variety', 'competitive-round-robin']
 SessionType = Literal['doubles', 'singles']
 MatchStatus = Literal['waiting', 'in-progress', 'completed', 'forfeited']
 
@@ -109,11 +109,45 @@ class RoundRobinConfig:
     pass
 
 
+# Approval status for scheduled matches in Competitive Round Robin
+ScheduledMatchStatus = Literal['pending', 'approved', 'rejected']
+
+
+@dataclass
+class ScheduledMatch:
+    """
+    A scheduled match in Competitive Round Robin mode.
+    Tracks approval status for human-in-the-loop validation.
+    """
+    id: str
+    team1: List[str]  # Player IDs
+    team2: List[str]  # Player IDs
+    status: ScheduledMatchStatus = 'pending'
+    match_number: int = 0  # Position in scheduled order (1-indexed)
+    balance_score: float = 0.0  # How well-balanced the teams are (higher = better)
+    
+    def get_all_players(self) -> List[str]:
+        """Return all 4 player IDs in this match"""
+        return self.team1 + self.team2
+
+
+@dataclass 
+class CompetitiveRoundRobinConfig:
+    """Configuration for Competitive Round Robin mode"""
+    games_per_player: int = 8  # Target games per player
+    max_partner_repeats: int = 0  # Maximum times to play with same partner (0 = never repeat)
+    max_opponent_pair_repeats: int = 0  # Maximum times to face same opponent pair (0 = never repeat)
+    max_individual_opponent_repeats: int = 3  # Maximum times to face same individual
+    scheduled_matches: List[ScheduledMatch] = field(default_factory=list)  # Pre-approved matches
+    schedule_finalized: bool = False  # True when user has approved enough matches
+
+
 @dataclass
 class AdvancedConfig:
     """Advanced configuration settings"""
     king_of_court: KingOfCourtConfig = field(default_factory=KingOfCourtConfig)
     round_robin: RoundRobinConfig = field(default_factory=RoundRobinConfig)
+    competitive_round_robin: CompetitiveRoundRobinConfig = field(default_factory=CompetitiveRoundRobinConfig)
     
     # Deterministic waitlist predictions
     waitlist_predictions: List[Any] = field(default_factory=list)  # WaitlistPrediction objects
@@ -134,6 +168,7 @@ class SessionConfig:
     advanced_config: Optional[AdvancedConfig] = None
     pre_seeded_ratings: bool = False  # Whether skill ratings were pre-seeded
     king_of_court_config: Optional[KingOfCourtConfig] = None  # King of Court specific settings
+    competitive_round_robin_config: Optional[CompetitiveRoundRobinConfig] = None  # Competitive Round Robin settings
 
 
 @dataclass

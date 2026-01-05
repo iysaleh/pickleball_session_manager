@@ -552,6 +552,7 @@ def evaluate_and_create_matches(session: Session) -> Session:
     This should be called whenever state changes to potentially start new games.
     For competitive-variety mode, re-populates courts based on current settings.
     For king-of-court mode, manages rounds-based progression.
+    For competitive-round-robin mode, populates from pre-approved schedule.
     """
     
     if session.config.mode == 'competitive-variety':
@@ -563,6 +564,9 @@ def evaluate_and_create_matches(session: Session) -> Session:
     elif session.config.mode == 'king-of-court':
         from python.kingofcourt import evaluate_king_of_court_session
         session = evaluate_king_of_court_session(session)
+    elif session.config.mode == 'competitive-round-robin':
+        from python.competitive_round_robin import populate_courts_from_schedule
+        populate_courts_from_schedule(session)
     
     return session
 
