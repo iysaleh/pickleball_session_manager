@@ -673,6 +673,12 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
 # Tweaks 4
 * Update the competetive-round-robin algorithm to do Round-based generation: Instead of generating matches one-by-one, generate them in "rounds" where each round has N matches (N = number of courts) and no player appears twice in the same round. This guarantees all courts can be used simultaneously.
 * Also add Batch scheduling: Group matches into batches of 4 (for N courts) where each batch has N*4 unique players (assuming there are enough players to fill those courts)
+# Tweaks 5 - more mixing
+* Look at @pickleball_session_20260104_205625.txt , Payton, Jeremy, Johnny, and Toni play 3 matches together with different configurations... That can be extremely frustrating and boring. The competetive-round-robin matches that are generated are not creating enough variety. We need to create more matches with skill mixing -- EG 4.0 3.5 vs 4.0 3.75 , currently, we most of the matches generated emphasize keeping the skill ratings the same, EG 4.0 4.0 vs 4.0 4.0, that's great, but in rec play, we want more variety while keeping matches relatively balanced. Make sure the generated matches have more mixing (but we still want the high skill matches to also be included!)
+# Tweaks 6
+* Much better! Now, lets tweak the algorithm to emphasize more similar skill matches for the first 1st generated round, and then do the more mixing that we just added here for 1 round... Keep cycling back and forth between similar skill emphasis and variety emphasis until the necessary number of matches are generated... That way we get a good variety of match types throughout the session.
+# Tweaks 7
+* I am still struggling with continous flow of the session -- we are ending up with empty courts waiting for multiple games to finish too often. Look at @pickleball_session_20260104_212522.txt, we are only 2 games completed, and already a court is waiting! What is wrong wtih the schedule @competitive_round_robin_schedule.json ? What update do we have to make to the competetive-round-robin algorithm to help make the continuous flow less interrupted by waiting?
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts
