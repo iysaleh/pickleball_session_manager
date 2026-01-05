@@ -519,8 +519,20 @@ def generate_initial_schedule(
                 continuity = sum(1 for p in combo_list if p in preferred_players)
                 continuity_bonus = continuity * 50
                 
-                games_needed = sum((target_games - games_per_player[p]) * 20 for p in combo_list)
-                total_score = balance_score + style_score + continuity_bonus + games_needed
+                # CRITICAL: Strong bonus/penalty for games balance
+                # This is the most important factor for fair distribution
+                games_balance_score = 0
+                for p in combo_list:
+                    games_deficit = target_games - games_per_player[p]
+                    if games_deficit > 0:
+                        # Strong bonus for under-played players
+                        # deficit=1 -> 100, deficit=2 -> 250, deficit=3 -> 450, deficit=4 -> 700
+                        games_balance_score += games_deficit * 50 + (games_deficit ** 2) * 25
+                    elif games_deficit < 0:
+                        # Penalty for over-played players (they shouldn't play more)
+                        games_balance_score -= abs(games_deficit) * 100
+                
+                total_score = balance_score + style_score + continuity_bonus + games_balance_score
                 
                 if total_score > best_score:
                     best_score = total_score
@@ -774,11 +786,17 @@ def generate_initial_schedule(
             court_idx = i % num_courts
             court_waiters[court_idx].add(waiter)
         
+        # CRITICAL: Identify players who are significantly behind on games
+        # These players should be prioritized in ALL pools to ensure fair distribution
+        avg_games = sum(games_per_player.values()) / len(games_per_player) if games_per_player else 0
+        underplayed_players = set(p for p, g in games_per_player.items() 
+                                   if g < avg_games - 1 and g < max_games)
+        
         matches_needed_this_wave = min(num_courts, total_matches_needed - match_number)
         wave_matches: List[Tuple[int, List[str], List[str]]] = []
         used_in_wave: Set[str] = set()
         
-        # PHASE 1: Try each court with optimal flow (own players + waiters)
+        # PHASE 1: Try each court with optimal flow (own players + waiters + underplayed)
         for court_idx in range(num_courts):
             if match_number + len(wave_matches) >= total_matches_needed:
                 break
@@ -786,8 +804,9 @@ def generate_initial_schedule(
             prev_court_players = set(court_last_players[court_idx]) if court_last_players[court_idx] else set()
             my_waiters = court_waiters[court_idx] - used_in_wave
             
-            # Optimal pool: previous court players + assigned waiters
-            court_pool = (prev_court_players | my_waiters) - used_in_wave
+            # Optimal pool: previous court players + assigned waiters + underplayed players
+            # Adding underplayed players ensures they get opportunities even with tight continuity
+            court_pool = (prev_court_players | my_waiters | underplayed_players) - used_in_wave
             court_pool = set(p for p in court_pool if games_per_player[p] < max_games)
             
             # Track which phase succeeded
