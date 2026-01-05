@@ -137,9 +137,9 @@ class TestCompetitiveRoundRobinAlgorithm:
         print(f"✅ No repeated partnerships in {len(matches)} matches")
     
     def test_individual_opponent_limit(self):
-        """Test that no player faces the same opponent more than 3 times."""
+        """Test that no player faces the same opponent more than 2 times."""
         session = create_test_session(16)
-        config = CompetitiveRoundRobinConfig(max_individual_opponent_repeats=3)
+        config = CompetitiveRoundRobinConfig()  # Use default max_individual_opponent_repeats=2
         
         matches = generate_initial_schedule(session, config)
         
@@ -153,7 +153,7 @@ class TestCompetitiveRoundRobinAlgorithm:
         opponent_violations = [v for v in validation.violations if v.violation_type == 'individual_opponent_exceed']
         
         assert len(opponent_violations) == 0, f"Found {len(opponent_violations)} opponent limit violations"
-        print(f"✅ Individual opponent limit (3) respected")
+        print(f"✅ Individual opponent limit (2) respected")
     
     def test_skill_balanced_teams(self):
         """Test that generated matches have balanced teams."""

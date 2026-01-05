@@ -812,7 +812,7 @@ class CompetitiveRoundRobinConfig:
     games_per_player: int = 8              # Target games per player
     max_partner_repeats: int = 0           # Never repeat partners
     max_opponent_pair_repeats: int = 0     # Never face same pair twice
-    max_individual_opponent_repeats: int = 3  # Max times facing individual
+    max_individual_opponent_repeats: int = 2  # Max times facing individual
     scheduled_matches: List[ScheduledMatch] = field(default_factory=list)
     schedule_finalized: bool = False       # True after user approval
 ```
