@@ -882,6 +882,71 @@ def generate_initial_schedule(
                 balance_score=balance_score
             ))
     
+    # ===== GENERATE ADDITIONAL MATCHES FOR LIMITED-WAITER SCENARIOS =====
+    # When num_players < num_courts * 5 (e.g., 18 players with 4 courts = only 2 waiters),
+    # the wave-based approach may not generate enough valid matches because:
+    # - Courts without assigned waiters can only reuse their own 4 players
+    # - This creates gaps where no valid match exists for some court completion orders
+    #
+    # Solution: Generate extra matches using "waiter batch" combinations
+    # These matches use players who will be waiting together after various match completions
+    
+    waiters_per_wave = num_players - (num_courts * 4)
+    if waiters_per_wave < num_courts and match_number < total_matches_needed:
+        # Limited waiter scenario - generate additional cross-court matches
+        # These serve as "backup" matches when optimal flow isn't possible
+        
+        extra_matches_needed = total_matches_needed - match_number
+        extra_matches_generated = 0
+        
+        # Get all players who haven't reached max games
+        available_for_extra = [p for p in all_player_ids if games_per_player[p] < max_games]
+        
+        # Try to generate matches from underplayed players first
+        available_for_extra.sort(key=lambda p: (games_per_player[p], player_ratings.get(p, 1500)))
+        
+        attempts = 0
+        max_attempts = extra_matches_needed * 10
+        
+        while extra_matches_generated < extra_matches_needed and attempts < max_attempts:
+            attempts += 1
+            
+            # Pick 4 underplayed players
+            candidates = [p for p in available_for_extra if games_per_player[p] < max_games]
+            if len(candidates) < 4:
+                break
+            
+            # Prioritize players with fewest games
+            candidates.sort(key=lambda p: games_per_player[p])
+            pool = set(candidates[:min(8, len(candidates))])  # Consider top 8 underplayed
+            
+            match_result = find_best_match(pool, set(), 'variety')
+            if match_result:
+                team1, team2 = match_result
+                
+                # Verify this isn't a duplicate match
+                match_key = frozenset(team1 + team2)
+                is_duplicate = False
+                for existing in scheduled_matches:
+                    if frozenset(existing.team1 + existing.team2) == match_key:
+                        is_duplicate = True
+                        break
+                
+                if not is_duplicate:
+                    record_match(team1, team2)
+                    match_number += 1
+                    extra_matches_generated += 1
+                    
+                    balance_score = calculate_team_balance_score(session, team1, team2)
+                    scheduled_matches.append(ScheduledMatch(
+                        id=f"scheduled_{uuid.uuid4().hex[:8]}",
+                        team1=team1,
+                        team2=team2,
+                        status='pending',
+                        match_number=match_number,
+                        balance_score=balance_score
+                    ))
+    
     # Reorder to handle first bye players (they appear later)
     scheduled_matches = _reorder_for_fair_distribution(scheduled_matches, all_player_ids, first_bye_player_ids)
     

@@ -1872,7 +1872,30 @@ class SetupDialog(QDialog):
                 from python.pickleball_types import CompetitiveRoundRobinConfig
                 crr_config = getattr(self, '_competitive_round_robin_config', None)
                 if crr_config is None:
+                    # User didn't manually manage matches - auto-generate and approve all
                     crr_config = CompetitiveRoundRobinConfig()
+                    # Generate schedule and auto-approve all matches
+                    from python.competitive_round_robin import generate_initial_schedule
+                    temp_session_config = SessionConfig(
+                        mode='competitive-round-robin',
+                        session_type=session_type,
+                        players=players,
+                        courts=courts,
+                        banned_pairs=self.banned_pairs,
+                        locked_teams=self.locked_teams,
+                        first_bye_players=self.first_bye_players,
+                        court_sliding_mode=self.sliding_combo.currentText(),
+                        randomize_player_order=False,
+                        pre_seeded_ratings=self.pre_seed_checkbox.isChecked(),
+                        competitive_round_robin_config=crr_config
+                    )
+                    temp_session = create_session(temp_session_config)
+                    scheduled_matches = generate_initial_schedule(temp_session, crr_config)
+                    # Auto-approve all matches
+                    for m in scheduled_matches:
+                        m.status = 'approved'
+                    crr_config.scheduled_matches = scheduled_matches
+                    crr_config.schedule_finalized = True
             
             config = SessionConfig(
                 mode=mode,

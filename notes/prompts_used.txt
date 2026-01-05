@@ -683,6 +683,9 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
 * Look at @competitive_round_robin_schedule.json , Brock is only being generated 4 of the necessary 8 matches... is it possible to keep continuous flow but still generate atleast 8 matches (or whatever the specified configuration is) for each player?
 # Tweaks 8
 * Look at @pickleball_session_20260104_223852.txt , the session had beautiful continuous flow, but honestly, opponent repetetion happened too frequently. Jim and Cleo played with each other 3 times, can we achieve the same continuous flow property while limiting repetition to 2 times?
+# Tweaks 9
+* The continuous flow doesn't work well in the 18 player scenarios -- see @pickleball_session_20260104_224925.txt . Can we generate better flowing matches somehow in the 2 always on the waitlist scenario or no? It seems like Jim & Greg vs Payton & David would have been an OK match to generate, but we don't have it in this session.
+* Make it so that if we do competetive-round-robin and we don't manually approve and manage the matches, they all become auto approved when "Start Session" is pressed.
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts
