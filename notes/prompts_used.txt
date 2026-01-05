@@ -667,6 +667,9 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
 * After I approve a match in the Manage Matches window, I should be able to unapprove it (the same way that I can swap players after approving)
 * In the Session Setup window, the "Export Players" and "Import Players" buttons only take up half of the dialog horizontally, they should expand to take up the whole dialog horizontal width (each taking half the available space).
 * The Approved Matches do not appear in the Match Queue, but they should.
+# Tweaks 3
+* The system isn't flowing very well -- For example, in a 4 court scenario with 20 players as specified in @players.json , we often find ourselves in scenarios where only 3 of the 4 courts are in use, and the last court is waiting for players to finish, even though 8 players are on the waitlist! I think we need to generate more matches for the queue for things to flow better, let's make the 7-9 matches generated per player range configurable on the "Managed Scheduled Matches" window.
+* On the Manage Scheduled Matches window, add a button "Regnerate All" that rebuilds the entire list with the new player range configurations.
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts

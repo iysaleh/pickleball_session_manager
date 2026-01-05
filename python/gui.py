@@ -536,6 +536,29 @@ class ManageMatchesDialog(QDialog):
         
         layout.addLayout(header_layout)
         
+        # Configuration section for games per player
+        config_layout = QHBoxLayout()
+        config_layout.addWidget(QLabel("Games per player:"))
+        
+        self.games_per_player_spin = QSpinBox()
+        self.games_per_player_spin.setMinimum(4)
+        self.games_per_player_spin.setMaximum(20)
+        self.games_per_player_spin.setValue(self.config.games_per_player)
+        self.games_per_player_spin.setFixedWidth(60)
+        self.games_per_player_spin.setToolTip("Target number of games each player should play")
+        config_layout.addWidget(self.games_per_player_spin)
+        
+        config_layout.addSpacing(20)
+        
+        regenerate_all_btn = QPushButton("🔁 Regenerate All")
+        regenerate_all_btn.setToolTip("Rebuild entire schedule with current settings")
+        regenerate_all_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 5px 15px; }")
+        regenerate_all_btn.clicked.connect(self.regenerate_all_matches)
+        config_layout.addWidget(regenerate_all_btn)
+        
+        config_layout.addStretch()
+        layout.addLayout(config_layout)
+        
         # Constraint summary
         self.constraint_label = QLabel("")
         self.constraint_label.setStyleSheet("QLabel { color: #FFB74D; font-size: 12px; }")
@@ -821,6 +844,41 @@ class ManageMatchesDialog(QDialog):
             QMessageBox.information(self, "Regenerated", f"Successfully regenerated {regenerated} matches.")
         else:
             QMessageBox.warning(self, "No Changes", "Could not regenerate any matches while meeting constraints.")
+    
+    def regenerate_all_matches(self):
+        """Regenerate entire schedule with current configuration"""
+        from python.competitive_round_robin import generate_initial_schedule
+        
+        # Update config with new games per player value
+        new_games_per_player = self.games_per_player_spin.value()
+        self.config.games_per_player = new_games_per_player
+        
+        # Confirm with user
+        reply = QMessageBox.question(
+            self,
+            "Regenerate All Matches",
+            f"This will regenerate the entire schedule with {new_games_per_player} games per player.\n\n"
+            "All current matches (including approved ones) will be replaced.\n\n"
+            "Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Generate new schedule
+        self.scheduled_matches = generate_initial_schedule(self.session, self.config)
+        
+        # Refresh display
+        self.refresh_match_display()
+        self.update_stats()
+        
+        QMessageBox.information(
+            self,
+            "Schedule Regenerated",
+            f"Generated {len(self.scheduled_matches)} matches with target of {new_games_per_player} games per player."
+        )
     
     def swap_player_dialog(self, match_index: int):
         """Open dialog to swap a player in a match"""
