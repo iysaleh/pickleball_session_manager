@@ -854,7 +854,8 @@ def populate_courts_from_schedule(session: Session) -> None:
     """
     Populate empty courts from approved scheduled matches.
     
-    Uses wait priority to determine which approved matches to start next.
+    Also adds all unplayed approved matches to the match queue so users
+    can see what's coming up.
     """
     if session.config.mode != 'competitive-round-robin':
         return
@@ -863,26 +864,46 @@ def populate_courts_from_schedule(session: Session) -> None:
     if not config or not config.schedule_finalized:
         return
     
-    # Get approved, unplayed matches
+    # Get approved matches
     approved_matches = [
         m for m in config.scheduled_matches 
         if m.status == 'approved'
     ]
     
-    # Find which scheduled matches have already been played
-    played_match_ids = set()
+    # Find which scheduled matches have already been played or are currently on courts
+    played_or_active_ids = set()
     for match in session.matches:
         # Check if any session match corresponds to a scheduled match
         for sm in config.scheduled_matches:
             if (set(match.team1) == set(sm.team1) and 
                 set(match.team2) == set(sm.team2)):
-                played_match_ids.add(sm.id)
+                played_or_active_ids.add(sm.id)
     
-    # Get unplayed approved matches
-    unplayed = [m for m in approved_matches if m.id not in played_match_ids]
+    # Get unplayed approved matches (sorted by match number for queue order)
+    unplayed = [m for m in approved_matches if m.id not in played_or_active_ids]
+    unplayed.sort(key=lambda m: m.match_number)
     
     if not unplayed:
         return
+    
+    # Add all unplayed approved matches to the match queue (if not already there)
+    from .pickleball_types import QueuedMatch
+    
+    # Build set of existing queued matches for comparison
+    existing_queued = set()
+    for qm in session.match_queue:
+        key = (frozenset(qm.team1), frozenset(qm.team2))
+        existing_queued.add(key)
+    
+    for scheduled_match in unplayed:
+        key = (frozenset(scheduled_match.team1), frozenset(scheduled_match.team2))
+        if key not in existing_queued:
+            queued_match = QueuedMatch(
+                team1=scheduled_match.team1[:],
+                team2=scheduled_match.team2[:]
+            )
+            session.match_queue.append(queued_match)
+            existing_queued.add(key)
     
     # Find empty courts
     from .queue_manager import get_empty_courts
@@ -891,22 +912,6 @@ def populate_courts_from_schedule(session: Session) -> None:
     if not empty_courts:
         return
     
-    # Sort unplayed matches by wait priority of players involved
-    # Players who have waited longer get priority
-    from .wait_priority import calculate_wait_priority_info
-    
-    def match_wait_priority(scheduled_match: ScheduledMatch) -> float:
-        """Calculate combined wait priority for all players in match."""
-        total_priority = 0.0
-        for player_id in scheduled_match.get_all_players():
-            if player_id in session.active_players:
-                info = calculate_wait_priority_info(session, player_id)
-                total_priority += info.total_wait_seconds
-        return total_priority
-    
-    # Sort by total wait time (highest first)
-    unplayed.sort(key=match_wait_priority, reverse=True)
-    
     # Check player availability (not in active match)
     active_players = set()
     for match in session.matches:
@@ -914,14 +919,16 @@ def populate_courts_from_schedule(session: Session) -> None:
             active_players.update(match.team1)
             active_players.update(match.team2)
     
-    # Assign matches to courts
+    # Assign matches to courts from the queue
     from .pickleball_types import Match
     from .time_manager import now
     import uuid
     
+    matches_to_remove = []
+    
     for court_number in empty_courts:
-        for scheduled_match in unplayed:
-            match_players = set(scheduled_match.get_all_players())
+        for i, queued_match in enumerate(session.match_queue):
+            match_players = set(queued_match.team1 + queued_match.team2)
             
             # All players must be available
             if match_players & active_players:
@@ -935,19 +942,23 @@ def populate_courts_from_schedule(session: Session) -> None:
             match = Match(
                 id=f"match_{uuid.uuid4().hex[:8]}",
                 court_number=court_number,
-                team1=scheduled_match.team1[:],
-                team2=scheduled_match.team2[:],
+                team1=queued_match.team1[:],
+                team2=queued_match.team2[:],
                 status='waiting',
                 start_time=now()
             )
             session.matches.append(match)
             
+            # Mark for removal from queue
+            matches_to_remove.append(i)
+            
             # Mark players as active
             active_players.update(match_players)
-            
-            # Remove from unplayed list
-            unplayed.remove(scheduled_match)
             break
+    
+    # Remove assigned matches from queue (in reverse order to maintain indices)
+    for i in sorted(matches_to_remove, reverse=True):
+        session.match_queue.pop(i)
 
 
 def swap_players_within_match(

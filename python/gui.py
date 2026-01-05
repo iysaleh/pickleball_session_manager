@@ -747,6 +747,14 @@ class ManageMatchesDialog(QDialog):
             reject_btn.setStyleSheet("QPushButton { background-color: #F44336; }")
             reject_btn.clicked.connect(lambda checked, idx=index: self.reject_match(idx))
             btn_layout.addWidget(reject_btn)
+        elif match.status == 'approved':
+            # Add unapprove button for approved matches
+            unapprove_btn = QPushButton("↩️")
+            unapprove_btn.setToolTip("Unapprove (return to pending)")
+            unapprove_btn.setFixedSize(35, 35)
+            unapprove_btn.setStyleSheet("QPushButton { background-color: #9E9E9E; }")
+            unapprove_btn.clicked.connect(lambda checked, idx=index: self.unapprove_match(idx))
+            btn_layout.addWidget(unapprove_btn)
         
         swap_btn = QPushButton("🔄")
         swap_btn.setToolTip("Swap a player")
@@ -763,6 +771,13 @@ class ManageMatchesDialog(QDialog):
         """Approve a scheduled match"""
         if 0 <= index < len(self.scheduled_matches):
             self.scheduled_matches[index].status = 'approved'
+            self.refresh_match_display()
+            self.update_stats()
+    
+    def unapprove_match(self, index: int):
+        """Unapprove an approved match (return to pending)"""
+        if 0 <= index < len(self.scheduled_matches):
+            self.scheduled_matches[index].status = 'pending'
             self.refresh_match_display()
             self.update_stats()
     
@@ -1281,15 +1296,15 @@ class SetupDialog(QDialog):
         byes_btn.clicked.connect(self.manage_byes)
         layout.addWidget(byes_btn)
         
-        # Export/Import Players buttons (horizontal layout)
+        # Export/Import Players buttons (horizontal layout, each taking half width)
         player_io_layout = QHBoxLayout()
+        player_io_layout.setSpacing(10)
         export_players_btn = QPushButton("📤 Export Players")
         export_players_btn.clicked.connect(self.export_players)
         import_players_btn = QPushButton("📥 Import Players")
         import_players_btn.clicked.connect(self.import_players)
-        player_io_layout.addWidget(export_players_btn)
-        player_io_layout.addWidget(import_players_btn)
-        player_io_layout.addStretch()
+        player_io_layout.addWidget(export_players_btn, 1)  # stretch factor 1
+        player_io_layout.addWidget(import_players_btn, 1)  # stretch factor 1
         layout.addLayout(player_io_layout)
         
         # Manage Matches Button (only for Competitive Round Robin)
