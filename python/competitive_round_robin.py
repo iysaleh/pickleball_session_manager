@@ -253,12 +253,12 @@ def generate_initial_schedule(
     """
     Generate an initial schedule of matches for Competitive Round Robin.
     
-    ALGORITHM: Round-robin inspired approach
-    1. Generate all possible unique partnership pairings
-    2. Create matches by selecting compatible partnerships
-    3. Ensure balanced games per player
-    4. Apply skill-based team formation
-    5. Respect first bye players
+    ALGORITHM: Round-based generation with variety mixing
+    1. Generate matches in "rounds" where each round fills all courts simultaneously
+    2. No player appears twice in the same round (guarantees all courts can be used)
+    3. Mix skill levels for variety while keeping matches balanced
+    4. Track which groups of 4 have played together to avoid repetition
+    5. Respects partnership constraints and opponent limits
     
     Returns list of ScheduledMatch objects (all with 'pending' status).
     """
@@ -267,6 +267,7 @@ def generate_initial_schedule(
     
     players = session.config.players
     num_players = len(players)
+    num_courts = session.config.courts
     
     if num_players < 4:
         return []
@@ -274,7 +275,7 @@ def generate_initial_schedule(
     # Get first bye players to exclude from initial matches
     first_bye_player_ids = set(session.config.first_bye_players or [])
     
-    # Get player ratings and organize by skill
+    # Get player ratings
     player_ratings: Dict[str, float] = {}
     for player in players:
         player_ratings[player.id] = get_player_skill_rating(session, player.id)
@@ -290,6 +291,13 @@ def generate_initial_schedule(
     games_per_player: Dict[str, int] = {pid: 0 for pid in all_player_ids}
     partnership_used: Dict[str, Set[str]] = {pid: set() for pid in all_player_ids}
     individual_opponent_count: Dict[str, Dict[str, int]] = {pid: {} for pid in all_player_ids}
+    sit_out_count: Dict[str, int] = {pid: 0 for pid in all_player_ids}
+    
+    # Track which groups of 4 players have played together (to avoid repetition)
+    groups_played: Set[frozenset] = set()
+    
+    # Track how many times each pair of players has been in the same match (as partners OR opponents)
+    pair_match_count: Dict[frozenset, int] = {}
     
     scheduled_matches: List[ScheduledMatch] = []
     match_number = 0
@@ -298,12 +306,20 @@ def generate_initial_schedule(
         """Get total rating of a team."""
         return sum(player_ratings.get(pid, 1500) for pid in team)
     
+    def get_group_key(players_list: List[str]) -> frozenset:
+        """Get a hashable key for a group of 4 players."""
+        return frozenset(players_list)
+    
+    def get_pair_key(p1: str, p2: str) -> frozenset:
+        """Get a hashable key for a pair of players."""
+        return frozenset([p1, p2])
+    
     def can_form_match(team1: List[str], team2: List[str]) -> bool:
         """Check if two teams can play against each other."""
         p1, p2 = team1
         p3, p4 = team2
         
-        # Check if all players can still play
+        # Check if all players can still play more games
         for pid in [p1, p2, p3, p4]:
             if games_per_player[pid] >= max_games:
                 return False
@@ -326,8 +342,9 @@ def generate_initial_schedule(
         """Record that a match was played."""
         p1, p2 = team1
         p3, p4 = team2
+        all_four = team1 + team2
         
-        for pid in [p1, p2, p3, p4]:
+        for pid in all_four:
             games_per_player[pid] += 1
         
         partnership_used[p1].add(p2)
@@ -339,127 +356,238 @@ def generate_initial_schedule(
             for b in team2:
                 individual_opponent_count[a][b] = individual_opponent_count[a].get(b, 0) + 1
                 individual_opponent_count[b][a] = individual_opponent_count[b].get(a, 0) + 1
-    
-    def get_available_partners(player: str) -> List[str]:
-        """Get players who can still partner with this player."""
-        return [p for p in all_player_ids 
-                if p != player 
-                and p not in partnership_used[player]
-                and games_per_player[p] < max_games]
-    
-    def players_needing_games() -> List[str]:
-        """Get players who still need games, sorted by games needed."""
-        need = [pid for pid in all_player_ids if games_per_player[pid] < target_games]
-        need.sort(key=lambda p: (games_per_player[p], -player_ratings.get(p, 1500)))
-        return need
-    
-    def try_create_match_for_player(player: str) -> Optional[Tuple[List[str], List[str]]]:
-        """Try to create a balanced match including the given player."""
-        partners = get_available_partners(player)
-        if not partners:
-            return None
         
-        # Sort partners by games needed (prioritize underplayed) and skill similarity
-        partners.sort(key=lambda p: (
-            games_per_player[p],
-            abs(player_ratings.get(p, 1500) - player_ratings.get(player, 1500))
-        ))
+        # Track this group of 4
+        groups_played.add(get_group_key(all_four))
         
-        for partner in partners[:8]:  # Try top 8 potential partners
-            team1 = [player, partner]
-            team1_rating = get_team_rating(team1)
+        # Track all pairs in this match
+        for i, p1 in enumerate(all_four):
+            for p2 in all_four[i+1:]:
+                key = get_pair_key(p1, p2)
+                pair_match_count[key] = pair_match_count.get(key, 0) + 1
+    
+    def score_match_variety(team1: List[str], team2: List[str]) -> float:
+        """
+        Score a potential match based on variety factors.
+        Higher score = more variety (better).
+        """
+        all_four = team1 + team2
+        score = 0.0
+        
+        # PENALTY: If this exact group of 4 has played before
+        group_key = get_group_key(all_four)
+        if group_key in groups_played:
+            score -= 500  # Heavy penalty for same 4 players
+        
+        # PENALTY: For pairs that have been in many matches together
+        for i, p1 in enumerate(all_four):
+            for p2 in all_four[i+1:]:
+                pair_key = get_pair_key(p1, p2)
+                times_together = pair_match_count.get(pair_key, 0)
+                score -= times_together * 30  # Penalty for frequent pairings
+        
+        # BONUS: For skill mixing (different ratings in the match)
+        ratings = [player_ratings.get(pid, 1500) for pid in all_four]
+        rating_spread = max(ratings) - min(ratings)
+        # Reward moderate spread (not too homogeneous, not too extreme)
+        if 100 <= rating_spread <= 400:  # ~0.25 to 1.0 skill level difference
+            score += 100  # Bonus for good variety
+        elif rating_spread < 100:
+            score -= 50  # Slight penalty for too homogeneous
+        
+        # BONUS: For balanced teams with mixed skills
+        # E.g., 4.0+3.5 vs 4.0+3.5 is more interesting than 4.0+4.0 vs 3.5+3.5
+        team1_ratings = sorted([player_ratings.get(pid, 1500) for pid in team1])
+        team2_ratings = sorted([player_ratings.get(pid, 1500) for pid in team2])
+        
+        # Check if each team has mixed ratings
+        team1_spread = team1_ratings[1] - team1_ratings[0]
+        team2_spread = team2_ratings[1] - team2_ratings[0]
+        if team1_spread > 50 and team2_spread > 50:  # Both teams have skill variety
+            score += 75  # Bonus for mixed teams
+        
+        return score
+    
+    def generate_round(available_players: List[str], matches_needed: int) -> List[Tuple[List[str], List[str]]]:
+        """
+        Generate a single round of matches where no player appears twice.
+        Prioritizes variety and mixing while maintaining balance.
+        """
+        round_matches = []
+        used_in_round: Set[str] = set()
+        
+        # Create candidate pool with variety-aware ordering
+        # Mix players by alternating between skill levels
+        candidates = available_players[:]
+        candidates.sort(key=lambda p: (games_per_player[p], -player_ratings.get(p, 1500)))
+        
+        for match_idx in range(matches_needed):
+            # Get players not yet used in this round
+            remaining = [p for p in candidates if p not in used_in_round and games_per_player[p] < max_games]
             
-            # Find opponents
-            available = [p for p in all_player_ids 
-                        if p not in team1 
-                        and games_per_player[p] < max_games]
+            if len(remaining) < 4:
+                break
             
-            # Sort by skill similarity to create balanced match
-            available.sort(key=lambda p: (
-                games_per_player[p],
-                -player_ratings.get(p, 1500)
-            ))
-            
+            # Try to find a match with good variety
             best_match = None
-            best_balance = float('inf')
+            best_score = -float('inf')
             
-            # Try different opponent combinations
-            for i, opp1 in enumerate(available[:10]):
-                for opp2 in available[i+1:10]:
-                    team2 = [opp1, opp2]
+            # Sample different combinations of 4 players for variety
+            # Instead of always taking the first 4, try multiple combinations
+            search_pool = remaining[:min(16, len(remaining))]
+            
+            combos_tried = 0
+            max_combos = 50  # Limit for performance
+            
+            for combo in combinations(search_pool, 4):
+                if combos_tried >= max_combos:
+                    break
+                combos_tried += 1
+                
+                combo_list = list(combo)
+                
+                # Skip if this exact group has played before
+                if get_group_key(combo_list) in groups_played:
+                    continue
+                
+                # Try all team configurations
+                team_configs = [
+                    ([combo_list[0], combo_list[1]], [combo_list[2], combo_list[3]]),
+                    ([combo_list[0], combo_list[2]], [combo_list[1], combo_list[3]]),
+                    ([combo_list[0], combo_list[3]], [combo_list[1], combo_list[2]]),
+                ]
+                
+                for team1, team2 in team_configs:
+                    if not can_form_match(team1, team2):
+                        continue
                     
-                    if can_form_match(team1, team2):
-                        # Score by balance
-                        team2_rating = get_team_rating(team2)
-                        balance = abs(team1_rating - team2_rating)
-                        
-                        if balance < best_balance:
-                            best_balance = balance
-                            best_match = (team1[:], team2[:])
+                    # Calculate score with balance and variety
+                    balance = abs(get_team_rating(team1) - get_team_rating(team2))
+                    balance_score = 500 - balance  # Balance component (max 500)
+                    
+                    variety_score = score_match_variety(team1, team2)
+                    
+                    # Bonus for players who need more games
+                    games_needed_score = sum((target_games - games_per_player[pid]) * 20 
+                                            for pid in combo_list)
+                    
+                    total_score = balance_score + variety_score + games_needed_score
+                    
+                    if total_score > best_score:
+                        best_score = total_score
+                        best_match = (team1[:], team2[:])
             
             if best_match:
-                return best_match
-        
-        return None
-    
-    # Main generation loop - round-robin style
-    max_iterations = num_players * target_games * 2
-    
-    for iteration in range(max_iterations):
-        # Get players who need games
-        need = players_needing_games()
-        
-        if not need:
-            break  # Everyone has enough games
-        
-        if len(need) < 4:
-            break  # Can't form a match
-        
-        # Try to create match for most underplayed player
-        result = None
-        for player in need[:8]:  # Try most underplayed players
-            result = try_create_match_for_player(player)
-            if result:
-                break
-        
-        if not result:
-            # Try harder by relaxing some constraints
-            # First, try ANY valid match among players who need games
-            for combo in combinations(need[:16], 4):
-                players_list = list(combo)
-                # Try all team configurations
-                configs = [
-                    ([players_list[0], players_list[1]], [players_list[2], players_list[3]]),
-                    ([players_list[0], players_list[2]], [players_list[1], players_list[3]]),
-                    ([players_list[0], players_list[3]], [players_list[1], players_list[2]]),
-                ]
-                for team1, team2 in configs:
-                    if can_form_match(team1, team2):
-                        result = (team1, team2)
-                        break
-                if result:
+                round_matches.append(best_match)
+                used_in_round.update(best_match[0] + best_match[1])
+            else:
+                # Fallback: try any valid match
+                for combo in combinations(remaining[:12], 4):
+                    combo_list = list(combo)
+                    for team1, team2 in [
+                        ([combo_list[0], combo_list[1]], [combo_list[2], combo_list[3]]),
+                        ([combo_list[0], combo_list[2]], [combo_list[1], combo_list[3]]),
+                        ([combo_list[0], combo_list[3]], [combo_list[1], combo_list[2]]),
+                    ]:
+                        if can_form_match(team1, team2):
+                            round_matches.append((team1, team2))
+                            used_in_round.update(team1 + team2)
+                            break
+                    else:
+                        continue
                     break
         
-        if not result:
+        return round_matches
+    
+    def select_players_for_round(num_needed: int) -> List[str]:
+        """
+        Select players for a round, fairly rotating who sits out.
+        
+        Args:
+            num_needed: Number of players needed (courts * 4)
+        
+        Returns:
+            List of player IDs selected for this round
+        """
+        # Get players who still need games
+        eligible = [pid for pid in all_player_ids if games_per_player[pid] < target_games]
+        
+        if len(eligible) < num_needed:
+            # Include players who have reached target but not max
+            eligible = [pid for pid in all_player_ids if games_per_player[pid] < max_games]
+        
+        if len(eligible) <= num_needed:
+            return eligible
+        
+        # Sort by: 1) fewest games played, 2) fewest times sat out, 3) rating
+        eligible.sort(key=lambda p: (
+            games_per_player[p],
+            sit_out_count[p],
+            -player_ratings.get(p, 1500)
+        ))
+        
+        # Select top N players, rest sit out
+        selected = eligible[:num_needed]
+        sitting_out = eligible[num_needed:]
+        
+        # Track who sat out
+        for pid in sitting_out:
+            sit_out_count[pid] += 1
+        
+        return selected
+    
+    # Calculate how many players we can use per round
+    players_per_round = min(num_courts * 4, num_players)
+    matches_per_round = players_per_round // 4
+    
+    # Calculate approximate number of rounds needed
+    # Each player needs target_games, each round gives 1 game to players_per_round players
+    # But some players sit out each round, so we need more rounds
+    total_games_needed = num_players * target_games
+    games_per_round = matches_per_round * 4  # Each match = 4 player-games
+    estimated_rounds = (total_games_needed // games_per_round) + num_players
+    
+    # Generate rounds
+    for round_num in range(estimated_rounds):
+        # Check if everyone has enough games
+        min_games = min(games_per_player.values())
+        if min_games >= target_games:
+            break
+        
+        # Select players for this round
+        round_players = select_players_for_round(players_per_round)
+        
+        if len(round_players) < 4:
+            break  # Not enough players
+        
+        # Generate matches for this round
+        round_matches = generate_round(round_players, matches_per_round)
+        
+        if not round_matches:
+            # Try with all available players if round generation failed
+            all_available = [pid for pid in all_player_ids if games_per_player[pid] < max_games]
+            round_matches = generate_round(all_available, matches_per_round)
+        
+        if not round_matches:
             break  # Can't generate more matches
         
-        team1, team2 = result
-        record_match(team1, team2)
-        match_number += 1
-        
-        # Create scheduled match
-        balance_score = calculate_team_balance_score(session, team1, team2)
-        scheduled_match = ScheduledMatch(
-            id=f"scheduled_{uuid.uuid4().hex[:8]}",
-            team1=team1,
-            team2=team2,
-            status='pending',
-            match_number=match_number,
-            balance_score=balance_score
-        )
-        scheduled_matches.append(scheduled_match)
+        # Record all matches in this round
+        for team1, team2 in round_matches:
+            record_match(team1, team2)
+            match_number += 1
+            
+            balance_score = calculate_team_balance_score(session, team1, team2)
+            scheduled_match = ScheduledMatch(
+                id=f"scheduled_{uuid.uuid4().hex[:8]}",
+                team1=team1,
+                team2=team2,
+                status='pending',
+                match_number=match_number,
+                balance_score=balance_score
+            )
+            scheduled_matches.append(scheduled_match)
     
-    # Reorder for fair distribution (first bye players later in queue)
+    # Reorder to handle first bye players (they appear later)
     scheduled_matches = _reorder_for_fair_distribution(scheduled_matches, all_player_ids, first_bye_player_ids)
     
     # Renumber matches after reordering

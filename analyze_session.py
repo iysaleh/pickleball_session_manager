@@ -88,9 +88,15 @@ def analyze_session(filename):
         if not line or line.startswith('---') or line.startswith('='):
             continue
         
-        # Parse match: "Player1 & Player2: 11 beat Player3 & Player4: 7"
-        # The format is: "p1 & p2: X beat p3 & p4: Y [time]" for singles pairs
-        match = re.match(r'(.+?)\s*&\s*(.+?):\s*(\d+)\s+beat\s+(.+?)\s*&\s*(.+?):\s*(\d+)', line)
+        # Parse match: supports both formats
+        # Doubles: "Player1, Player2: 11 beat Player3, Player4: 7 [time]"
+        # Teams: "Player1 & Player2: 11 beat Player3 & Player4: 7 [time]"
+        # Try comma-separated first (doubles)
+        match = re.match(r'(.+?),\s*(.+?):\s*(\d+)\s+beat\s+(.+?),\s*(.+?):\s*(\d+)', line)
+        
+        # If comma format didn't match, try ampersand format (teams)
+        if not match:
+            match = re.match(r'(.+?)\s*&\s*(.+?):\s*(\d+)\s+beat\s+(.+?)\s*&\s*(.+?):\s*(\d+)', line)
         
         if match:
             p1, p2, p3, p4 = match.group(1).strip(), match.group(2).strip(), match.group(4).strip(), match.group(5).strip()
