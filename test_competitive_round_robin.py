@@ -375,6 +375,36 @@ class TestScheduleSummary:
         print("✅ Summary counts correct")
 
 
+class TestRuntimePopulation:
+    """Test runtime court population from schedule."""
+    
+    def test_courts_populate_from_schedule(self):
+        """Test that courts populate from approved schedule at session start."""
+        from python.session import create_session, evaluate_and_create_matches
+        from python.competitive_round_robin import populate_courts_from_schedule
+        
+        session = create_test_session(16)
+        config = CompetitiveRoundRobinConfig()
+        
+        # Generate and approve schedule
+        matches = generate_initial_schedule(session, config)
+        for m in matches:
+            m.status = 'approved'
+        
+        # Store in config and finalize
+        session.config.competitive_round_robin_config.scheduled_matches = matches
+        session.config.competitive_round_robin_config.schedule_finalized = True
+        
+        # Run population
+        session = evaluate_and_create_matches(session)
+        
+        # Check matches were created on courts
+        active_matches = [m for m in session.matches if m.status in ('active', 'waiting', 'in-progress')]
+        assert len(active_matches) > 0, "Should create matches from schedule"
+        assert len(active_matches) <= session.config.courts, "Should not exceed court count"
+        print(f"✅ Courts populated: {len(active_matches)} matches on {session.config.courts} courts")
+
+
 def run_all_tests():
     """Run all test classes."""
     test_classes = [
@@ -385,6 +415,7 @@ def run_all_tests():
         TestSkillRatings,
         TestTeamBalance,
         TestScheduleSummary,
+        TestRuntimePopulation,
     ]
     
     passed = 0

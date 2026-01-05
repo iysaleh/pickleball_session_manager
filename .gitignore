@@ -14,3 +14,4 @@ pickleball-session-*txt
 pickleball_session*.txt
 test-output*
 **.swp
+**.json

@@ -40,7 +40,8 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
         randomize_player_order=config.randomize_player_order,
         advanced_config=config.advanced_config,
         pre_seeded_ratings=config.pre_seeded_ratings,
-        king_of_court_config=config.king_of_court_config
+        king_of_court_config=config.king_of_court_config,
+        competitive_round_robin_config=config.competitive_round_robin_config
     )
     
     # Generate match queue for round-robin mode
@@ -60,9 +61,9 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     # Use provided advanced config or defaults
     advanced_config = config.advanced_config or get_default_advanced_config()
     
-    # For competitive-variety mode, start all players in waiting list
+    # For competitive-variety and competitive-round-robin modes, start all players in waiting list
     waiting_players = []
-    if final_config.mode == 'competitive-variety':
+    if final_config.mode in ('competitive-variety', 'competitive-round-robin'):
         waiting_players = [p.id for p in players_to_use]
     
     # Start the session timing if not already started

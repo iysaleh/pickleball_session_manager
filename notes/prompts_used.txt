@@ -657,11 +657,16 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
 # Tweaks
 * Brenda & Brock did not get 8 matches scheduled -- always generate enough games so that everybody gets atleast 8 matches scheduled.
 * For an outlier like Brock who is a 4.5 rating when the closest matches are 4.0, instead of always trying to compensate for that by pairing Brock with a low rating player like a 3.5, try to create quality matches where 4.5 plays with 4.0s, that keeps it fun for everyone... The same reasoning needs to be applied to low level players like Brenda at 3.25, don't try to always give her high level players, try to make some matches where all the lowest level players are together with her.
+** Most of Brocks games were generated later in the match approval window... Try to evenly sparse the games and players so that the match queue fairly distributes who is playing and who is waiting.
 * After approving the matches and starting the session, no games were actually queued -- all the courts were stuck "Waiting for Players" and the "Match Queue" item was empty, it seems like the matches were not added to the queue.
 * While swapping players in the match approval screen, I could only swap players that were not assigned to other positions on the court... Add the ability to swap players assigned to one team with players assigned to the other team.
 * Add the capability to export and import generated matches via the Manage Matches screen.
-
-
+* Add the capability to export and import player lists and match configurations via the Session Setup page -- this export/import feature should include the assigned rankings when ranking-based game modes are enabled.
+* Make sure that competetive round robin supports the First Bye feature so that matches aren't assigned for the first bye players.
+# Tweaks 2
+* After I approve a match in the Manage Matches window, I should be able to unapprove it (the same way that I can swap players after approving)
+* In the Session Setup window, the "Export Players" and "Import Players" buttons only take up half of the dialog horizontally, they should expand to take up the whole dialog horizontal width (each taking half the available space).
+* The Approved Matches do not appear in the Match Queue, but they should.
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts

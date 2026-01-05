@@ -525,6 +525,15 @@ class ManageMatchesDialog(QDialog):
         approve_all_btn.clicked.connect(self.approve_all_pending)
         header_layout.addWidget(approve_all_btn)
         
+        # Export/Import buttons
+        export_btn = QPushButton("📤 Export")
+        export_btn.clicked.connect(self.export_schedule)
+        header_layout.addWidget(export_btn)
+        
+        import_btn = QPushButton("📥 Import")
+        import_btn.clicked.connect(self.import_schedule)
+        header_layout.addWidget(import_btn)
+        
         layout.addLayout(header_layout)
         
         # Constraint summary
@@ -808,31 +817,70 @@ class ManageMatchesDialog(QDialog):
         # Create swap dialog
         dialog = QDialog(self)
         dialog.setWindowTitle("Swap Player")
-        dialog.resize(400, 300)
+        dialog.resize(500, 400)
         layout = QVBoxLayout()
         
-        layout.addWidget(QLabel("Select player to replace:"))
+        # Swap mode selection
+        layout.addWidget(QLabel("Swap Mode:"))
+        mode_combo = QComboBox()
+        mode_combo.addItem("Replace with bench player", "bench")
+        mode_combo.addItem("Swap between teams in this match", "teams")
+        layout.addWidget(mode_combo)
         
+        # Stack widget for different modes
+        from PyQt6.QtWidgets import QStackedWidget
+        stack = QStackedWidget()
+        
+        # Mode 1: Bench swap
+        bench_widget = QWidget()
+        bench_layout = QVBoxLayout(bench_widget)
+        
+        bench_layout.addWidget(QLabel("Select player to replace:"))
         player_combo = QComboBox()
         for player_id in match.get_all_players():
             from python.competitive_round_robin import get_player_display_info
             info = get_player_display_info(self.session, player_id)
             player_combo.addItem(f"{info['name']} ({info['skill_rating'] or info['elo_rating']})", player_id)
-        layout.addWidget(player_combo)
+        bench_layout.addWidget(player_combo)
         
-        layout.addWidget(QLabel("Select replacement:"))
-        
+        bench_layout.addWidget(QLabel("Select replacement from bench:"))
         replacement_combo = QComboBox()
         replacement_combo.addItem("(Select a player)", None)
         
-        # Add available players (not in this match)
         match_players = set(match.get_all_players())
         for player in self.session.config.players:
             if player.id not in match_players:
                 from python.competitive_round_robin import get_player_display_info
                 info = get_player_display_info(self.session, player.id)
                 replacement_combo.addItem(f"{info['name']} ({info['skill_rating'] or info['elo_rating']})", player.id)
-        layout.addWidget(replacement_combo)
+        bench_layout.addWidget(replacement_combo)
+        
+        stack.addWidget(bench_widget)
+        
+        # Mode 2: Team swap
+        teams_widget = QWidget()
+        teams_layout = QVBoxLayout(teams_widget)
+        
+        teams_layout.addWidget(QLabel("Select player from Team 1:"))
+        team1_combo = QComboBox()
+        for player_id in match.team1:
+            from python.competitive_round_robin import get_player_display_info
+            info = get_player_display_info(self.session, player_id)
+            team1_combo.addItem(f"{info['name']} ({info['skill_rating'] or info['elo_rating']})", player_id)
+        teams_layout.addWidget(team1_combo)
+        
+        teams_layout.addWidget(QLabel("Select player from Team 2:"))
+        team2_combo = QComboBox()
+        for player_id in match.team2:
+            from python.competitive_round_robin import get_player_display_info
+            info = get_player_display_info(self.session, player_id)
+            team2_combo.addItem(f"{info['name']} ({info['skill_rating'] or info['elo_rating']})", player_id)
+        teams_layout.addWidget(team2_combo)
+        
+        stack.addWidget(teams_widget)
+        
+        mode_combo.currentIndexChanged.connect(stack.setCurrentIndex)
+        layout.addWidget(stack)
         
         # Result label
         result_label = QLabel("")
@@ -848,17 +896,32 @@ class ManageMatchesDialog(QDialog):
         swap_btn = QPushButton("Swap")
         
         def do_swap():
-            old_id = player_combo.currentData()
-            new_id = replacement_combo.currentData()
-            if not old_id or not new_id:
-                result_label.setText("Please select both players")
-                return
+            mode = mode_combo.currentData()
             
-            from python.competitive_round_robin import swap_player_in_match
-            success, new_match, error = swap_player_in_match(
-                self.session, match, old_id, new_id, 
-                self.scheduled_matches, self.config
-            )
+            if mode == "bench":
+                old_id = player_combo.currentData()
+                new_id = replacement_combo.currentData()
+                if not old_id or not new_id:
+                    result_label.setText("Please select both players")
+                    return
+                
+                from python.competitive_round_robin import swap_player_in_match
+                success, new_match, error = swap_player_in_match(
+                    self.session, match, old_id, new_id, 
+                    self.scheduled_matches, self.config
+                )
+            else:  # teams mode
+                p1_id = team1_combo.currentData()
+                p2_id = team2_combo.currentData()
+                if not p1_id or not p2_id:
+                    result_label.setText("Please select players from both teams")
+                    return
+                
+                from python.competitive_round_robin import swap_players_within_match
+                success, new_match, error = swap_players_within_match(
+                    self.session, match, p1_id, p2_id,
+                    self.scheduled_matches, self.config
+                )
             
             if success:
                 self.scheduled_matches[match_index] = new_match
@@ -880,6 +943,57 @@ class ManageMatchesDialog(QDialog):
             QPushButton { background-color: #0d47a1; color: white; padding: 8px; border-radius: 4px; }
         """)
         dialog.exec()
+    
+    def export_schedule(self):
+        """Export the scheduled matches to a file"""
+        from python.competitive_round_robin import export_schedule_to_json
+        from PyQt6.QtWidgets import QFileDialog
+        
+        json_str = export_schedule_to_json(self.session, self.scheduled_matches, self.config)
+        
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Export Schedule", "competitive_round_robin_schedule.json",
+            "JSON Files (*.json);;All Files (*)"
+        )
+        
+        if filename:
+            try:
+                with open(filename, 'w') as f:
+                    f.write(json_str)
+                QMessageBox.information(self, "Export Successful", f"Schedule exported to {filename}")
+            except Exception as e:
+                QMessageBox.warning(self, "Export Failed", f"Failed to export: {str(e)}")
+    
+    def import_schedule(self):
+        """Import scheduled matches from a file"""
+        from python.competitive_round_robin import import_schedule_from_json
+        from PyQt6.QtWidgets import QFileDialog
+        
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Import Schedule", "",
+            "JSON Files (*.json);;All Files (*)"
+        )
+        
+        if filename:
+            try:
+                with open(filename, 'r') as f:
+                    json_str = f.read()
+                
+                success, matches, error = import_schedule_from_json(
+                    self.session, json_str, self.config
+                )
+                
+                if success:
+                    self.scheduled_matches = matches
+                    self.config.scheduled_matches = matches
+                    self.refresh_match_display()
+                    self.update_stats()
+                    QMessageBox.information(self, "Import Successful", 
+                        f"Imported {len(matches)} matches")
+                else:
+                    QMessageBox.warning(self, "Import Failed", f"Failed to import: {error}")
+            except Exception as e:
+                QMessageBox.warning(self, "Import Failed", f"Failed to import: {str(e)}")
     
     def update_stats(self):
         """Update the statistics display"""
@@ -1166,6 +1280,17 @@ class SetupDialog(QDialog):
         byes_btn = QPushButton("📋 Manage Byes")
         byes_btn.clicked.connect(self.manage_byes)
         layout.addWidget(byes_btn)
+        
+        # Export/Import Players buttons (horizontal layout)
+        player_io_layout = QHBoxLayout()
+        export_players_btn = QPushButton("📤 Export Players")
+        export_players_btn.clicked.connect(self.export_players)
+        import_players_btn = QPushButton("📥 Import Players")
+        import_players_btn.clicked.connect(self.import_players)
+        player_io_layout.addWidget(export_players_btn)
+        player_io_layout.addWidget(import_players_btn)
+        player_io_layout.addStretch()
+        layout.addLayout(player_io_layout)
         
         # Manage Matches Button (only for Competitive Round Robin)
         self.manage_matches_btn = QPushButton("📅 Manage Matches")
@@ -1481,6 +1606,87 @@ class SetupDialog(QDialog):
                 f"Successfully scheduled {len([m for m in self._competitive_round_robin_config.scheduled_matches if m.status == 'approved'])} matches.\n\n"
                 "Click 'Start Session' to begin playing."
             )
+
+    def export_players(self):
+        """Export current player list with ratings to JSON file"""
+        players = self.player_widget.get_players()
+        if not players:
+            QMessageBox.warning(self, "No Players", "Add players before exporting")
+            return
+        
+        from PyQt6.QtWidgets import QFileDialog
+        from python.competitive_round_robin import export_players_with_ratings
+        import json
+        
+        # Get file path
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Players",
+            "players.json",
+            "JSON Files (*.json)"
+        )
+        
+        if file_path:
+            try:
+                data = export_players_with_ratings(players)
+                with open(file_path, 'w') as f:
+                    json.dump(data, f, indent=2)
+                QMessageBox.information(
+                    self,
+                    "Export Successful",
+                    f"Exported {len(players)} players to:\n{file_path}"
+                )
+            except Exception as e:
+                QMessageBox.warning(self, "Export Failed", str(e))
+    
+    def import_players(self):
+        """Import players with ratings from JSON file"""
+        from PyQt6.QtWidgets import QFileDialog
+        from python.competitive_round_robin import import_players_with_ratings
+        import json
+        
+        # Get file path
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Players",
+            "",
+            "JSON Files (*.json)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                
+                players, has_ratings = import_players_with_ratings(data)
+                
+                # Enable pre-seed mode if import has ratings
+                if has_ratings and not self.pre_seed_checkbox.isChecked():
+                    self.pre_seed_checkbox.setChecked(True)
+                    self.player_widget.set_pre_seed_mode(True)
+                
+                # Add imported players
+                for player in players:
+                    self.player_widget.players.append(player)
+                    
+                    display_text = player.name
+                    if player.skill_rating is not None:
+                        display_text = f"{player.name} ({player.skill_rating})"
+                    
+                    item = QListWidgetItem(display_text)
+                    item.setData(Qt.ItemDataRole.UserRole, player.id)
+                    self.player_widget.player_list.addItem(item)
+                
+                self.player_widget.update_player_count()
+                
+                QMessageBox.information(
+                    self,
+                    "Import Successful",
+                    f"Imported {len(players)} players" + 
+                    (" with skill ratings" if has_ratings else "")
+                )
+            except Exception as e:
+                QMessageBox.warning(self, "Import Failed", str(e))
 
     def add_test_players(self):
         """Add 18 test players with optional random skill ratings"""
