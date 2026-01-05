@@ -679,6 +679,7 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
 * Much better! Now, lets tweak the algorithm to emphasize more similar skill matches for the first 1st generated round, and then do the more mixing that we just added here for 1 round... Keep cycling back and forth between similar skill emphasis and variety emphasis until the necessary number of matches are generated... That way we get a good variety of match types throughout the session.
 # Tweaks 7
 * I am still struggling with continous flow of the session -- we are ending up with empty courts waiting for multiple games to finish too often. Look at @pickleball_session_20260104_212522.txt, we are only 2 games completed, and already a court is waiting! What is wrong wtih the schedule @competitive_round_robin_schedule.json ? What update do we have to make to the competetive-round-robin algorithm to help make the continuous flow less interrupted by waiting?
+* Update @CLAUDE.md explaining the competetive-round-robin algorithm and adding other neccessary documentation.
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts

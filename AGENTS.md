@@ -696,6 +696,183 @@ Critical test files:
 - test_partner_opponent_partner_prevention.py: social dynamic constraint testing
 - test_roaming_range_preservation.py: verifies roaming range preservation across all adaptive phases
 
+## COMPETITIVE ROUND ROBIN ALGORITHM (python/competitive_round_robin.py)
+
+### Core Purpose
+Implements a pre-scheduled tournament format where ALL matches are generated upfront with human-in-the-loop approval. The schedule is skill-balanced, respects variety constraints, and optimizes for **continuous flow** - ensuring courts never sit empty waiting for other matches to finish.
+
+### Key Features
+
+**Pre-Scheduled Tournament Format**
+- All matches generated before session starts
+- Human approval workflow: Review → Approve/Reject → Regenerate
+- Schedule can be modified after approval via player swaps
+- Matches executed in order with automatic court assignment
+
+**Continuous Flow Scheduling (CRITICAL)**
+- **Problem Solved**: Prevents courts from sitting empty waiting for multiple games to finish
+- **Wave Structure**: Matches organized in waves of `num_courts` matches each
+- **1:1 Flow**: When Match N finishes on Court C, Match N+4 can start immediately on Court C
+- **Court Continuity**: Each follow-up match retains 3/4 players from the same court
+- **Single Dependency**: Wave 1 matches each depend on exactly ONE Wave 0 match
+
+**Skill-Balanced Matchmaking**
+- Uses ELO ratings from `competitive_variety.py` for player skill assessment
+- Team balance scoring prioritizes close team ratings
+- Alternating round styles: SKILL rounds (tight spreads) vs VARIETY rounds (mixed levels)
+- Balance score calculation: `500 - abs(team1_rating - team2_rating)`
+
+**Variety Constraints**
+- **No Repeated Partnerships**: Same two players never partner twice in schedule
+- **Individual Opponent Limit**: Default max 3 times facing same individual opponent
+- **No Repeated Groups**: Same 4 players never play together twice (as any configuration)
+- Uses `partnership_used`, `individual_opponent_count`, `groups_played` tracking
+
+**First Bye Integration**
+- First bye players excluded from initial wave
+- Introduced in later waves after initial matches complete
+- Maintains fair games distribution across all players
+
+### Critical Functions
+
+**generate_initial_schedule(session, config) → List[ScheduledMatch]**
+- **Main Entry Point**: Generates complete tournament schedule
+- **Wave 0**: Initial matches filling all courts with top-rated players
+- **Subsequent Waves**: Uses continuous flow optimization algorithm
+- **Alternating Styles**: Odd waves = skill-focused, even waves = variety-focused
+- **Returns**: List of `ScheduledMatch` objects with `pending` status
+
+**find_best_match(pool, preferred_players, style) → Optional[Tuple[team1, team2]]**
+- **Purpose**: Find best valid match from a pool of players
+- **Constraints Checked**: Groups played, partnership constraints, opponent limits
+- **Scoring**: Balance + style score + continuity bonus + games needed
+- **Continuity Bonus**: Prefers players from same court position (+50 per player)
+
+**_reorder_for_fair_distribution(matches, all_player_ids, first_bye_player_ids) → List[ScheduledMatch]**
+- **Purpose**: Reorder matches for first-bye handling while preserving wave structure
+- **CRITICAL**: Preserves wave structure for continuous flow (matches stay in wave groups)
+- **First Bye Handling**: Delays first-bye player matches to later in schedule
+
+**score_match_variety(team1, team2) → float**
+- Scores matches for VARIETY rounds (mixed skill levels)
+- Rewards skill diversity: high+low pairings over similar-skill pairings
+- Penalty for repeated partnerships in match history
+
+**score_match_skill_focused(team1, team2) → float**
+- Scores matches for SKILL rounds (competitive balance)
+- Rewards homogeneous teams: both teammates at similar skill levels
+- Bonus for tight intra-team skill spreads (<70 ELO)
+
+**validate_schedule(session, matches) → ScheduleValidationResult**
+- Validates schedule against all constraints
+- Returns violations list and games-per-player distribution
+- Used before approval to ensure schedule integrity
+
+**regenerate_match(session, schedule, rejected_idx, config) → Optional[ScheduledMatch]**
+- Regenerates a single rejected match
+- Respects all constraints from approved matches
+- Maintains games-per-player balance
+
+**swap_player_in_match(match, old_player, new_player) → bool**
+- Swaps a player in an approved match
+- Validates constraints after swap
+- Used for manual adjustments after approval
+
+### Algorithm Details
+
+**Continuous Flow Wave Algorithm**
+```
+For each wave after Wave 0:
+  1. Distribute waiters evenly across courts (1 per court with 4 waiters)
+  2. For each court:
+     a. PHASE 1 (Optimal): Try court's previous players + assigned waiter
+     b. PHASE 2 (Adjacent): Expand to adjacent court if needed
+     c. PHASE 3 (Full): Use all available players (worst case)
+  3. Select best match from available pool
+  4. Track used players to prevent double-booking within wave
+```
+
+**Scoring Formula**
+```
+total_score = balance_score + style_score + continuity_bonus + games_needed
+
+where:
+  balance_score = 500 - abs(team1_rating - team2_rating)
+  style_score = score_match_variety() or score_match_skill_focused()
+  continuity_bonus = 50 * (players from same court position)
+  games_needed = 20 * sum(target_games - games_per_player[p] for p in match)
+```
+
+### Configuration
+
+**CompetitiveRoundRobinConfig (python/pickleball_types.py)**
+```python
+@dataclass
+class CompetitiveRoundRobinConfig:
+    games_per_player: int = 8              # Target games per player
+    max_partner_repeats: int = 0           # Never repeat partners
+    max_opponent_pair_repeats: int = 0     # Never face same pair twice
+    max_individual_opponent_repeats: int = 3  # Max times facing individual
+    scheduled_matches: List[ScheduledMatch] = field(default_factory=list)
+    schedule_finalized: bool = False       # True after user approval
+```
+
+### Session State
+
+**ScheduledMatch Dataclass**
+```python
+@dataclass
+class ScheduledMatch:
+    id: str                    # Unique identifier
+    team1: List[str]           # Player IDs for team 1
+    team2: List[str]           # Player IDs for team 2
+    status: str                # 'pending', 'approved', 'rejected', 'completed'
+    match_number: int          # Order in schedule
+    balance_score: float       # Quality score for UI display
+```
+
+### Testing & Validation
+
+**Test Files**
+- `test_competitive_round_robin.py`: Main test suite (15 tests)
+- `test_continuous_flow.py`: Verifies 1:1 continuous flow and court continuity
+
+**Make Targets**
+```bash
+make test_competitive_round_robin  # Main algorithm tests
+make test_continuous_flow          # Continuous flow verification
+```
+
+**Key Test Assertions**
+- Generated matches respect all constraints (partnerships, opponents, groups)
+- Average games per player within ±1 of target
+- 100% positive balance scores (teams reasonably matched)
+- 3/4 court continuity between consecutive waves
+- 1:1 continuous flow (each finish enables exactly one start)
+
+### Integration with GUI
+
+**Session Setup Page**
+- Select "Competitive Round Robin" game mode
+- Configure target games per player
+- Review/approve generated schedule before starting
+
+**Active Session**
+- Matches execute in schedule order
+- Courts auto-assigned based on availability
+- Completed matches tracked via standard match completion flow
+- Schedule progress shown in UI
+
+### Important Invariants
+
+1. **NO REPEATED PARTNERSHIPS**: Same two players never partner twice in entire schedule
+2. **NO REPEATED GROUPS**: Same 4 players never play together twice
+3. **WAVE STRUCTURE PRESERVED**: Reordering functions maintain wave boundaries
+4. **CONTINUOUS FLOW**: Each court's next match uses 3/4 players from that court
+5. **SINGLE DEPENDENCY**: Wave N+1 matches each depend on exactly one Wave N match
+6. **BALANCE PRIORITY**: Team rating differences minimized within constraints
+7. **FAIR DISTRIBUTION**: All players get approximately equal games (±1-2)
+
 ## KING OF THE COURT ALGORITHM (python/king_of_court.py)
 
 ### Core Purpose
