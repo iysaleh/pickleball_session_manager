@@ -692,7 +692,12 @@ class ManageMatchesDialog(QDialog):
             """)
             header_layout = QVBoxLayout(round_header)
             
-            round_label = QLabel(f"📋 ROUND {round_num + 1}")
+            # Determine round type from first match in round
+            round_matches = matches_by_round[round_num]
+            round_type = getattr(round_matches[0], 'round_type', 'competitive') if round_matches else 'competitive'
+            round_type_display = "🎯 COMPETITIVE (Homogeneous)" if round_type == 'competitive' else "🌈 VARIETY (Mixed)"
+            
+            round_label = QLabel(f"📋 ROUND {round_num + 1} - {round_type_display}")
             round_label.setStyleSheet("QLabel { color: white; font-size: 16px; font-weight: bold; }")
             header_layout.addWidget(round_label)
             

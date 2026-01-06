@@ -126,6 +126,7 @@ class ScheduledMatch:
     match_number: int = 0  # Position in scheduled order (1-indexed)
     balance_score: float = 0.0  # How well-balanced the teams are (higher = better)
     round_number: int = 0  # Round this match belongs to (0-indexed)
+    round_type: str = 'competitive'  # 'competitive' (homogeneous) or 'variety' (mixed)
     
     def get_all_players(self) -> List[str]:
         """Return all 4 player IDs in this match"""

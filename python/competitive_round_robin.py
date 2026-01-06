@@ -431,8 +431,12 @@ def generate_initial_schedule(
         Higher score = more competitive (similar skill players).
         Used in SKILL rounds to create tight competitive matches.
         
-        ELO scale: 3.0 skill = ~1300, 4.5 skill = ~1700
-        So 0.25 skill = ~67 ELO, 0.5 skill = ~133 ELO
+        ELO scale reference:
+        - 4.0 skill = 1800 ELO
+        - 3.75 skill = 1650 ELO (0.25 skill = 150 ELO gap)
+        - 3.5 skill = 1500 ELO
+        
+        For true homogeneity, we want spread < 50 (within same skill tier).
         """
         all_four = team1 + team2
         score = 0.0
@@ -453,15 +457,15 @@ def generate_initial_schedule(
         ratings = [player_ratings.get(pid, 1500) for pid in all_four]
         rating_spread = max(ratings) - min(ratings)
         
-        # Aggressive bonuses for homogeneous skill groups
-        if rating_spread < 70:  # Very similar skills (~0.25 level difference)
-            score += 300  # Very strong bonus for tight competitive matches
-        elif rating_spread < 140:  # Similar skills (~0.5 level difference)
-            score += 150  # Strong bonus
-        elif rating_spread < 200:  # Decent spread (~0.75 level difference)
-            score += 50  # Small bonus
-        elif rating_spread > 300:  # Wide skill gap (1+ level difference)
-            score -= 200  # Strong penalty for mismatched skills
+        # Tightened thresholds for homogeneous skill groups
+        if rating_spread < 50:  # All same skill tier (e.g., all 4.0s)
+            score += 500  # Very strong bonus for tight competitive matches
+        elif rating_spread < 100:  # Very close skills
+            score += 300  # Strong bonus
+        elif rating_spread < 150:  # One tier difference max
+            score += 100  # Decent bonus
+        elif rating_spread >= 150:  # Mixing skill tiers
+            score -= 250  # Penalty for mismatched skills in competitive rounds
         
         # STRONG BONUS: For homogeneous teams (same skill partners)
         # E.g., 4.0+4.0 vs 3.75+3.75 for tight competitive matches
@@ -471,11 +475,13 @@ def generate_initial_schedule(
         team1_spread = team1_ratings[1] - team1_ratings[0]
         team2_spread = team2_ratings[1] - team2_ratings[0]
         
-        # Reward teams with similar skill partners (both under 0.25 skill level)
-        if team1_spread < 70 and team2_spread < 70:  
-            score += 200  # Strong bonus for competitive team composition
+        # Reward teams with similar skill partners (same skill tier)
+        if team1_spread < 50 and team2_spread < 50:  
+            score += 300  # Strong bonus for competitive team composition
         elif team1_spread < 100 and team2_spread < 100:
-            score += 75  # Good bonus
+            score += 150  # Good bonus
+        elif team1_spread >= 150 or team2_spread >= 150:
+            score -= 100  # Penalty for mixed-skill teammates
         
         return score
     
@@ -1619,6 +1625,7 @@ def export_schedule_to_json(
                 'id': m.id,
                 'match_number': m.match_number,
                 'round_number': m.round_number,
+                'round_type': getattr(m, 'round_type', 'competitive'),  # 'competitive' or 'variety'
                 'team1': [player_map[pid]['name'] for pid in m.team1],
                 'team2': [player_map[pid]['name'] for pid in m.team2],
                 'team1_ids': m.team1,
@@ -1685,7 +1692,8 @@ def import_schedule_from_json(
                 status=match_data.get('status', 'pending'),
                 match_number=match_data.get('match_number', len(imported_matches) + 1),
                 balance_score=match_data.get('balance_score', 0.0),
-                round_number=match_data.get('round_number', 0)
+                round_number=match_data.get('round_number', 0),
+                round_type=match_data.get('round_type', 'competitive')
             )
             imported_matches.append(match)
         
@@ -1909,6 +1917,14 @@ def generate_rounds_based_schedule(
         
         This ensures elite players (4.5) play with other elites (4.0+),
         and beginners play with other beginners, even if teams are slightly imbalanced.
+        
+        ELO scale reference:
+        - 4.0 skill = 1800 ELO
+        - 3.75 skill = 1650 ELO (150 point gap)
+        - 3.5 skill = 1500 ELO (150 point gap)
+        
+        So to keep 4.0s together, we need spread < 50 (within same skill tier).
+        A 4.0+3.75 mix has spread = 150, which should be penalized in competitive rounds.
         """
         t1_ratings = [player_ratings[p] for p in team1]
         t2_ratings = [player_ratings[p] for p in team2]
@@ -1923,30 +1939,37 @@ def generate_rounds_based_schedule(
         
         # Start with homogeneity bonus as the base (inverted spread)
         # Lower spread = higher score. Max spread ~1400 (800 to 2200)
-        homogeneity_score = 1500 - rating_spread * 2
+        # Use much steeper penalty for spread to strongly prefer homogeneous matches
+        homogeneity_score = 1500 - rating_spread * 4  # Doubled penalty multiplier
         
-        # Extra bonuses for very tight skill groups
-        if rating_spread < 100:
-            homogeneity_score += 600  # Excellent - nearly identical skill
+        # STRONG bonuses for truly homogeneous skill groups (same skill tier)
+        # Tightened thresholds to reward only true same-skill matches
+        if rating_spread < 50:
+            homogeneity_score += 800  # Excellent - all same skill level (e.g., all 4.0s)
+        elif rating_spread < 100:
+            homogeneity_score += 500  # Very good - very close skill levels
         elif rating_spread < 150:
-            homogeneity_score += 400  # Great - elite vs elite
-        elif rating_spread < 200:
-            homogeneity_score += 250
-        elif rating_spread < 300:
-            homogeneity_score += 100
+            homogeneity_score += 200  # Decent - one tier difference max
+        elif rating_spread >= 150:
+            # PENALTY for mixing skill tiers (4.0 with 3.75, etc.)
+            # This is the key fix - actively penalize mixing in competitive rounds
+            homogeneity_score -= 300
         
         # SECONDARY: Team balance (lower weight than homogeneity)
         team_diff = abs(t1_avg - t2_avg)
         balance_score = max(0, 200 - team_diff * 0.5)  # Capped contribution
         
         # Bonus for within-team similarity (teammates close in skill)
+        # Tightened thresholds - we want teammates at same level
         t1_gap = abs(t1_ratings[0] - t1_ratings[1])
         t2_gap = abs(t2_ratings[0] - t2_ratings[1])
         teammate_bonus = 0
-        if t1_gap < 100 and t2_gap < 100:
-            teammate_bonus = 150
-        elif t1_gap < 150 and t2_gap < 150:
-            teammate_bonus = 75
+        if t1_gap < 50 and t2_gap < 50:
+            teammate_bonus = 200  # Both teams homogeneous - ideal competitive match
+        elif t1_gap < 100 and t2_gap < 100:
+            teammate_bonus = 100
+        elif t1_gap >= 150 or t2_gap >= 150:
+            teammate_bonus = -100  # Penalty for mixed-skill teammates
         
         return homogeneity_score + balance_score + teammate_bonus
     
@@ -2262,43 +2285,44 @@ def generate_rounds_based_schedule(
         if selected_matches is None:
             round_candidates.sort(key=match_score_for_round, reverse=True)
             
-        # Select matches for this round (greedy with backtracking)
-        round_matches: List[ScheduledMatch] = []
-        used_in_round: Set[str] = set()
-        
-        def find_matches_for_round(candidates: List[PotentialMatch], num_needed: int, used: Set[str]) -> Optional[List[PotentialMatch]]:
-            """Find num_needed non-overlapping matches from candidates."""
-            if num_needed == 0:
-                return []
+            # Select matches for this round (greedy with backtracking)
+            def find_matches_for_round(candidates: List[PotentialMatch], num_needed: int, used: Set[str]) -> Optional[List[PotentialMatch]]:
+                """Find num_needed non-overlapping matches from candidates."""
+                if num_needed == 0:
+                    return []
+                
+                for i, match in enumerate(candidates):
+                    if match.player_set & used:
+                        continue  # Players already used
+                    
+                    if not can_use_match(match):
+                        continue  # Constraints violated
+                    
+                    # Try this match
+                    new_used = used | match.player_set
+                    remaining = candidates[i+1:]
+                    
+                    result = find_matches_for_round(remaining, num_needed - 1, new_used)
+                    if result is not None:
+                        return [match] + result
+                
+                return None
             
-            for i, match in enumerate(candidates):
-                if match.player_set & used:
-                    continue  # Players already used
-                
-                if not can_use_match(match):
-                    continue  # Constraints violated
-                
-                # Try this match
-                new_used = used | match.player_set
-                remaining = candidates[i+1:]
-                
-                result = find_matches_for_round(remaining, num_needed - 1, new_used)
-                if result is not None:
-                    return [match] + result
-            
-            return None
-        
-        selected_matches = find_matches_for_round(round_candidates, num_courts, set())
-        
-        # If backtracking failed, try with relaxed variety constraints
-        if selected_matches is None:
-            # Re-sort without variety penalty
-            round_candidates.sort(
-                key=lambda m: m.competitive_score if is_competitive_round else m.mixed_score,
-                reverse=True
-            )
             selected_matches = find_matches_for_round(round_candidates, num_courts, set())
+            
+            # If backtracking failed, try with relaxed variety constraints
+            if selected_matches is None:
+                # Re-sort without variety penalty
+                round_candidates.sort(
+                    key=lambda m: m.competitive_score if is_competitive_round else m.mixed_score,
+                    reverse=True
+                )
+                selected_matches = find_matches_for_round(round_candidates, num_courts, set())
         
+        # Determine round type label
+        round_type_label = 'competitive' if is_competitive_round else 'variety'
+        
+        round_matches: List[ScheduledMatch] = []
         if selected_matches:
             for match in selected_matches:
                 record_match_constraints(match.team1, match.team2)
@@ -2313,7 +2337,8 @@ def generate_rounds_based_schedule(
                     status='pending',
                     match_number=match_number,
                     balance_score=score,
-                    round_number=round_idx
+                    round_number=round_idx,
+                    round_type=round_type_label
                 ))
         
         scheduled_matches.extend(round_matches)
