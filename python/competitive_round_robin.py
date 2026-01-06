@@ -2322,21 +2322,65 @@ def generate_rounds_based_schedule(
         # Determine round type label
         round_type_label = 'competitive' if is_competitive_round else 'variety'
         
+        # POST-PROCESSING: For competitive rounds, re-balance teams within each match
+        # This ensures that after selecting 4 homogeneous players, we pair them optimally
+        # E.g., 4.0+4.0 vs 3.75+3.75 should become 4.0+3.75 vs 4.0+3.75 for balance
+        def find_best_team_config(players_4: List[str]) -> Tuple[List[str], List[str]]:
+            """Given 4 players, find the team configuration with best balance."""
+            if len(players_4) != 4:
+                return players_4[:2], players_4[2:]
+            
+            p = players_4
+            configs = [
+                ([p[0], p[1]], [p[2], p[3]]),
+                ([p[0], p[2]], [p[1], p[3]]),
+                ([p[0], p[3]], [p[1], p[2]]),
+            ]
+            
+            best_config = configs[0]
+            best_balance = float('inf')
+            
+            for t1, t2 in configs:
+                # Check partnership constraint
+                if t1[1] in partnership_used[t1[0]] or t2[1] in partnership_used[t2[0]]:
+                    continue
+                
+                t1_rating = sum(player_ratings[pid] for pid in t1)
+                t2_rating = sum(player_ratings[pid] for pid in t2)
+                diff = abs(t1_rating - t2_rating)
+                
+                if diff < best_balance:
+                    best_balance = diff
+                    best_config = (t1, t2)
+            
+            return best_config
+        
         round_matches: List[ScheduledMatch] = []
         if selected_matches:
             for match in selected_matches:
-                record_match_constraints(match.team1, match.team2)
+                # For competitive rounds, re-balance the teams
+                if is_competitive_round:
+                    all_four = list(match.player_set)
+                    team1, team2 = find_best_team_config(all_four)
+                else:
+                    team1, team2 = match.team1, match.team2
+                
+                record_match_constraints(team1, team2)
                 match_number += 1
                 
-                score = match.competitive_score if is_competitive_round else match.mixed_score
+                # Recalculate balance score with new teams
+                t1_rating = sum(player_ratings[pid] for pid in team1)
+                t2_rating = sum(player_ratings[pid] for pid in team2)
+                balance_diff = abs(t1_rating - t2_rating)
+                balance_score = 1000 - balance_diff  # Higher = better balance
                 
                 round_matches.append(ScheduledMatch(
                     id=f"scheduled_{uuid.uuid4().hex[:8]}",
-                    team1=match.team1,
-                    team2=match.team2,
+                    team1=team1,
+                    team2=team2,
                     status='pending',
                     match_number=match_number,
-                    balance_score=score,
+                    balance_score=balance_score,
                     round_number=round_idx,
                     round_type=round_type_label
                 ))
