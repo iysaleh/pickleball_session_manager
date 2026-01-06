@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import List, Set, Dict, Optional, Literal, Any
 from datetime import datetime
 
-GameMode = Literal['king-of-court', 'round-robin', 'competitive-variety', 'competitive-round-robin']
+GameMode = Literal['king-of-court', 'round-robin', 'competitive-variety', 'competitive-round-robin', 'continuous-wave-flow']
 SessionType = Literal['doubles', 'singles']
 MatchStatus = Literal['waiting', 'in-progress', 'completed', 'forfeited']
 
@@ -125,6 +125,7 @@ class ScheduledMatch:
     status: ScheduledMatchStatus = 'pending'
     match_number: int = 0  # Position in scheduled order (1-indexed)
     balance_score: float = 0.0  # How well-balanced the teams are (higher = better)
+    round_number: int = 0  # Round this match belongs to (0-indexed)
     
     def get_all_players(self) -> List[str]:
         """Return all 4 player IDs in this match"""
@@ -133,13 +134,47 @@ class ScheduledMatch:
 
 @dataclass 
 class CompetitiveRoundRobinConfig:
-    """Configuration for Competitive Round Robin mode"""
+    """
+    Configuration for Competitive Round Robin mode.
+    
+    This is a rounds-based mode where:
+    - ALL matches for the session are pre-scheduled before starting
+    - Each round, all courts play simultaneously
+    - Courts do NOT populate until ALL courts finish
+    - Fair waitlist rotation: nobody waits twice before everyone waits once
+    - Admin can view/edit who waits in each round via Manage Matches UI
+    """
     games_per_player: int = 8  # Target games per player
+    num_rounds: int = 0  # Number of rounds to generate (0 = auto-calculate)
     max_partner_repeats: int = 0  # Maximum times to play with same partner (0 = never repeat)
     max_opponent_pair_repeats: int = 0  # Maximum times to face same opponent pair (0 = never repeat)
     max_individual_opponent_repeats: int = 2  # Maximum times to face same individual
     scheduled_matches: List[ScheduledMatch] = field(default_factory=list)  # Pre-approved matches
+    scheduled_waiters: List[List[str]] = field(default_factory=list)  # Players waiting each round (List[round_index] -> List[player_ids])
     schedule_finalized: bool = False  # True when user has approved enough matches
+    current_round: int = 0  # Current round number during play (0-indexed)
+
+
+@dataclass
+class ContinuousWaveFlowConfig:
+    """
+    Configuration for Continuous Wave Flow mode.
+    
+    This is a continuous mode where:
+    - Only the FIRST round is pre-scheduled in Manage Matches
+    - New matches are generated dynamically as each court finishes
+    - Prioritizes players who have waited longest
+    - Aims for best balance among selected players
+    - Soft variety constraints (don't block matches)
+    - Always swaps at least 2 players between matches
+    """
+    games_per_player: int = 8  # Target games per player (for first round scheduling)
+    max_partner_repeats: int = 0  # Soft limit - try to avoid but don't block
+    max_opponent_pair_repeats: int = 0  # Soft limit - try to avoid but don't block
+    max_individual_opponent_repeats: int = 3  # Soft limit - try to avoid but don't block
+    scheduled_matches: List[ScheduledMatch] = field(default_factory=list)  # First round matches only
+    schedule_finalized: bool = False  # True when first round approved
+    min_waitlist_warning_threshold: int = 2  # Warn if waitlist < this
 
 
 @dataclass
@@ -169,6 +204,7 @@ class SessionConfig:
     pre_seeded_ratings: bool = False  # Whether skill ratings were pre-seeded
     king_of_court_config: Optional[KingOfCourtConfig] = None  # King of Court specific settings
     competitive_round_robin_config: Optional[CompetitiveRoundRobinConfig] = None  # Competitive Round Robin settings
+    continuous_wave_flow_config: Optional['ContinuousWaveFlowConfig'] = None  # Continuous Wave Flow settings
 
 
 @dataclass

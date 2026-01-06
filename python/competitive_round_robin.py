@@ -1,16 +1,23 @@
 """
-Competitive Round Robin Algorithm - Pre-scheduled skill-balanced matches with human approval
+Competitive Round Robin Algorithm - Rounds-based skill-balanced matches with human approval
 
-This mode generates all matches for a session upfront, allowing the organizer to review,
-approve, reject, or swap players before the session begins. Key features:
-- Each player plays exactly N games (default 8)
+This mode generates all matches for a session upfront in a ROUNDS-BASED format, 
+allowing the organizer to review, approve, reject, or swap players before the 
+session begins. Key features:
+
+ROUNDS-BASED OPERATION:
+- ALL matches are pre-scheduled before session starts
+- Each round, all courts play simultaneously  
+- Courts do NOT populate until ALL courts finish their current round
+- Fair waitlist rotation: nobody waits twice before everyone waits once
+- Admin can view/edit who waits in each round via Manage Matches UI
+
+CONSTRAINTS:
+- Each player plays target N games (default 8)
 - No repeat partnerships allowed
-- Opponent pair repeats not allowed  
-- Individual opponent repeats limited (max 3x)
+- Individual opponent repeats limited (max 2x)
 - Skill-balanced team formation using ELO ratings
-- Wait priority integration during runtime
 - First bye support
-- Fair distribution of matches across the queue
 """
 
 from typing import List, Dict, Tuple, Optional, Set
@@ -1158,8 +1165,13 @@ def swap_player_in_match(
     """
     Swap a player in a match with another player.
     
+    If the new player is in another match in the same round, this performs a two-way swap,
+    moving old_player_id to the new_player's original match.
+    
     Returns:
         (success, new_match, error_message)
+        
+    Note: If a two-way swap is performed, both matches in current_schedule are modified.
     """
     if old_player_id not in match.get_all_players():
         return False, None, f"Player {old_player_id} not in this match"
@@ -1167,6 +1179,53 @@ def swap_player_in_match(
     if new_player_id in match.get_all_players():
         return False, None, f"Player {new_player_id} already in this match"
     
+    # Check if new_player is in another match in the same round
+    other_match = None
+    other_match_idx = None
+    for idx, m in enumerate(current_schedule):
+        if m.id != match.id and m.round_number == match.round_number and new_player_id in m.get_all_players():
+            other_match = m
+            other_match_idx = idx
+            break
+    
+    # If new_player is in another match in the same round, we need a two-way swap
+    if other_match:
+        # Two-way swap: old_player goes to other_match, new_player comes to this match
+        # Create new teams for this match
+        new_team1 = [new_player_id if p == old_player_id else p for p in match.team1]
+        new_team2 = [new_player_id if p == old_player_id else p for p in match.team2]
+        
+        # Create new teams for other match (put old_player where new_player was)
+        other_team1 = [old_player_id if p == new_player_id else p for p in other_match.team1]
+        other_team2 = [old_player_id if p == new_player_id else p for p in other_match.team2]
+        
+        # Update both matches
+        new_match = ScheduledMatch(
+            id=match.id,
+            team1=new_team1,
+            team2=new_team2,
+            status=match.status,
+            match_number=match.match_number,
+            balance_score=calculate_team_balance_score(session, new_team1, new_team2),
+            round_number=match.round_number
+        )
+        
+        updated_other = ScheduledMatch(
+            id=other_match.id,
+            team1=other_team1,
+            team2=other_team2,
+            status=other_match.status,
+            match_number=other_match.match_number,
+            balance_score=calculate_team_balance_score(session, other_team1, other_team2),
+            round_number=other_match.round_number
+        )
+        
+        # Update the other match in the schedule directly
+        current_schedule[other_match_idx] = updated_other
+        
+        return True, new_match, ""
+    
+    # Single swap - new player is not in this round (e.g., from waitlist)
     # Create new teams with swap
     new_team1 = [new_player_id if p == old_player_id else p for p in match.team1]
     new_team2 = [new_player_id if p == old_player_id else p for p in match.team2]
@@ -1212,7 +1271,8 @@ def swap_player_in_match(
         team2=new_team2,
         status=match.status,
         match_number=match.match_number,
-        balance_score=calculate_team_balance_score(session, new_team1, new_team2)
+        balance_score=calculate_team_balance_score(session, new_team1, new_team2),
+        round_number=match.round_number
     )
     
     return True, new_match, ""
@@ -1300,6 +1360,11 @@ def populate_courts_from_schedule(session: Session) -> None:
     """
     Populate empty courts from approved scheduled matches.
     
+    ROUNDS-BASED OPERATION:
+    - All courts must complete before the next round starts
+    - Only assigns matches from the next round when ALL courts are empty
+    - Ensures fair play: all scheduled matches for a round start together
+    
     Also adds all unplayed approved matches to the match queue so users
     can see what's coming up.
     """
@@ -1332,6 +1397,21 @@ def populate_courts_from_schedule(session: Session) -> None:
     if not unplayed:
         return
     
+    # ROUNDS-BASED CHECK: Only populate when ALL courts are empty
+    # This ensures we wait for the entire round to complete
+    from .queue_manager import get_empty_courts
+    empty_courts = get_empty_courts(session)
+    
+    # Check for any active matches (waiting or in-progress)
+    active_match_count = sum(1 for m in session.matches if m.status in ['waiting', 'in-progress'])
+    
+    # If any matches are still in progress, don't start the next round
+    if active_match_count > 0:
+        return
+    
+    # All courts are empty - start the next round
+    num_courts = session.config.courts
+    
     # Add all unplayed approved matches to the match queue (if not already there)
     from .pickleball_types import QueuedMatch
     
@@ -1351,13 +1431,6 @@ def populate_courts_from_schedule(session: Session) -> None:
             session.match_queue.append(queued_match)
             existing_queued.add(key)
     
-    # Find empty courts
-    from .queue_manager import get_empty_courts
-    empty_courts = get_empty_courts(session)
-    
-    if not empty_courts:
-        return
-    
     # Check player availability (not in active match)
     active_players = set()
     for match in session.matches:
@@ -1366,14 +1439,22 @@ def populate_courts_from_schedule(session: Session) -> None:
             active_players.update(match.team2)
     
     # Assign matches to courts from the queue
+    # ROUNDS-BASED: Assign up to num_courts matches (one round)
     from .pickleball_types import Match
     from .time_manager import now
     import uuid
     
     matches_to_remove = []
+    matches_assigned = 0
     
     for court_number in empty_courts:
+        if matches_assigned >= num_courts:
+            break  # Only fill one round at a time
+            
         for i, queued_match in enumerate(session.match_queue):
+            if i in matches_to_remove:
+                continue  # Already assigned
+                
             match_players = set(queued_match.team1 + queued_match.team2)
             
             # All players must be available
@@ -1400,7 +1481,11 @@ def populate_courts_from_schedule(session: Session) -> None:
             
             # Mark players as active
             active_players.update(match_players)
+            matches_assigned += 1
             break
+    
+    # Increment current round counter
+    config.current_round += 1
     
     # Remove assigned matches from queue (in reverse order to maintain indices)
     for i in sorted(matches_to_remove, reverse=True):
@@ -1685,3 +1770,437 @@ def get_player_display_info(session: Session, player_id: str) -> Dict:
         'elo_rating': round(elo_rating),
         'bracket': bracket
     }
+
+
+def compute_scheduled_waiters(
+    scheduled_matches: List[ScheduledMatch],
+    all_player_ids: List[str],
+    num_courts: int
+) -> List[List[str]]:
+    """
+    Compute which players wait in each round based on the scheduled matches.
+    
+    Returns a list where each element is a list of player IDs waiting in that round.
+    
+    FAIR WAITLIST RULE: Nobody waits twice before everyone waits once.
+    """
+    players_per_match = 4
+    players_per_round = num_courts * players_per_match
+    
+    # Group matches into rounds
+    rounds: List[List[ScheduledMatch]] = []
+    current_round: List[ScheduledMatch] = []
+    
+    for match in scheduled_matches:
+        if match.status != 'approved':
+            continue
+        current_round.append(match)
+        if len(current_round) == num_courts:
+            rounds.append(current_round)
+            current_round = []
+    
+    if current_round:
+        rounds.append(current_round)
+    
+    # Compute waiters for each round
+    scheduled_waiters: List[List[str]] = []
+    all_players = set(all_player_ids)
+    
+    for round_matches in rounds:
+        playing_this_round = set()
+        for match in round_matches:
+            playing_this_round.update(match.team1 + match.team2)
+        
+        waiting_this_round = list(all_players - playing_this_round)
+        scheduled_waiters.append(waiting_this_round)
+    
+    return scheduled_waiters
+
+
+def generate_rounds_based_schedule(
+    session: Session,
+    config: Optional[CompetitiveRoundRobinConfig] = None
+) -> Tuple[List[ScheduledMatch], List[List[str]]]:
+    """
+    Generate a rounds-based schedule with fair waitlist assignment.
+    
+    Returns:
+        (scheduled_matches, scheduled_waiters)
+        
+    FAIR WAITLIST RULE: Nobody waits twice before everyone waits once.
+    This function generates matches and ensures waitlist fairness.
+    """
+    if config is None:
+        config = CompetitiveRoundRobinConfig()
+    
+    players = session.config.players
+    num_players = len(players)
+    num_courts = session.config.courts
+    players_per_round = num_courts * 4
+    
+    if num_players < 4:
+        return [], []
+    
+    # Get player ratings
+    player_ratings: Dict[str, float] = {}
+    for player in players:
+        player_ratings[player.id] = get_player_skill_rating(session, player.id)
+    
+    all_player_ids = [p.id for p in players]
+    
+    # Calculate number of rounds needed
+    target_games = config.games_per_player
+    if num_players <= players_per_round:
+        # Everyone plays every round
+        num_rounds = target_games
+    else:
+        # Some players wait each round
+        # Each player plays: (players_per_round / num_players) * num_rounds games
+        # So: num_rounds = target_games * num_players / players_per_round
+        num_rounds = math.ceil(target_games * num_players / players_per_round)
+    
+    # Track constraints
+    games_per_player: Dict[str, int] = {pid: 0 for pid in all_player_ids}
+    wait_count: Dict[str, int] = {pid: 0 for pid in all_player_ids}
+    partnership_used: Dict[str, Set[str]] = {pid: set() for pid in all_player_ids}
+    individual_opponent_count: Dict[str, Dict[str, int]] = {pid: {} for pid in all_player_ids}
+    groups_played: Set[frozenset] = set()
+    
+    # Track last round interactions for back-to-back prevention
+    # Maps player_id -> {'partners': set(), 'opponents': set()}
+    last_round_interactions: Dict[str, Dict[str, Set[str]]] = {
+        pid: {'partners': set(), 'opponents': set()} for pid in all_player_ids
+    }
+    # Track who played in the last round (not on waitlist)
+    last_round_players: Set[str] = set()
+    
+    scheduled_matches: List[ScheduledMatch] = []
+    scheduled_waiters: List[List[str]] = []
+    match_number = 0
+    
+    first_bye_player_ids = set(session.config.first_bye_players or [])
+    
+    def can_form_match(team1: List[str], team2: List[str], round_idx: int) -> bool:
+        """Check if two teams can play against each other (hard constraints only)."""
+        p1, p2 = team1
+        p3, p4 = team2
+        all_four = team1 + team2
+        
+        # Check partnership constraint
+        if p2 in partnership_used[p1]:
+            return False
+        if p4 in partnership_used[p3]:
+            return False
+        
+        # Check individual opponent limits
+        for a in team1:
+            for b in team2:
+                if individual_opponent_count[a].get(b, 0) >= config.max_individual_opponent_repeats:
+                    return False
+        
+        # Check if this group already played
+        group_key = frozenset(team1 + team2)
+        if group_key in groups_played:
+            return False
+        
+        return True
+    
+    def calculate_back_to_back_penalty(team1: List[str], team2: List[str], round_idx: int) -> float:
+        """Calculate penalty for back-to-back interactions (soft constraint).
+        
+        Returns a penalty score (0 = no penalty, higher = worse).
+        Each back-to-back interaction adds a penalty to discourage but not prevent the match.
+        """
+        if round_idx == 0:
+            return 0
+        
+        all_four = team1 + team2
+        penalty = 0
+        
+        for player in all_four:
+            # Skip if this player didn't play last round
+            if player not in last_round_players:
+                continue
+            
+            last_round_partners = last_round_interactions.get(player, {}).get('partners', set())
+            last_round_opponents = last_round_interactions.get(player, {}).get('opponents', set())
+            
+            if player in team1:
+                teammate = team1[0] if team1[1] == player else team1[1]
+                opponents = team2
+            else:
+                teammate = team2[0] if team2[1] == player else team2[1]
+                opponents = team1
+            
+            # Penalty for playing with same teammate as last round
+            if teammate in last_round_players and teammate in last_round_partners:
+                penalty += 200  # Heavy penalty for back-to-back partnership
+            
+            # Penalty for playing with someone who was opponent last round  
+            if teammate in last_round_players and teammate in last_round_opponents:
+                penalty += 100  # Moderate penalty
+            
+            # Penalty for facing same opponent as last round
+            for opp in opponents:
+                if opp in last_round_players:
+                    if opp in last_round_opponents:
+                        penalty += 100  # Moderate penalty for back-to-back opponent
+                    if opp in last_round_partners:
+                        penalty += 100  # Moderate penalty for facing former partner
+        
+        return penalty
+    
+    def record_match(team1: List[str], team2: List[str]) -> None:
+        """Record that a match was played."""
+        all_four = team1 + team2
+        
+        for pid in all_four:
+            games_per_player[pid] += 1
+        
+        partnership_used[team1[0]].add(team1[1])
+        partnership_used[team1[1]].add(team1[0])
+        partnership_used[team2[0]].add(team2[1])
+        partnership_used[team2[1]].add(team2[0])
+        
+        for a in team1:
+            for b in team2:
+                individual_opponent_count[a][b] = individual_opponent_count[a].get(b, 0) + 1
+                individual_opponent_count[b][a] = individual_opponent_count[b].get(a, 0) + 1
+        
+        groups_played.add(frozenset(all_four))
+    
+    def select_waiters_fairly(available_players: List[str], num_to_wait: int) -> List[str]:
+        """
+        Select players to wait, ensuring fair rotation.
+        
+        RULE: Nobody waits twice before everyone waits once.
+        """
+        if num_to_wait <= 0:
+            return []
+        
+        # Find minimum wait count among available players
+        min_wait = min(wait_count[p] for p in available_players)
+        
+        # Players who can be selected (haven't waited more than minimum)
+        eligible = [p for p in available_players if wait_count[p] == min_wait]
+        
+        # If not enough eligible, add players with next wait count
+        next_level = [p for p in available_players if wait_count[p] == min_wait + 1]
+        
+        # Prioritize by games played (those with fewer games get to play)
+        # So select waiters from those with MORE games played
+        eligible.sort(key=lambda p: games_per_player[p], reverse=True)
+        
+        selected = eligible[:num_to_wait]
+        
+        # If still need more, take from next level
+        if len(selected) < num_to_wait:
+            needed = num_to_wait - len(selected)
+            next_level.sort(key=lambda p: games_per_player[p], reverse=True)
+            selected.extend(next_level[:needed])
+        
+        # Update wait counts
+        for p in selected:
+            wait_count[p] += 1
+        
+        return selected
+    
+    # Generate rounds
+    for round_idx in range(num_rounds):
+        round_matches: List[ScheduledMatch] = []
+        
+        # Clear current round interactions tracking (will be filled as matches are recorded)
+        current_round_interactions: Dict[str, Dict[str, Set[str]]] = {
+            pid: {'partners': set(), 'opponents': set()} for pid in all_player_ids
+        }
+        
+        # Determine who plays this round
+        available = all_player_ids[:]
+        
+        # First round: exclude first bye players
+        if round_idx == 0 and first_bye_player_ids:
+            available = [p for p in available if p not in first_bye_player_ids]
+        
+        # Calculate how many need to wait
+        num_to_wait = max(0, len(available) - players_per_round)
+        
+        # Select waiters fairly
+        waiters = select_waiters_fairly(available, num_to_wait)
+        scheduled_waiters.append(waiters)
+        
+        # Players who play this round
+        playing = [p for p in available if p not in waiters]
+        
+        # Sort by rating for better match balance
+        playing.sort(key=lambda p: player_ratings.get(p, 1500), reverse=True)
+        
+        # Generate matches for this round
+        used_in_round: Set[str] = set()
+        
+        for court_idx in range(num_courts):
+            if len(playing) - len(used_in_round) < 4:
+                break
+            
+            remaining = [p for p in playing if p not in used_in_round]
+            
+            if len(remaining) < 4:
+                break
+            
+            # Find best match from remaining players
+            best_match = None
+            best_score = -float('inf')
+            
+            candidates = remaining[:min(8, len(remaining))]
+            
+            for combo in combinations(candidates, 4):
+                combo_list = list(combo)
+                
+                for team1, team2 in [
+                    ([combo_list[0], combo_list[1]], [combo_list[2], combo_list[3]]),
+                    ([combo_list[0], combo_list[2]], [combo_list[1], combo_list[3]]),
+                    ([combo_list[0], combo_list[3]], [combo_list[1], combo_list[2]]),
+                ]:
+                    if not can_form_match(team1, team2, round_idx):
+                        continue
+                    
+                    score = calculate_team_balance_score(session, team1, team2)
+                    
+                    # Apply back-to-back penalty (soft constraint)
+                    back_to_back_penalty = calculate_back_to_back_penalty(team1, team2, round_idx)
+                    score -= back_to_back_penalty
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_match = (team1[:], team2[:])
+            
+            if best_match:
+                team1, team2 = best_match
+                record_match(team1, team2)
+                used_in_round.update(team1 + team2)
+                match_number += 1
+                
+                # Track current round interactions for next round's back-to-back prevention
+                for p in team1:
+                    partner = team1[0] if team1[1] == p else team1[1]
+                    current_round_interactions[p]['partners'].add(partner)
+                    for opp in team2:
+                        current_round_interactions[p]['opponents'].add(opp)
+                for p in team2:
+                    partner = team2[0] if team2[1] == p else team2[1]
+                    current_round_interactions[p]['partners'].add(partner)
+                    for opp in team1:
+                        current_round_interactions[p]['opponents'].add(opp)
+                
+                round_matches.append(ScheduledMatch(
+                    id=f"scheduled_{uuid.uuid4().hex[:8]}",
+                    team1=team1,
+                    team2=team2,
+                    status='pending',
+                    match_number=match_number,
+                    balance_score=best_score,
+                    round_number=round_idx
+                ))
+        
+        # Update last_round_interactions and last_round_players for next round
+        last_round_interactions = current_round_interactions
+        last_round_players = used_in_round.copy()
+        
+        scheduled_matches.extend(round_matches)
+    
+    return scheduled_matches, scheduled_waiters
+
+
+def swap_waiter_in_round(
+    config: CompetitiveRoundRobinConfig,
+    scheduled_matches: List[ScheduledMatch],
+    round_index: int,
+    waiter_id: str,
+    player_id: str,
+    session: Session
+) -> Tuple[bool, str]:
+    """
+    Swap a waiter with a player in a specific round.
+    
+    The waiter becomes a player, and the player becomes a waiter.
+    
+    Returns:
+        (success, error_message)
+    """
+    if round_index < 0 or round_index >= len(config.scheduled_waiters):
+        return False, "Invalid round index"
+    
+    waiters = config.scheduled_waiters[round_index]
+    
+    if waiter_id not in waiters:
+        return False, f"Player {waiter_id} is not waiting in round {round_index + 1}"
+    
+    # Find matches in this round
+    num_courts = session.config.courts
+    start_idx = round_index * num_courts
+    end_idx = min(start_idx + num_courts, len(scheduled_matches))
+    
+    round_matches = scheduled_matches[start_idx:end_idx]
+    
+    # Find which match the player is in
+    target_match_idx = None
+    for i, match in enumerate(round_matches):
+        if player_id in match.team1 + match.team2:
+            target_match_idx = start_idx + i
+            break
+    
+    if target_match_idx is None:
+        return False, f"Player {player_id} is not playing in round {round_index + 1}"
+    
+    # Swap the players
+    match = scheduled_matches[target_match_idx]
+    
+    # Update teams
+    new_team1 = [waiter_id if p == player_id else p for p in match.team1]
+    new_team2 = [waiter_id if p == player_id else p for p in match.team2]
+    
+    # Update the match
+    scheduled_matches[target_match_idx] = ScheduledMatch(
+        id=match.id,
+        team1=new_team1,
+        team2=new_team2,
+        status=match.status,
+        match_number=match.match_number,
+        balance_score=calculate_team_balance_score(session, new_team1, new_team2)
+    )
+    
+    # Update waiters list
+    config.scheduled_waiters[round_index] = [
+        player_id if w == waiter_id else w for w in waiters
+    ]
+    
+    return True, ""
+
+
+def get_round_info(
+    scheduled_matches: List[ScheduledMatch],
+    scheduled_waiters: List[List[str]],
+    num_courts: int
+) -> List[Dict]:
+    """
+    Get information about each round for display in UI.
+    
+    Returns list of round info dicts with:
+    - round_number: 1-indexed round number
+    - matches: List of ScheduledMatch objects for this round
+    - waiters: List of player IDs waiting this round
+    """
+    rounds_info = []
+    
+    # Group matches by round
+    for round_idx, waiters in enumerate(scheduled_waiters):
+        start_idx = round_idx * num_courts
+        end_idx = min(start_idx + num_courts, len(scheduled_matches))
+        round_matches = scheduled_matches[start_idx:end_idx]
+        
+        rounds_info.append({
+            'round_number': round_idx + 1,
+            'matches': round_matches,
+            'waiters': waiters
+        })
+    
+    return rounds_info

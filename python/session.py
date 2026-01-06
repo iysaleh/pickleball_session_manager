@@ -41,7 +41,8 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
         advanced_config=config.advanced_config,
         pre_seeded_ratings=config.pre_seeded_ratings,
         king_of_court_config=config.king_of_court_config,
-        competitive_round_robin_config=config.competitive_round_robin_config
+        competitive_round_robin_config=config.competitive_round_robin_config,
+        continuous_wave_flow_config=config.continuous_wave_flow_config
     )
     
     # Generate match queue for round-robin mode
@@ -61,9 +62,10 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     # Use provided advanced config or defaults
     advanced_config = config.advanced_config or get_default_advanced_config()
     
-    # For competitive-variety and competitive-round-robin modes, start all players in waiting list
+    # For competitive-variety, competitive-round-robin, and continuous-wave-flow modes, 
+    # start all players in waiting list
     waiting_players = []
-    if final_config.mode in ('competitive-variety', 'competitive-round-robin'):
+    if final_config.mode in ('competitive-variety', 'competitive-round-robin', 'continuous-wave-flow'):
         waiting_players = [p.id for p in players_to_use]
     
     # Start the session timing if not already started
@@ -553,7 +555,8 @@ def evaluate_and_create_matches(session: Session) -> Session:
     This should be called whenever state changes to potentially start new games.
     For competitive-variety mode, re-populates courts based on current settings.
     For king-of-court mode, manages rounds-based progression.
-    For competitive-round-robin mode, populates from pre-approved schedule.
+    For competitive-round-robin mode, populates from pre-approved schedule (rounds-based).
+    For continuous-wave-flow mode, dynamically generates matches as courts finish.
     """
     
     if session.config.mode == 'competitive-variety':
@@ -568,6 +571,11 @@ def evaluate_and_create_matches(session: Session) -> Session:
     elif session.config.mode == 'competitive-round-robin':
         from python.competitive_round_robin import populate_courts_from_schedule
         populate_courts_from_schedule(session)
+    elif session.config.mode == 'continuous-wave-flow':
+        from python.continuous_wave_flow import populate_courts_continuous_wave_flow
+        populate_courts_continuous_wave_flow(session)
+    
+    return session
     
     return session
 
