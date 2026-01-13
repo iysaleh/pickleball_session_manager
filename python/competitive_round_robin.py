@@ -2641,13 +2641,18 @@ def regenerate_round_with_type(
     if new_round_type == ROUND_TYPE_ULTRA_COMPETITIVE:
         # Ultra-competitive: group highest rated players together
         # Fill courts from highest to lowest rated
+        # Add randomization: shuffle team pairings within each court
         for court_idx in range(num_courts):
             start = court_idx * 4
             if start + 4 <= len(playing_list):
                 court_players = playing_list[start:start + 4]
-                # Optimal pairing: 1+4 vs 2+3 for best balance within similar skill
-                team1 = [court_players[0], court_players[3]]
-                team2 = [court_players[1], court_players[2]]
+                # Randomly pick one of the 3 valid team configurations
+                team_configs = [
+                    ([court_players[0], court_players[3]], [court_players[1], court_players[2]]),  # 1+4 vs 2+3
+                    ([court_players[0], court_players[2]], [court_players[1], court_players[3]]),  # 1+3 vs 2+4
+                    ([court_players[0], court_players[1]], [court_players[2], court_players[3]]),  # 1+2 vs 3+4
+                ]
+                team1, team2 = random.choice(team_configs)
                 
                 balance_score = calculate_team_balance_score(session, team1, team2)
                 match_num = scheduled_matches[start_idx + court_idx].match_number
@@ -2664,26 +2669,37 @@ def regenerate_round_with_type(
                 ))
     
     elif new_round_type == ROUND_TYPE_COMPETITIVE:
-        # Competitive: similar skill levels, still some mixing
-        # Group by similar ratings but allow some crossover
+        # Competitive: similar skill levels with some controlled randomization
+        # Shuffle players within similar skill bands, then group
+        # Break into skill quartiles and shuffle within each
+        quartile_size = max(4, len(playing_list) // 4)
+        shuffled_playing = []
+        for i in range(0, len(playing_list), quartile_size):
+            quartile = playing_list[i:i + quartile_size]
+            random.shuffle(quartile)
+            shuffled_playing.extend(quartile)
+        
         groups = []
-        remaining = playing_list[:]
+        remaining = shuffled_playing[:]
         
         while len(remaining) >= 4:
-            # Take top 4-8 players and pick best 4-player combo
-            pool = remaining[:min(8, len(remaining))]
-            best_group = pool[:4]
+            # Take next 4 players 
+            best_group = remaining[:4]
             remaining = remaining[4:]
             groups.append(best_group)
         
         for court_idx, group in enumerate(groups[:num_courts]):
             if len(group) < 4:
                 continue
-            # Sort by rating within group
+            # Sort by rating within group for balanced pairing
             group.sort(key=lambda p: player_ratings.get(p, 1500), reverse=True)
-            # Cross-pair for balance: 1+4 vs 2+3
-            team1 = [group[0], group[3]]
-            team2 = [group[1], group[2]]
+            # Randomly pick one of the 3 valid team configurations
+            team_configs = [
+                ([group[0], group[3]], [group[1], group[2]]),  # 1+4 vs 2+3
+                ([group[0], group[2]], [group[1], group[3]]),  # 1+3 vs 2+4
+                ([group[0], group[1]], [group[2], group[3]]),  # 1+2 vs 3+4
+            ]
+            team1, team2 = random.choice(team_configs)
             
             balance_score = calculate_team_balance_score(session, team1, team2)
             match_num = scheduled_matches[start_idx + court_idx].match_number if start_idx + court_idx < len(scheduled_matches) else court_idx + 1
@@ -2700,14 +2716,18 @@ def regenerate_round_with_type(
             ))
     
     else:  # VARIETY
-        # Variety: mix skill levels across matches
-        # For each court, pair high-rated with low-rated players
-        # Simple approach: just use groups of 4 with cross-pairing
+        # Variety: mix skill levels across matches with RANDOMIZATION
+        # Shuffle players to create different matchups each time
+        shuffled_players = playing_list[:]
+        random.shuffle(shuffled_players)
+        
         for court_idx in range(num_courts):
             start = court_idx * 4
-            if start + 4 <= len(playing_list):
-                court_players = playing_list[start:start + 4]
-                # For variety, cross-pair: 1+4 vs 2+3 (high+low vs high+low)
+            if start + 4 <= len(shuffled_players):
+                court_players = shuffled_players[start:start + 4]
+                # Sort within court for balanced cross-pairing
+                court_players.sort(key=lambda p: player_ratings.get(p, 1500), reverse=True)
+                # Cross-pair: 1+4 vs 2+3 (high+low vs high+low)
                 team1 = [court_players[0], court_players[3]]
                 team2 = [court_players[1], court_players[2]]
                 
@@ -3122,39 +3142,91 @@ def regenerate_subsequent_rounds(
         kept_waiters.append(waiters)
         
         playing = [p for p in available if p not in waiters]
-        playing.sort(key=lambda p: player_ratings.get(p, 1500), reverse=True)
         
-        # Generate matches for this round
+        # Sort by rating for competitive rounds, shuffle for variety
+        if round_type == ROUND_TYPE_VARIETY:
+            random.shuffle(playing)
+        else:
+            playing.sort(key=lambda p: player_ratings.get(p, 1500), reverse=True)
+        
+        # Generate matches for this round - try harder to fill all courts
+        used_in_round: Set[str] = set()
+        round_matches_added = 0
+        
         for court_idx in range(num_courts):
-            start = court_idx * 4
-            if start + 4 > len(playing):
+            remaining = [p for p in playing if p not in used_in_round]
+            if len(remaining) < 4:
                 break
             
-            court_players = playing[start:start + 4]
-            
-            # Find best valid team configuration
+            # Try to find ANY valid 4-player combination for this court
             best_teams = None
             best_score = float('-inf')
             
-            team_configs = [
-                ([court_players[0], court_players[1]], [court_players[2], court_players[3]]),
-                ([court_players[0], court_players[2]], [court_players[1], court_players[3]]),
-                ([court_players[0], court_players[3]], [court_players[1], court_players[2]]),
-            ]
+            # First try: Use next 4 available players (maintains skill grouping for competitive)
+            primary_candidates = remaining[:min(8, len(remaining))]
             
-            for t1, t2 in team_configs:
-                if can_form_match_check(t1, t2):
-                    balance = abs(sum(player_ratings.get(p, 1500) for p in t1) - 
-                                 sum(player_ratings.get(p, 1500) for p in t2))
-                    score = 500 - balance
-                    if score > best_score:
-                        best_score = score
-                        best_teams = (t1, t2)
+            # Try all 4-player combinations from primary candidates
+            for combo in combinations(primary_candidates, 4):
+                combo_list = list(combo)
+                # Sort by rating within combo for consistent pairing
+                combo_list.sort(key=lambda p: player_ratings.get(p, 1500), reverse=True)
+                
+                # Try all 3 team configurations
+                team_configs = [
+                    ([combo_list[0], combo_list[1]], [combo_list[2], combo_list[3]]),
+                    ([combo_list[0], combo_list[2]], [combo_list[1], combo_list[3]]),
+                    ([combo_list[0], combo_list[3]], [combo_list[1], combo_list[2]]),
+                ]
+                
+                for t1, t2 in team_configs:
+                    if can_form_match_check(t1, t2):
+                        balance = abs(sum(player_ratings.get(p, 1500) for p in t1) - 
+                                     sum(player_ratings.get(p, 1500) for p in t2))
+                        score = 500 - balance
+                        if score > best_score:
+                            best_score = score
+                            best_teams = (t1, t2)
+            
+            # Fallback: If no valid combo in primary candidates, try all remaining
+            if best_teams is None and len(remaining) > len(primary_candidates):
+                for combo in combinations(remaining, 4):
+                    combo_list = list(combo)
+                    combo_list.sort(key=lambda p: player_ratings.get(p, 1500), reverse=True)
+                    
+                    team_configs = [
+                        ([combo_list[0], combo_list[1]], [combo_list[2], combo_list[3]]),
+                        ([combo_list[0], combo_list[2]], [combo_list[1], combo_list[3]]),
+                        ([combo_list[0], combo_list[3]], [combo_list[1], combo_list[2]]),
+                    ]
+                    
+                    for t1, t2 in team_configs:
+                        if can_form_match_check(t1, t2):
+                            balance = abs(sum(player_ratings.get(p, 1500) for p in t1) - 
+                                         sum(player_ratings.get(p, 1500) for p in t2))
+                            score = 500 - balance
+                            if score > best_score:
+                                best_score = score
+                                best_teams = (t1, t2)
+                    
+                    if best_teams:
+                        break  # Found a valid combo
+            
+            # Last resort: relax constraints and pick any 4 players
+            if best_teams is None and len(remaining) >= 4:
+                combo_list = remaining[:4]
+                combo_list.sort(key=lambda p: player_ratings.get(p, 1500), reverse=True)
+                # Force the best balanced configuration even if constraints violated
+                t1 = [combo_list[0], combo_list[3]]
+                t2 = [combo_list[1], combo_list[2]]
+                best_teams = (t1, t2)
             
             if best_teams:
                 team1, team2 = best_teams
                 record_match_check(team1, team2)
                 match_number += 1
+                
+                for p in team1 + team2:
+                    used_in_round.add(p)
                 
                 kept_matches.append(ScheduledMatch(
                     id=f"scheduled_{uuid.uuid4().hex[:8]}",
@@ -3166,5 +3238,6 @@ def regenerate_subsequent_rounds(
                     round_number=round_idx,
                     round_type=round_type
                 ))
+                round_matches_added += 1
     
     return kept_matches, kept_waiters

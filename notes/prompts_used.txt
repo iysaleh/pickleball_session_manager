@@ -722,6 +722,8 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
 * After switching from competetive to ultra-competetive, the courts shuffle. But then when shifting from ultra-competetive to variety, the courts stay the same. Switch to variety should cause some randomness to be introduced that ultimately shuffles the players on the court and creates a unique round. 
 * Add a button at the round level in the Manage Scheduled matches window to regenerate the entire round dynamically. I should be able to repeatedly click this button until a round I like is created.
 
+
+* In the Manage Scheduled Matches window, there is a warning that shows some constraint violations have been found, EG 11 constraint violations found. That's OK, but I have no idea what they are. Make it so that I can click on that and see what the constraint violations are.
 # Competetive-Continuous-Round-Robin
 * Duplicate the competetive round robin code and create a new competetive-continuous-round-robin format. We still
 

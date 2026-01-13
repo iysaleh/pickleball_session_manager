@@ -844,14 +844,44 @@ class ManageMatchesDialog(QDialog):
                 }}
             """)
             
-            # Round label with click hint
-            round_label = QLabel(f"📋 ROUND {round_num + 1} - {round_type_display} (click to change)")
-            round_label.setStyleSheet("QLabel { color: white; font-size: 16px; font-weight: bold; }")
-            header_layout.addWidget(round_label)
+            # Create a horizontal layout for the header content
+            header_top_layout = QHBoxLayout()
+            header_top_layout.setContentsMargins(0, 0, 0, 0)
             
-            # Store round_num for click handler
+            # Round label with click hint (left side)
+            round_label = QLabel(f"📋 ROUND {round_num + 1} - {round_type_display} (click to change type)")
+            round_label.setStyleSheet("QLabel { color: white; font-size: 16px; font-weight: bold; }")
+            header_top_layout.addWidget(round_label)
+            
+            header_top_layout.addStretch()
+            
+            # Regenerate Round button (right side)
+            regen_btn = QPushButton("🔄 Regenerate")
+            regen_btn.setStyleSheet("""
+                QPushButton { 
+                    background-color: rgba(255,255,255,0.2); 
+                    color: white; 
+                    font-size: 11px; 
+                    padding: 4px 10px;
+                    border-radius: 3px;
+                    border: 1px solid rgba(255,255,255,0.3);
+                }
+                QPushButton:hover { 
+                    background-color: rgba(255,255,255,0.3); 
+                }
+            """)
+            regen_btn.setToolTip("Click repeatedly to generate different match configurations for this round")
+            regen_btn.clicked.connect(lambda checked, r=round_num: self.regenerate_single_round(r))
+            header_top_layout.addWidget(regen_btn)
+            
+            header_top_container = QWidget()
+            header_top_container.setLayout(header_top_layout)
+            header_layout.addWidget(header_top_container)
+            
+            # Store round_num for click handler (on the main frame, excluding the button)
             round_header.round_index = round_num
-            round_header.mousePressEvent = lambda event, r=round_num: self.toggle_round_type(r)
+            round_label.setCursor(Qt.CursorShape.PointingHandCursor)
+            round_label.mousePressEvent = lambda event, r=round_num: self.toggle_round_type(r)
             
             # Show waiters for this round with draggable labels
             if round_num < len(waiters_per_round) and waiters_per_round[round_num]:
@@ -921,6 +951,51 @@ class ManageMatchesDialog(QDialog):
             self.config.scheduled_waiters,
             round_index,
             new_type,
+            self.config
+        )
+        
+        if error:
+            QMessageBox.warning(self, "Error", f"Could not regenerate round: {error}")
+            return
+        
+        # Replace matches for this round
+        end_idx = min(start_idx + num_courts, len(self.scheduled_matches))
+        self.scheduled_matches[start_idx:end_idx] = new_matches
+        
+        # Regenerate subsequent rounds
+        self.scheduled_matches, self.config.scheduled_waiters = regenerate_subsequent_rounds(
+            self.session,
+            self.scheduled_matches,
+            self.config.scheduled_waiters,
+            round_index,
+            self.config
+        )
+        
+        self.config.scheduled_matches = self.scheduled_matches
+        self.refresh_match_display()
+        self.update_stats()
+    
+    def regenerate_single_round(self, round_index: int):
+        """Regenerate just this round with new randomization, keeping same round type"""
+        from python.competitive_round_robin import (
+            regenerate_round_with_type, regenerate_subsequent_rounds, ROUND_TYPE_COMPETITIVE
+        )
+        
+        # Get current round type
+        num_courts = self.session.config.courts
+        start_idx = round_index * num_courts
+        if start_idx >= len(self.scheduled_matches):
+            return
+        
+        current_type = getattr(self.scheduled_matches[start_idx], 'round_type', ROUND_TYPE_COMPETITIVE)
+        
+        # Regenerate this round with SAME type (but new randomization)
+        new_matches, error = regenerate_round_with_type(
+            self.session,
+            self.scheduled_matches,
+            self.config.scheduled_waiters,
+            round_index,
+            current_type,
             self.config
         )
         
