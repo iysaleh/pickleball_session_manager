@@ -2109,8 +2109,16 @@ def generate_rounds_based_schedule(
                 player_cooccurrence[p1][p2] = player_cooccurrence[p1].get(p2, 0) + 1
                 player_cooccurrence[p2][p1] = player_cooccurrence[p2].get(p1, 0) + 1
     
-    def select_waiters_fairly(available_players: List[str], num_to_wait: int, round_idx: int) -> List[str]:
-        """Select players to wait, ensuring fair rotation."""
+    def select_waiters_fairly(available_players: List[str], num_to_wait: int, round_idx: int, round_type: str) -> List[str]:
+        """Select players to wait, ensuring fair rotation with skill-based preferences.
+        
+        Preferences (applied only within the pool of players with minimum wait count):
+        - ULTRA-COMPETITIVE & COMPETITIVE rounds: prefer lower-rated players (bottom 40%) to wait
+        - VARIETY rounds: prefer higher-rated players (top 40%) to wait
+        
+        This ensures competitive rounds have the best players playing while variety
+        rounds give lower-rated players more court time with mixed groups.
+        """
         if num_to_wait <= 0:
             return []
         
@@ -2118,9 +2126,37 @@ def generate_rounds_based_schedule(
         eligible = [p for p in available_players if wait_count[p] == min_wait]
         next_level = [p for p in available_players if wait_count[p] == min_wait + 1]
         
+        # Sort all available players by rating to determine skill tiers
+        sorted_by_rating = sorted(available_players, key=lambda p: player_ratings.get(p, 1500))
+        num_players = len(sorted_by_rating)
+        
+        # Bottom 40% (lower-rated) and top 40% (higher-rated)
+        bottom_40_cutoff = int(num_players * 0.4)
+        top_40_cutoff = int(num_players * 0.6)
+        
+        bottom_40_players = set(sorted_by_rating[:bottom_40_cutoff])
+        top_40_players = set(sorted_by_rating[top_40_cutoff:])
+        
         def waiter_sort_key(p):
+            # Base rotation factor for fairness within same preference tier
             rotation_factor = hash((p, round_idx)) % 100
-            return (games_per_player[p] * 1000 + rotation_factor)
+            base_score = games_per_player[p] * 1000 + rotation_factor
+            
+            # Apply skill-based preference (higher score = more likely to wait)
+            if round_type in ('ultra-competitive', 'competitive'):
+                # Prefer lower-rated players to wait on competitive rounds
+                if p in bottom_40_players:
+                    base_score += 5000  # Strong preference for bottom 40% to wait
+                elif p in top_40_players:
+                    base_score -= 3000  # Prefer top 40% to play
+            else:  # variety round
+                # Prefer higher-rated players to wait on variety rounds
+                if p in top_40_players:
+                    base_score += 5000  # Strong preference for top 40% to wait
+                elif p in bottom_40_players:
+                    base_score -= 3000  # Prefer bottom 40% to play
+            
+            return base_score
         
         eligible.sort(key=waiter_sort_key, reverse=True)
         selected = eligible[:num_to_wait]
@@ -2157,8 +2193,18 @@ def generate_rounds_based_schedule(
     
     # Generate rounds
     for round_idx in range(num_rounds):
-        # Determine round type: alternate between COMPETITIVE and MIXED
-        is_competitive_round = (round_idx % 2 == 0)
+        # Determine round type:
+        # Round 0: ULTRA-COMPETITIVE (highest players together)
+        # Then alternate: COMPETITIVE (round 1, 3, 5...) and VARIETY (round 2, 4, 6...)
+        if round_idx == 0:
+            round_type_label = 'ultra-competitive'
+            is_competitive_round = True  # Use competitive scoring for ultra-competitive
+            is_ultra_competitive = True
+        else:
+            # After round 0, alternate starting with competitive
+            is_competitive_round = ((round_idx - 1) % 2 == 0)  # rounds 1,3,5... are competitive
+            is_ultra_competitive = False
+            round_type_label = 'competitive' if is_competitive_round else 'variety'
         
         # Determine who plays this round
         available = all_player_ids[:]
@@ -2166,7 +2212,7 @@ def generate_rounds_based_schedule(
             available = [p for p in available if p not in first_bye_player_ids]
         
         num_to_wait = max(0, len(available) - players_per_round)
-        waiters = select_waiters_fairly(available, num_to_wait, round_idx)
+        waiters = select_waiters_fairly(available, num_to_wait, round_idx, round_type_label)
         scheduled_waiters.append(waiters)
         
         playing = [p for p in available if p not in waiters]
@@ -2184,9 +2230,47 @@ def generate_rounds_based_schedule(
             variety_penalty = get_cooccurrence_penalty(m)
             return base_score - variety_penalty
         
+        # For ULTRA-COMPETITIVE round (round 0): group highest-rated players together
+        if is_ultra_competitive:
+            # Sort playing players by rating (highest first)
+            playing_sorted = sorted(playing, key=lambda p: player_ratings.get(p, 1500), reverse=True)
+            
+            selected_matches = []
+            for court_idx in range(num_courts):
+                start = court_idx * 4
+                if start + 4 <= len(playing_sorted):
+                    court_players = playing_sorted[start:start + 4]
+                    # Find best match configuration for these 4 players
+                    best_match = None
+                    best_score = float('-inf')
+                    
+                    for m in round_candidates:
+                        if m.player_set == frozenset(court_players):
+                            score = match_score_for_round(m)
+                            if score > best_score:
+                                best_score = score
+                                best_match = m
+                    
+                    if best_match:
+                        selected_matches.append(best_match)
+                    else:
+                        # Create a match manually if no candidate found
+                        # Use 1+4 vs 2+3 pattern for best balance
+                        team1 = [court_players[0], court_players[3]]
+                        team2 = [court_players[1], court_players[2]]
+                        
+                        # Create a temporary PotentialMatch-like object
+                        class TempMatch:
+                            def __init__(self, t1, t2):
+                                self.team1 = t1
+                                self.team2 = t2
+                                self.player_set = frozenset(t1 + t2)
+                        
+                        selected_matches.append(TempMatch(team1, team2))
+        
         # For COMPETITIVE rounds, use player-centric selection strategy
         # Ensure each player gets their best available skill-appropriate match
-        if is_competitive_round and len(playing) >= 8:
+        elif is_competitive_round and len(playing) >= 8:
             # Sort players by rating
             playing_ratings = [(p, player_ratings[p]) for p in playing]
             playing_ratings.sort(key=lambda x: x[1])
@@ -2308,7 +2392,7 @@ def generate_rounds_based_schedule(
                 
                 return None
             
-            selected_matches = find_matches_for_round(round_candidates, num_courts, set())
+                selected_matches = find_matches_for_round(round_candidates, num_courts, set())
             
             # If backtracking failed, try with relaxed variety constraints
             if selected_matches is None:
@@ -2319,8 +2403,7 @@ def generate_rounds_based_schedule(
                 )
                 selected_matches = find_matches_for_round(round_candidates, num_courts, set())
         
-        # Determine round type label
-        round_type_label = 'competitive' if is_competitive_round else 'variety'
+        # round_type_label was already set at the start of this round iteration
         
         # POST-PROCESSING: For competitive rounds, re-balance teams within each match
         # This ensures that after selecting 4 homogeneous players, we pair them optimally
@@ -2484,3 +2567,604 @@ def get_round_info(
         })
     
     return rounds_info
+
+
+# Round type constants
+ROUND_TYPE_COMPETITIVE = 'competitive'
+ROUND_TYPE_VARIETY = 'variety'
+ROUND_TYPE_ULTRA_COMPETITIVE = 'ultra-competitive'
+
+# Cycle order for toggling round types
+ROUND_TYPE_CYCLE = [ROUND_TYPE_VARIETY, ROUND_TYPE_COMPETITIVE, ROUND_TYPE_ULTRA_COMPETITIVE]
+
+
+def get_next_round_type(current_type: str) -> str:
+    """Get the next round type in the cycle."""
+    try:
+        idx = ROUND_TYPE_CYCLE.index(current_type)
+        return ROUND_TYPE_CYCLE[(idx + 1) % len(ROUND_TYPE_CYCLE)]
+    except ValueError:
+        return ROUND_TYPE_COMPETITIVE
+
+
+def regenerate_round_with_type(
+    session: Session,
+    scheduled_matches: List[ScheduledMatch],
+    scheduled_waiters: List[List[str]],
+    round_index: int,
+    new_round_type: str,
+    config: CompetitiveRoundRobinConfig
+) -> Tuple[List[ScheduledMatch], str]:
+    """
+    Regenerate a specific round with a new round type.
+    
+    Does NOT change who is on the waitlist for this round - only regenerates
+    match configurations for the players who are playing.
+    
+    Args:
+        session: Current session
+        scheduled_matches: All scheduled matches
+        scheduled_waiters: Waiters per round
+        round_index: 0-indexed round to regenerate
+        new_round_type: 'competitive', 'variety', or 'ultra-competitive'
+        config: Configuration
+        
+    Returns:
+        (new_matches_for_round, error_message)
+    """
+    num_courts = session.config.courts
+    
+    # Get matches for this round
+    start_idx = round_index * num_courts
+    end_idx = min(start_idx + num_courts, len(scheduled_matches))
+    
+    if start_idx >= len(scheduled_matches):
+        return [], "Invalid round index"
+    
+    # Get players playing this round (from existing matches)
+    playing_players: Set[str] = set()
+    for match in scheduled_matches[start_idx:end_idx]:
+        playing_players.update(match.get_all_players())
+    
+    # Get player ratings
+    player_ratings: Dict[str, float] = {}
+    for player in session.config.players:
+        player_ratings[player.id] = get_player_skill_rating(session, player.id)
+    
+    # Sort players by rating
+    playing_list = list(playing_players)
+    playing_list.sort(key=lambda p: player_ratings.get(p, 1500), reverse=True)
+    
+    # Generate new matches based on round type
+    new_round_matches: List[ScheduledMatch] = []
+    
+    if new_round_type == ROUND_TYPE_ULTRA_COMPETITIVE:
+        # Ultra-competitive: group highest rated players together
+        # Fill courts from highest to lowest rated
+        for court_idx in range(num_courts):
+            start = court_idx * 4
+            if start + 4 <= len(playing_list):
+                court_players = playing_list[start:start + 4]
+                # Optimal pairing: 1+4 vs 2+3 for best balance within similar skill
+                team1 = [court_players[0], court_players[3]]
+                team2 = [court_players[1], court_players[2]]
+                
+                balance_score = calculate_team_balance_score(session, team1, team2)
+                match_num = scheduled_matches[start_idx + court_idx].match_number
+                
+                new_round_matches.append(ScheduledMatch(
+                    id=f"scheduled_{uuid.uuid4().hex[:8]}",
+                    team1=team1,
+                    team2=team2,
+                    status='pending',
+                    match_number=match_num,
+                    balance_score=balance_score,
+                    round_number=round_index,
+                    round_type=new_round_type
+                ))
+    
+    elif new_round_type == ROUND_TYPE_COMPETITIVE:
+        # Competitive: similar skill levels, still some mixing
+        # Group by similar ratings but allow some crossover
+        groups = []
+        remaining = playing_list[:]
+        
+        while len(remaining) >= 4:
+            # Take top 4-8 players and pick best 4-player combo
+            pool = remaining[:min(8, len(remaining))]
+            best_group = pool[:4]
+            remaining = remaining[4:]
+            groups.append(best_group)
+        
+        for court_idx, group in enumerate(groups[:num_courts]):
+            if len(group) < 4:
+                continue
+            # Sort by rating within group
+            group.sort(key=lambda p: player_ratings.get(p, 1500), reverse=True)
+            # Cross-pair for balance: 1+4 vs 2+3
+            team1 = [group[0], group[3]]
+            team2 = [group[1], group[2]]
+            
+            balance_score = calculate_team_balance_score(session, team1, team2)
+            match_num = scheduled_matches[start_idx + court_idx].match_number if start_idx + court_idx < len(scheduled_matches) else court_idx + 1
+            
+            new_round_matches.append(ScheduledMatch(
+                id=f"scheduled_{uuid.uuid4().hex[:8]}",
+                team1=team1,
+                team2=team2,
+                status='pending',
+                match_number=match_num,
+                balance_score=balance_score,
+                round_number=round_index,
+                round_type=new_round_type
+            ))
+    
+    else:  # VARIETY
+        # Variety: mix skill levels across matches
+        # For each court, pair high-rated with low-rated players
+        # Simple approach: just use groups of 4 with cross-pairing
+        for court_idx in range(num_courts):
+            start = court_idx * 4
+            if start + 4 <= len(playing_list):
+                court_players = playing_list[start:start + 4]
+                # For variety, cross-pair: 1+4 vs 2+3 (high+low vs high+low)
+                team1 = [court_players[0], court_players[3]]
+                team2 = [court_players[1], court_players[2]]
+                
+                balance_score = calculate_team_balance_score(session, team1, team2)
+                match_num = scheduled_matches[start_idx + court_idx].match_number if start_idx + court_idx < len(scheduled_matches) else court_idx + 1
+                
+                new_round_matches.append(ScheduledMatch(
+                    id=f"scheduled_{uuid.uuid4().hex[:8]}",
+                    team1=team1,
+                    team2=team2,
+                    status='pending',
+                    match_number=match_num,
+                    balance_score=balance_score,
+                    round_number=round_index,
+                    round_type=new_round_type
+                ))
+    
+    return new_round_matches, ""
+
+
+def swap_player_between_matches_or_waitlist(
+    session: Session,
+    scheduled_matches: List[ScheduledMatch],
+    scheduled_waiters: List[List[str]],
+    round_index: int,
+    player1_id: str,
+    player2_id: str,
+    config: CompetitiveRoundRobinConfig
+) -> Tuple[bool, str]:
+    """
+    Swap two players in the same round - either both in matches, 
+    or one in match and one on waitlist.
+    
+    Args:
+        session: Current session
+        scheduled_matches: All scheduled matches
+        scheduled_waiters: Waiters per round
+        round_index: 0-indexed round
+        player1_id: First player to swap
+        player2_id: Second player to swap
+        config: Configuration
+        
+    Returns:
+        (success, error_message)
+    """
+    num_courts = session.config.courts
+    start_idx = round_index * num_courts
+    end_idx = min(start_idx + num_courts, len(scheduled_matches))
+    
+    # Find where each player is
+    p1_match_idx = None
+    p1_in_team1 = False
+    p1_team_pos = -1
+    
+    p2_match_idx = None
+    p2_in_team1 = False
+    p2_team_pos = -1
+    
+    p1_on_waitlist = round_index < len(scheduled_waiters) and player1_id in scheduled_waiters[round_index]
+    p2_on_waitlist = round_index < len(scheduled_waiters) and player2_id in scheduled_waiters[round_index]
+    
+    # Find player1 in matches
+    for idx in range(start_idx, end_idx):
+        match = scheduled_matches[idx]
+        if player1_id in match.team1:
+            p1_match_idx = idx
+            p1_in_team1 = True
+            p1_team_pos = match.team1.index(player1_id)
+            break
+        elif player1_id in match.team2:
+            p1_match_idx = idx
+            p1_in_team1 = False
+            p1_team_pos = match.team2.index(player1_id)
+            break
+    
+    # Find player2 in matches
+    for idx in range(start_idx, end_idx):
+        match = scheduled_matches[idx]
+        if player2_id in match.team1:
+            p2_match_idx = idx
+            p2_in_team1 = True
+            p2_team_pos = match.team1.index(player2_id)
+            break
+        elif player2_id in match.team2:
+            p2_match_idx = idx
+            p2_in_team1 = False
+            p2_team_pos = match.team2.index(player2_id)
+            break
+    
+    # Case 1: Both players are in matches
+    if p1_match_idx is not None and p2_match_idx is not None:
+        # Swap players between matches (could be same match or different)
+        match1 = scheduled_matches[p1_match_idx]
+        match2 = scheduled_matches[p2_match_idx]
+        
+        if p1_match_idx == p2_match_idx:
+            # Same match - swap positions
+            new_team1 = list(match1.team1)
+            new_team2 = list(match1.team2)
+            
+            if p1_in_team1 and p2_in_team1:
+                # Both in team1
+                new_team1[p1_team_pos] = player2_id
+                new_team1[p2_team_pos] = player1_id
+            elif not p1_in_team1 and not p2_in_team1:
+                # Both in team2
+                new_team2[p1_team_pos] = player2_id
+                new_team2[p2_team_pos] = player1_id
+            else:
+                # One in each team - swap across teams
+                if p1_in_team1:
+                    new_team1[p1_team_pos] = player2_id
+                    new_team2[p2_team_pos] = player1_id
+                else:
+                    new_team2[p1_team_pos] = player2_id
+                    new_team1[p2_team_pos] = player1_id
+            
+            scheduled_matches[p1_match_idx] = ScheduledMatch(
+                id=match1.id,
+                team1=new_team1,
+                team2=new_team2,
+                status='pending',
+                match_number=match1.match_number,
+                balance_score=calculate_team_balance_score(session, new_team1, new_team2),
+                round_number=match1.round_number,
+                round_type=match1.round_type
+            )
+        else:
+            # Different matches - swap players between them
+            new_m1_team1 = list(match1.team1)
+            new_m1_team2 = list(match1.team2)
+            new_m2_team1 = list(match2.team1)
+            new_m2_team2 = list(match2.team2)
+            
+            # Replace p1 with p2 in match1
+            if p1_in_team1:
+                new_m1_team1[p1_team_pos] = player2_id
+            else:
+                new_m1_team2[p1_team_pos] = player2_id
+            
+            # Replace p2 with p1 in match2
+            if p2_in_team1:
+                new_m2_team1[p2_team_pos] = player1_id
+            else:
+                new_m2_team2[p2_team_pos] = player1_id
+            
+            scheduled_matches[p1_match_idx] = ScheduledMatch(
+                id=match1.id,
+                team1=new_m1_team1,
+                team2=new_m1_team2,
+                status='pending',
+                match_number=match1.match_number,
+                balance_score=calculate_team_balance_score(session, new_m1_team1, new_m1_team2),
+                round_number=match1.round_number,
+                round_type=match1.round_type
+            )
+            
+            scheduled_matches[p2_match_idx] = ScheduledMatch(
+                id=match2.id,
+                team1=new_m2_team1,
+                team2=new_m2_team2,
+                status='pending',
+                match_number=match2.match_number,
+                balance_score=calculate_team_balance_score(session, new_m2_team1, new_m2_team2),
+                round_number=match2.round_number,
+                round_type=match2.round_type
+            )
+        
+        return True, ""
+    
+    # Case 2: One in match, one on waitlist
+    elif (p1_match_idx is not None and p2_on_waitlist) or (p2_match_idx is not None and p1_on_waitlist):
+        # Determine who is in match and who is on waitlist
+        if p1_match_idx is not None:
+            match_player = player1_id
+            waitlist_player = player2_id
+            match_idx = p1_match_idx
+            in_team1 = p1_in_team1
+            team_pos = p1_team_pos
+        else:
+            match_player = player2_id
+            waitlist_player = player1_id
+            match_idx = p2_match_idx
+            in_team1 = p2_in_team1
+            team_pos = p2_team_pos
+        
+        match = scheduled_matches[match_idx]
+        new_team1 = list(match.team1)
+        new_team2 = list(match.team2)
+        
+        # Replace match_player with waitlist_player
+        if in_team1:
+            new_team1[team_pos] = waitlist_player
+        else:
+            new_team2[team_pos] = waitlist_player
+        
+        scheduled_matches[match_idx] = ScheduledMatch(
+            id=match.id,
+            team1=new_team1,
+            team2=new_team2,
+            status='pending',
+            match_number=match.match_number,
+            balance_score=calculate_team_balance_score(session, new_team1, new_team2),
+            round_number=match.round_number,
+            round_type=match.round_type
+        )
+        
+        # Update waitlist: remove waitlist_player, add match_player
+        if round_index < len(scheduled_waiters):
+            waiters = scheduled_waiters[round_index]
+            if waitlist_player in waiters:
+                waiters.remove(waitlist_player)
+            waiters.append(match_player)
+        
+        return True, ""
+    
+    return False, "Could not find both players in round"
+
+
+def regenerate_subsequent_rounds(
+    session: Session,
+    scheduled_matches: List[ScheduledMatch],
+    scheduled_waiters: List[List[str]],
+    from_round_index: int,
+    config: CompetitiveRoundRobinConfig
+) -> Tuple[List[ScheduledMatch], List[List[str]]]:
+    """
+    Regenerate all rounds AFTER from_round_index.
+    
+    This is called after a player swap or round type change to ensure
+    subsequent rounds are valid and properly configured.
+    
+    Args:
+        session: Current session
+        scheduled_matches: All scheduled matches
+        scheduled_waiters: Waiters per round
+        from_round_index: Regenerate rounds AFTER this index (not including this round)
+        config: Configuration
+        
+    Returns:
+        (updated_scheduled_matches, updated_scheduled_waiters)
+    """
+    num_courts = session.config.courts
+    
+    # Calculate number of rounds
+    num_rounds = len(scheduled_waiters)
+    
+    # Keep matches up to and including from_round_index
+    keep_end_idx = (from_round_index + 1) * num_courts
+    kept_matches = scheduled_matches[:keep_end_idx]
+    kept_waiters = scheduled_waiters[:from_round_index + 1]
+    
+    # Get all player IDs
+    all_player_ids = [p.id for p in session.config.players]
+    
+    # Build constraint tracking from kept matches
+    games_per_player: Dict[str, int] = {pid: 0 for pid in all_player_ids}
+    wait_count: Dict[str, int] = {pid: 0 for pid in all_player_ids}
+    partnership_used: Dict[str, Set[str]] = {pid: set() for pid in all_player_ids}
+    individual_opponent_count: Dict[str, Dict[str, int]] = {pid: {} for pid in all_player_ids}
+    groups_played: Set[frozenset] = set()
+    player_cooccurrence: Dict[str, Dict[str, int]] = {pid: {} for pid in all_player_ids}
+    
+    # Get player ratings
+    player_ratings: Dict[str, float] = {}
+    for player in session.config.players:
+        player_ratings[player.id] = get_player_skill_rating(session, player.id)
+    
+    # Process kept matches to build constraint state
+    for match in kept_matches:
+        all_four = match.get_all_players()
+        for pid in all_four:
+            games_per_player[pid] += 1
+        
+        # Partnerships
+        if len(match.team1) == 2:
+            partnership_used[match.team1[0]].add(match.team1[1])
+            partnership_used[match.team1[1]].add(match.team1[0])
+        if len(match.team2) == 2:
+            partnership_used[match.team2[0]].add(match.team2[1])
+            partnership_used[match.team2[1]].add(match.team2[0])
+        
+        # Opponents
+        for a in match.team1:
+            for b in match.team2:
+                individual_opponent_count[a][b] = individual_opponent_count[a].get(b, 0) + 1
+                individual_opponent_count[b][a] = individual_opponent_count[b].get(a, 0) + 1
+        
+        # Groups
+        groups_played.add(frozenset(all_four))
+        
+        # Co-occurrence
+        for i, p1 in enumerate(all_four):
+            for p2 in all_four[i+1:]:
+                player_cooccurrence[p1][p2] = player_cooccurrence[p1].get(p2, 0) + 1
+                player_cooccurrence[p2][p1] = player_cooccurrence[p2].get(p1, 0) + 1
+    
+    # Process kept waiters
+    for waiters in kept_waiters:
+        for w in waiters:
+            wait_count[w] = wait_count.get(w, 0) + 1
+    
+    target_games = config.games_per_player
+    max_games = target_games + 2
+    players_per_round = num_courts * 4
+    
+    # Helper functions
+    def can_form_match_check(team1: List[str], team2: List[str]) -> bool:
+        p1, p2 = team1
+        p3, p4 = team2
+        
+        for pid in [p1, p2, p3, p4]:
+            if games_per_player.get(pid, 0) >= max_games:
+                return False
+        
+        if p2 in partnership_used.get(p1, set()):
+            return False
+        if p4 in partnership_used.get(p3, set()):
+            return False
+        
+        for a in team1:
+            for b in team2:
+                if individual_opponent_count.get(a, {}).get(b, 0) >= config.max_individual_opponent_repeats:
+                    return False
+        
+        return True
+    
+    def record_match_check(team1: List[str], team2: List[str]) -> None:
+        all_four = team1 + team2
+        for pid in all_four:
+            games_per_player[pid] = games_per_player.get(pid, 0) + 1
+        
+        partnership_used[team1[0]].add(team1[1])
+        partnership_used[team1[1]].add(team1[0])
+        partnership_used[team2[0]].add(team2[1])
+        partnership_used[team2[1]].add(team2[0])
+        
+        for a in team1:
+            for b in team2:
+                individual_opponent_count[a][b] = individual_opponent_count[a].get(b, 0) + 1
+                individual_opponent_count[b][a] = individual_opponent_count[b].get(a, 0) + 1
+        
+        groups_played.add(frozenset(all_four))
+        
+        for i, p1 in enumerate(all_four):
+            for p2 in all_four[i+1:]:
+                player_cooccurrence[p1][p2] = player_cooccurrence[p1].get(p2, 0) + 1
+                player_cooccurrence[p2][p1] = player_cooccurrence[p2].get(p1, 0) + 1
+    
+    def select_waiters(available: List[str], num_to_wait: int, round_idx: int, round_type: str) -> List[str]:
+        """Select waiters with skill-based preferences for regenerated rounds."""
+        if num_to_wait <= 0:
+            return []
+        
+        min_wait = min(wait_count.get(p, 0) for p in available)
+        eligible = [p for p in available if wait_count.get(p, 0) == min_wait]
+        
+        # Sort by rating to determine skill tiers
+        sorted_by_rating = sorted(available, key=lambda p: player_ratings.get(p, 1500))
+        num_players = len(sorted_by_rating)
+        bottom_40_cutoff = int(num_players * 0.4)
+        top_40_cutoff = int(num_players * 0.6)
+        bottom_40_players = set(sorted_by_rating[:bottom_40_cutoff])
+        top_40_players = set(sorted_by_rating[top_40_cutoff:])
+        
+        def waiter_key(p):
+            base_score = games_per_player.get(p, 0) * 1000 + hash((p, round_idx)) % 100
+            
+            # Apply skill-based preference
+            if round_type in ('ultra-competitive', 'competitive'):
+                if p in bottom_40_players:
+                    base_score += 5000
+                elif p in top_40_players:
+                    base_score -= 3000
+            else:  # variety
+                if p in top_40_players:
+                    base_score += 5000
+                elif p in bottom_40_players:
+                    base_score -= 3000
+            
+            return base_score
+        
+        eligible.sort(key=waiter_key, reverse=True)
+        selected = eligible[:num_to_wait]
+        
+        if len(selected) < num_to_wait:
+            next_level = [p for p in available if wait_count.get(p, 0) == min_wait + 1 and p not in selected]
+            next_level.sort(key=waiter_key, reverse=True)
+            selected.extend(next_level[:num_to_wait - len(selected)])
+        
+        for p in selected:
+            wait_count[p] = wait_count.get(p, 0) + 1
+        
+        return selected
+    
+    # Generate remaining rounds
+    match_number = len(kept_matches)
+    
+    for round_idx in range(from_round_index + 1, num_rounds):
+        # Determine round type: match the pattern from initial generation
+        # Round 0 = ultra-competitive, then alternate competitive/variety
+        if round_idx == 0:
+            round_type = ROUND_TYPE_ULTRA_COMPETITIVE
+        else:
+            is_competitive = ((round_idx - 1) % 2 == 0)  # rounds 1,3,5 = competitive
+            round_type = ROUND_TYPE_COMPETITIVE if is_competitive else ROUND_TYPE_VARIETY
+        
+        # Select who plays this round
+        available = all_player_ids[:]
+        num_to_wait = max(0, len(available) - players_per_round)
+        waiters = select_waiters(available, num_to_wait, round_idx, round_type)
+        kept_waiters.append(waiters)
+        
+        playing = [p for p in available if p not in waiters]
+        playing.sort(key=lambda p: player_ratings.get(p, 1500), reverse=True)
+        
+        # Generate matches for this round
+        for court_idx in range(num_courts):
+            start = court_idx * 4
+            if start + 4 > len(playing):
+                break
+            
+            court_players = playing[start:start + 4]
+            
+            # Find best valid team configuration
+            best_teams = None
+            best_score = float('-inf')
+            
+            team_configs = [
+                ([court_players[0], court_players[1]], [court_players[2], court_players[3]]),
+                ([court_players[0], court_players[2]], [court_players[1], court_players[3]]),
+                ([court_players[0], court_players[3]], [court_players[1], court_players[2]]),
+            ]
+            
+            for t1, t2 in team_configs:
+                if can_form_match_check(t1, t2):
+                    balance = abs(sum(player_ratings.get(p, 1500) for p in t1) - 
+                                 sum(player_ratings.get(p, 1500) for p in t2))
+                    score = 500 - balance
+                    if score > best_score:
+                        best_score = score
+                        best_teams = (t1, t2)
+            
+            if best_teams:
+                team1, team2 = best_teams
+                record_match_check(team1, team2)
+                match_number += 1
+                
+                kept_matches.append(ScheduledMatch(
+                    id=f"scheduled_{uuid.uuid4().hex[:8]}",
+                    team1=team1,
+                    team2=team2,
+                    status='pending',
+                    match_number=match_number,
+                    balance_score=calculate_team_balance_score(session, team1, team2),
+                    round_number=round_idx,
+                    round_type=round_type
+                ))
+    
+    return kept_matches, kept_waiters

@@ -706,8 +706,28 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
 
 * Look at @pickleball_session_20260105_212336.txt , Brock is an outlier high level 4.5 player while the next highest in the session are 4.0 players. The algorithm currently generates competetive matches with Brock by pairing him with low 3.5/3.75 level players, instead of making elite games with 4.5 and 4.0 players only... We need to augment the competetive round behavior to make more elite matches for players like Brock, instead of always balancing, because playing with low level players on your team can be boring for players like Brock -- that's OK for variety rounds, but not so much for competetive rounds. The same thing is going to apply for low-level outlier players, they should play as close as possible with other low-level players, not get high level-players alongside them in the competetive rounds to balance it out.
 
+# Manage Matches Enhancements
+* We want to improve the usability of the "Manage Matches" interface. 
+** Make it so that we can easily swap player positions within a match by just dragging & dropping the names to a side over another player -- whoever they are dropped over will swap with the dragged player. We should also be able to drag & drop players between different courts.
+** Make it so that we can drag players over the players on the waitlist, and it will swap the player on the court with the player on the waitlist. This action should cause rounds below it reconfigure so that player that is no-longer on the waitlist is on the waitlist in a further round-- BUT, it should NEVER alter rounds below the rounds that are being configured (EG, if I change a waitlisted player on Round 5, we should not alter Rounds 4,3,2, or 1 at all).
+* Add a new Round type named "Ultra Competetive" which just puts the highest ranking players together (excluding the waitlisted people in the round) and keeps on filling courts until the lowest ranking players get the last court.
+* Make it so that clicking the header of a round will toggle between the different round types and regenerate the round configuration (it should not change who is on the waitlist) -- we should be able to swap between all the round types (VARIETY, COMPETETIVE, ULTRA-COMPETETIVE). Similar to the waitlist alterations, changing configuration on a round, should automatically trigger further rounds to auto-reconfigure (but again, we never alter rounds below the round we're changing (EG, if I change a waitlisted player on Round 5, we should not alter Rounds 4,3,2, or 1 at all)
+
+# competetive-round-robin Enhancements
+* Always start with an ultra-competetive configuration for the first round. Then do Competetive, and Variety swapping.
+* Always prefer to have lower level players (the bottom 40%) be waitlisted on competetive & ultra-competetive rounds, and have higher level players (the top 40%) prefer to be waitlisted on variety rounds. (obviously we still try to be completely fair with who gets on the waitlist on not override these preferences to avoid repeated waitlisters for rounds).
+
+# Bugs
+* The subsequent regeneration of matches is completely breaking the system, rounds are being regenerated with less than the maximum number of courts being filled. Build a test that tests the functions manage scheduled matches uses, and add tests that ensure these capabilities work as expected.
+* After switching from competetive to ultra-competetive, the courts shuffle. But then when shifting from ultra-competetive to variety, the courts stay the same. Switch to variety should cause some randomness to be introduced that ultimately shuffles the players on the court and creates a unique round. 
+* Add a button at the round level in the Manage Scheduled matches window to regenerate the entire round dynamically. I should be able to repeatedly click this button until a round I like is created.
+
+# Competetive-Continuous-Round-Robin
+* Duplicate the competetive round robin code and create a new competetive-continuous-round-robin format. We still
+
 # Not sent -- TBD
 * Look at @pickleball_session_20260105_221745.txt , the algorithm insists on having players that played together play against each other in the next round, or having players that played against each other play together in the next round... That SHOULD NOT HAPPEN SO REGULARLY. If we have 8 rounds configured, those back to back configurations should happen as spread apart as possible. Analyze the session distribution that gets generated, and shuffle rounds around to make inter-round variety much better. 
+
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts

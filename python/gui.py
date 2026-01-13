@@ -15,8 +15,8 @@ from PyQt6.QtWidgets import (
     QMessageBox, QInputDialog, QSpinBox, QGroupBox, QCheckBox, QFrame, QScrollArea,
     QGridLayout, QSpacerItem, QSizePolicy, QSlider, QDialogButtonBox
 )
-from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup
-from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen, QPixmap
+from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup, QMimeData
+from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen, QPixmap, QDrag
 
 from python.pickleball_types import (
     Player, Session, SessionConfig, GameMode, SessionType, Match,
@@ -30,6 +30,128 @@ from python.session import (
 )
 from python.session_manager import create_session_manager
 from python.time_manager import now, start_session as tm_start_session
+
+
+class DraggablePlayerLabel(QLabel):
+    """A label that can be dragged and dropped for player swapping"""
+    
+    def __init__(self, player_id: str, player_name: str, rating_str: str, 
+                 round_index: int, is_waitlist: bool = False, parent=None):
+        super().__init__(parent)
+        self.player_id = player_id
+        self.player_name = player_name
+        self.rating_str = rating_str
+        self.round_index = round_index
+        self.is_waitlist = is_waitlist
+        self.setText(f"{player_name} {rating_str}")
+        self.setStyleSheet("""
+            QLabel { 
+                color: white; 
+                font-size: 12px; 
+                padding: 4px 8px;
+                border-radius: 4px;
+                background-color: rgba(255,255,255,0.1);
+            }
+            QLabel:hover {
+                background-color: rgba(255,255,255,0.3);
+            }
+        """)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAcceptDrops(True)
+        self._drag_start_pos = None
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_pos = event.pos()
+        super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        if not (event.buttons() & Qt.MouseButton.LeftButton):
+            return
+        if self._drag_start_pos is None:
+            return
+        if (event.pos() - self._drag_start_pos).manhattanLength() < QApplication.startDragDistance():
+            return
+        
+        # Start drag
+        drag = QDrag(self)
+        mime_data = QMimeData()
+        # Store player info in mime data
+        mime_data.setText(f"{self.player_id}|{self.round_index}|{'waitlist' if self.is_waitlist else 'match'}")
+        drag.setMimeData(mime_data)
+        
+        # Create drag pixmap
+        pixmap = QPixmap(self.size())
+        pixmap.fill(QColor(100, 100, 200, 200))
+        painter = QPainter(pixmap)
+        painter.setPen(QColor(255, 255, 255))
+        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, self.player_name)
+        painter.end()
+        drag.setPixmap(pixmap)
+        
+        drag.exec(Qt.DropAction.MoveAction)
+    
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasText():
+            text = event.mimeData().text()
+            parts = text.split('|')
+            if len(parts) >= 3:
+                source_round = int(parts[1])
+                # Only accept drops from same round
+                if source_round == self.round_index:
+                    event.acceptProposedAction()
+                    self.setStyleSheet("""
+                        QLabel { 
+                            color: white; 
+                            font-size: 12px; 
+                            padding: 4px 8px;
+                            border-radius: 4px;
+                            background-color: rgba(0,255,0,0.4);
+                            border: 2px solid #4CAF50;
+                        }
+                    """)
+                    return
+        event.ignore()
+    
+    def dragLeaveEvent(self, event):
+        self.setStyleSheet("""
+            QLabel { 
+                color: white; 
+                font-size: 12px; 
+                padding: 4px 8px;
+                border-radius: 4px;
+                background-color: rgba(255,255,255,0.1);
+            }
+            QLabel:hover {
+                background-color: rgba(255,255,255,0.3);
+            }
+        """)
+    
+    def dropEvent(self, event):
+        if event.mimeData().hasText():
+            text = event.mimeData().text()
+            parts = text.split('|')
+            if len(parts) >= 3:
+                source_player_id = parts[0]
+                source_round = int(parts[1])
+                
+                if source_round == self.round_index and source_player_id != self.player_id:
+                    # Find the parent ManageMatchesDialog
+                    parent = self.parent()
+                    while parent and not isinstance(parent, ManageMatchesDialog):
+                        parent = parent.parent()
+                    
+                    if parent:
+                        parent.handle_player_swap(
+                            self.round_index,
+                            source_player_id,
+                            self.player_id
+                        )
+                        event.acceptProposedAction()
+                        return
+        
+        event.ignore()
+        self.dragLeaveEvent(event)
 
 
 class DeselectableListWidget(QListWidget):
@@ -659,7 +781,7 @@ class ManageMatchesDialog(QDialog):
     
     def refresh_match_display(self):
         """Refresh the match cards in the UI with round labels and waiters"""
-        from python.competitive_round_robin import get_player_display_info
+        from python.competitive_round_robin import get_player_display_info, ROUND_TYPE_COMPETITIVE, ROUND_TYPE_VARIETY, ROUND_TYPE_ULTRA_COMPETITIVE
         
         # Clear existing widgets
         while self.matches_layout.count() > 1:  # Keep the stretch
@@ -680,7 +802,7 @@ class ManageMatchesDialog(QDialog):
         
         widget_index = 0
         for round_num in sorted(matches_by_round.keys()):
-            # Add Round Header
+            # Add Round Header (clickable to toggle round type)
             round_header = QFrame()
             round_header.setStyleSheet("""
                 QFrame { 
@@ -689,28 +811,82 @@ class ManageMatchesDialog(QDialog):
                     padding: 8px;
                     margin-top: 10px;
                 }
+                QFrame:hover {
+                    background-color: #1976D2;
+                }
             """)
+            round_header.setCursor(Qt.CursorShape.PointingHandCursor)
             header_layout = QVBoxLayout(round_header)
             
             # Determine round type from first match in round
             round_matches = matches_by_round[round_num]
             round_type = getattr(round_matches[0], 'round_type', 'competitive') if round_matches else 'competitive'
-            round_type_display = "🎯 COMPETITIVE (Homogeneous)" if round_type == 'competitive' else "🌈 VARIETY (Mixed)"
             
-            round_label = QLabel(f"📋 ROUND {round_num + 1} - {round_type_display}")
+            if round_type == ROUND_TYPE_ULTRA_COMPETITIVE:
+                round_type_display = "🏆 ULTRA-COMPETITIVE (Highest Together)"
+                bg_color = "#B71C1C"  # Dark red for ultra-competitive
+            elif round_type == ROUND_TYPE_COMPETITIVE:
+                round_type_display = "🎯 COMPETITIVE (Homogeneous)"
+                bg_color = "#1565C0"  # Blue
+            else:  # VARIETY
+                round_type_display = "🌈 VARIETY (Mixed)"
+                bg_color = "#2E7D32"  # Green
+            
+            round_header.setStyleSheet(f"""
+                QFrame {{ 
+                    background-color: {bg_color}; 
+                    border-radius: 5px; 
+                    padding: 8px;
+                    margin-top: 10px;
+                }}
+                QFrame:hover {{
+                    background-color: {bg_color}dd;
+                }}
+            """)
+            
+            # Round label with click hint
+            round_label = QLabel(f"📋 ROUND {round_num + 1} - {round_type_display} (click to change)")
             round_label.setStyleSheet("QLabel { color: white; font-size: 16px; font-weight: bold; }")
             header_layout.addWidget(round_label)
             
-            # Show waiters for this round
+            # Store round_num for click handler
+            round_header.round_index = round_num
+            round_header.mousePressEvent = lambda event, r=round_num: self.toggle_round_type(r)
+            
+            # Show waiters for this round with draggable labels
             if round_num < len(waiters_per_round) and waiters_per_round[round_num]:
-                waiter_names = []
+                waiters_container = QWidget()
+                waiters_layout = QHBoxLayout(waiters_container)
+                waiters_layout.setContentsMargins(0, 0, 0, 0)
+                waiters_layout.setSpacing(5)
+                
+                waiters_prefix = QLabel("⏳ Waiting: ")
+                waiters_prefix.setStyleSheet("QLabel { color: #FFEB3B; font-size: 12px; }")
+                waiters_layout.addWidget(waiters_prefix)
+                
                 for waiter_id in waiters_per_round[round_num]:
                     info = get_player_display_info(self.session, waiter_id)
-                    waiter_names.append(info['name'])
+                    rating_str = f"({info['skill_rating']})" if info['skill_rating'] else f"[{info['elo_rating']}]"
+                    waiter_label = DraggablePlayerLabel(
+                        waiter_id, info['name'], rating_str,
+                        round_num, is_waitlist=True
+                    )
+                    waiter_label.setStyleSheet("""
+                        QLabel { 
+                            color: #FFEB3B; 
+                            font-size: 11px; 
+                            padding: 3px 6px;
+                            border-radius: 3px;
+                            background-color: rgba(255,235,59,0.2);
+                        }
+                        QLabel:hover {
+                            background-color: rgba(255,235,59,0.4);
+                        }
+                    """)
+                    waiters_layout.addWidget(waiter_label)
                 
-                waiters_label = QLabel(f"⏳ Waiting: {', '.join(waiter_names)}")
-                waiters_label.setStyleSheet("QLabel { color: #FFEB3B; font-size: 12px; }")
-                header_layout.addWidget(waiters_label)
+                waiters_layout.addStretch()
+                header_layout.addWidget(waiters_container)
             
             self.matches_layout.insertWidget(widget_index, round_header)
             widget_index += 1
@@ -722,8 +898,89 @@ class ManageMatchesDialog(QDialog):
                 self.matches_layout.insertWidget(widget_index, card)
                 widget_index += 1
     
+    def toggle_round_type(self, round_index: int):
+        """Toggle the round type and regenerate this round + subsequent rounds"""
+        from python.competitive_round_robin import (
+            get_next_round_type, regenerate_round_with_type, 
+            regenerate_subsequent_rounds, ROUND_TYPE_COMPETITIVE
+        )
+        
+        # Get current round type
+        num_courts = self.session.config.courts
+        start_idx = round_index * num_courts
+        if start_idx >= len(self.scheduled_matches):
+            return
+        
+        current_type = getattr(self.scheduled_matches[start_idx], 'round_type', ROUND_TYPE_COMPETITIVE)
+        new_type = get_next_round_type(current_type)
+        
+        # Regenerate this round with new type
+        new_matches, error = regenerate_round_with_type(
+            self.session,
+            self.scheduled_matches,
+            self.config.scheduled_waiters,
+            round_index,
+            new_type,
+            self.config
+        )
+        
+        if error:
+            QMessageBox.warning(self, "Error", f"Could not regenerate round: {error}")
+            return
+        
+        # Replace matches for this round
+        end_idx = min(start_idx + num_courts, len(self.scheduled_matches))
+        self.scheduled_matches[start_idx:end_idx] = new_matches
+        
+        # Regenerate subsequent rounds
+        self.scheduled_matches, self.config.scheduled_waiters = regenerate_subsequent_rounds(
+            self.session,
+            self.scheduled_matches,
+            self.config.scheduled_waiters,
+            round_index,
+            self.config
+        )
+        
+        self.config.scheduled_matches = self.scheduled_matches
+        self.refresh_match_display()
+        self.update_stats()
+    
+    def handle_player_swap(self, round_index: int, player1_id: str, player2_id: str):
+        """Handle drag-drop player swap and regenerate subsequent rounds"""
+        from python.competitive_round_robin import (
+            swap_player_between_matches_or_waitlist,
+            regenerate_subsequent_rounds
+        )
+        
+        success, error = swap_player_between_matches_or_waitlist(
+            self.session,
+            self.scheduled_matches,
+            self.config.scheduled_waiters,
+            round_index,
+            player1_id,
+            player2_id,
+            self.config
+        )
+        
+        if not success:
+            QMessageBox.warning(self, "Swap Failed", f"Could not swap players: {error}")
+            return
+        
+        # Regenerate subsequent rounds
+        self.scheduled_matches, self.config.scheduled_waiters = regenerate_subsequent_rounds(
+            self.session,
+            self.scheduled_matches,
+            self.config.scheduled_waiters,
+            round_index,
+            self.config
+        )
+        
+        self.config.scheduled_matches = self.scheduled_matches
+        self.refresh_match_display()
+        self.update_stats()
+    
     def create_match_card(self, match, index: int) -> QWidget:
-        """Create a visual card for a scheduled match"""
+        """Create a visual card for a scheduled match with draggable player labels"""
         from python.competitive_round_robin import get_player_display_info
         
         card = QFrame()
@@ -769,17 +1026,31 @@ class ManageMatchesDialog(QDialog):
         
         card_layout.addLayout(left_layout)
         
-        # Team 1
+        # Team 1 with draggable player labels
         team1_frame = QFrame()
         team1_frame.setStyleSheet("QFrame { background-color: rgba(255,100,100,0.3); border-radius: 5px; padding: 5px; }")
         team1_layout = QVBoxLayout(team1_frame)
-        team1_layout.setSpacing(2)
+        team1_layout.setSpacing(4)
         
         for player_id in match.team1:
             info = get_player_display_info(self.session, player_id)
             rating_str = f"({info['skill_rating']})" if info['skill_rating'] else f"[{info['elo_rating']}]"
-            player_label = QLabel(f"{info['name']} {rating_str}")
-            player_label.setStyleSheet("QLabel { color: white; font-size: 12px; }")
+            player_label = DraggablePlayerLabel(
+                player_id, info['name'], rating_str,
+                match.round_number, is_waitlist=False
+            )
+            player_label.setStyleSheet("""
+                QLabel { 
+                    color: white; 
+                    font-size: 12px; 
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    background-color: rgba(255,100,100,0.3);
+                }
+                QLabel:hover {
+                    background-color: rgba(255,100,100,0.6);
+                }
+            """)
             team1_layout.addWidget(player_label)
         
         card_layout.addWidget(team1_frame)
@@ -790,17 +1061,31 @@ class ManageMatchesDialog(QDialog):
         vs_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         card_layout.addWidget(vs_label)
         
-        # Team 2
+        # Team 2 with draggable player labels
         team2_frame = QFrame()
         team2_frame.setStyleSheet("QFrame { background-color: rgba(100,100,255,0.3); border-radius: 5px; padding: 5px; }")
         team2_layout = QVBoxLayout(team2_frame)
-        team2_layout.setSpacing(2)
+        team2_layout.setSpacing(4)
         
         for player_id in match.team2:
             info = get_player_display_info(self.session, player_id)
             rating_str = f"({info['skill_rating']})" if info['skill_rating'] else f"[{info['elo_rating']}]"
-            player_label = QLabel(f"{info['name']} {rating_str}")
-            player_label.setStyleSheet("QLabel { color: white; font-size: 12px; }")
+            player_label = DraggablePlayerLabel(
+                player_id, info['name'], rating_str,
+                match.round_number, is_waitlist=False
+            )
+            player_label.setStyleSheet("""
+                QLabel { 
+                    color: white; 
+                    font-size: 12px; 
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    background-color: rgba(100,100,255,0.3);
+                }
+                QLabel:hover {
+                    background-color: rgba(100,100,255,0.6);
+                }
+            """)
             team2_layout.addWidget(player_label)
         
         card_layout.addWidget(team2_frame)
