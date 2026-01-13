@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLineEdit, QSpinBox, QComboBox, QLabel, QListWidget,
     QListWidgetItem, QDialog, QTabWidget, QTableWidget, QTableWidgetItem,
     QMessageBox, QInputDialog, QSpinBox, QGroupBox, QCheckBox, QFrame, QScrollArea,
-    QGridLayout, QSpacerItem, QSizePolicy, QSlider, QDialogButtonBox
+    QGridLayout, QSpacerItem, QSizePolicy, QSlider, QDialogButtonBox, QTextEdit
 )
 from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup, QMimeData
 from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen, QPixmap, QDrag
@@ -681,10 +681,15 @@ class ManageMatchesDialog(QDialog):
         config_layout.addStretch()
         layout.addLayout(config_layout)
         
-        # Constraint summary
+        # Constraint summary (clickable when there are violations)
         self.constraint_label = QLabel("")
         self.constraint_label.setStyleSheet("QLabel { color: #FFB74D; font-size: 12px; }")
+        self.constraint_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.constraint_label.mousePressEvent = lambda event: self.show_constraint_violations()
         layout.addWidget(self.constraint_label)
+        
+        # Store violations for display
+        self.current_violations = []
         
         # Main content: scrollable match list
         scroll = QScrollArea()
@@ -1499,10 +1504,11 @@ class ManageMatchesDialog(QDialog):
         
         # Constraint summary
         validation = validate_schedule(self.session, self.scheduled_matches, self.config)
+        self.current_violations = validation.violations  # Store for dialog
         if validation.violations:
-            violation_text = f"⚠️ {len(validation.violations)} constraint violations found"
+            violation_text = f"⚠️ {len(validation.violations)} constraint violations found (click to view)"
             self.constraint_label.setText(violation_text)
-            self.constraint_label.setStyleSheet("QLabel { color: #F44336; }")
+            self.constraint_label.setStyleSheet("QLabel { color: #F44336; text-decoration: underline; }")
         else:
             self.constraint_label.setText("✅ All constraints satisfied")
             self.constraint_label.setStyleSheet("QLabel { color: #4CAF50; }")
@@ -1521,6 +1527,70 @@ class ManageMatchesDialog(QDialog):
         approved_count = summary['approved']
         target_count = len(self.session.config.players) * self.config.games_per_player // 4
         self.finalize_btn.setEnabled(approved_count >= target_count * 0.8)  # At least 80% of target
+    
+    def show_constraint_violations(self):
+        """Show a dialog with detailed constraint violation information."""
+        if not self.current_violations:
+            QMessageBox.information(self, "No Violations", "✅ All constraints are satisfied!")
+            return
+        
+        # Build player name lookup
+        player_names = {p.id: p.name for p in self.session.config.players}
+        
+        # Group violations by type
+        partner_violations = []
+        opponent_violations = []
+        
+        for v in self.current_violations:
+            names = [player_names.get(pid, pid) for pid in v.players_involved]
+            if v.violation_type == 'partner_repeat':
+                partner_violations.append(f"  • {names[0]} & {names[1]}: partnered {v.count}x (limit: {v.limit})")
+            elif v.violation_type == 'individual_opponent_exceed':
+                opponent_violations.append(f"  • {names[0]} vs {names[1]}: faced {v.count}x (limit: {v.limit})")
+        
+        # Build message
+        message_parts = []
+        if partner_violations:
+            message_parts.append("🤝 PARTNER REPETITIONS:\n" + "\n".join(partner_violations))
+        if opponent_violations:
+            message_parts.append("⚔️ OPPONENT REPETITIONS:\n" + "\n".join(opponent_violations))
+        
+        message = "\n\n".join(message_parts) if message_parts else "No violations found."
+        
+        # Create scrollable dialog for many violations
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Constraint Violations ({len(self.current_violations)})")
+        dialog.resize(500, 400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Header
+        header = QLabel(f"⚠️ {len(self.current_violations)} constraint violations found:")
+        header.setStyleSheet("QLabel { color: #F44336; font-size: 14px; font-weight: bold; }")
+        layout.addWidget(header)
+        
+        # Scrollable text area
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText(message)
+        text_edit.setStyleSheet("""
+            QTextEdit { 
+                background-color: #2a2a2a; 
+                color: white; 
+                font-family: monospace;
+                font-size: 12px;
+                padding: 10px;
+            }
+        """)
+        layout.addWidget(text_edit)
+        
+        # Close button
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dialog.accept)
+        layout.addWidget(close_btn)
+        
+        dialog.setStyleSheet("QDialog { background-color: #1e1e1e; }")
+        dialog.exec()
     
     def finalize_schedule(self):
         """Finalize the schedule and close dialog"""
@@ -2050,7 +2120,7 @@ class SetupDialog(QDialog):
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel("Game Mode:"))
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Round Robin", "King of the Court", "Competitive Variety", "Competitive Round Robin", "Continuous Wave Flow"])
+        self.mode_combo.addItems(["Round Robin", "King of the Court", "Competitive Variety", "Competitive Round Robin", "Competitive Continuous Round Robin", "Continuous Wave Flow"])
         # Set default to 'Competitive Variety'
         self.mode_combo.setCurrentIndex(self.mode_combo.findText("Competitive Variety"))
         mode_layout.addWidget(self.mode_combo)
@@ -2267,6 +2337,7 @@ class SetupDialog(QDialog):
                 'round-robin': 'Round Robin',
                 'king-of-court': 'King of the Court',
                 'competitive-round-robin': 'Competitive Round Robin',
+                'competitive-continuous-round-robin': 'Competitive Continuous Round Robin',
                 'continuous-wave-flow': 'Continuous Wave Flow'
             }
             display_mode = mode_mapping.get(self.previous_game_mode, 'Competitive Variety')
@@ -2299,21 +2370,24 @@ class SetupDialog(QDialog):
         is_competitive_variety = mode_text == "Competitive Variety"
         is_king_of_court = mode_text == "King of the Court"
         is_competitive_round_robin = mode_text == "Competitive Round Robin"
+        is_competitive_continuous = mode_text == "Competitive Continuous Round Robin"
         is_continuous_wave_flow = mode_text == "Continuous Wave Flow"
         
         # Show pre-seed checkbox for modes that can use skill ratings
         self.pre_seed_checkbox.setVisible(
             is_competitive_variety or is_king_of_court or 
-            is_competitive_round_robin or is_continuous_wave_flow
+            is_competitive_round_robin or is_competitive_continuous or is_continuous_wave_flow
         )
         self.koc_seeding_combo.setVisible(is_king_of_court)
         
-        # Show Manage Matches button for Competitive Round Robin and Continuous Wave Flow
+        # Show Manage Matches button for Competitive Round Robin modes and Continuous Wave Flow
         if hasattr(self, 'manage_matches_btn'):
-            self.manage_matches_btn.setVisible(is_competitive_round_robin or is_continuous_wave_flow)
+            self.manage_matches_btn.setVisible(
+                is_competitive_round_robin or is_competitive_continuous or is_continuous_wave_flow
+            )
         
-        # Auto-enable pre-seeding for Competitive Round Robin and Continuous Wave Flow
-        if is_competitive_round_robin or is_continuous_wave_flow:
+        # Auto-enable pre-seeding for Competitive Round Robin modes and Continuous Wave Flow
+        if is_competitive_round_robin or is_competitive_continuous or is_continuous_wave_flow:
             self.pre_seed_checkbox.setChecked(True)
         
         # Connect KoC seeding change to update pre-seed visibility
@@ -2323,7 +2397,7 @@ class SetupDialog(QDialog):
         
         # If switching away from modes that use pre-seed, uncheck it
         if not (is_competitive_variety or is_king_of_court or 
-                is_competitive_round_robin or is_continuous_wave_flow):
+                is_competitive_round_robin or is_competitive_continuous or is_continuous_wave_flow):
             self.pre_seed_checkbox.setChecked(False)
     
     def on_koc_seeding_changed(self, seeding_text):
@@ -2396,7 +2470,7 @@ class SetupDialog(QDialog):
         dialog.exec()
     
     def manage_matches(self):
-        """Open the Manage Matches dialog for Competitive Round Robin or Continuous Wave Flow mode"""
+        """Open the Manage Matches dialog for Competitive Round Robin modes or Continuous Wave Flow mode"""
         players = self.player_widget.get_players()
         if len(players) < 4:
             QMessageBox.warning(self, "Error", "Need at least 4 players to manage matches")
@@ -2404,14 +2478,14 @@ class SetupDialog(QDialog):
         
         current_mode = self.mode_combo.currentText()
         is_continuous_wave_flow = current_mode == "Continuous Wave Flow"
+        is_competitive_continuous = current_mode == "Competitive Continuous Round Robin"
         
         # Check if pre-seeded ratings are enabled (required for these modes)
         if not self.pre_seed_checkbox.isChecked():
-            mode_name = "Continuous Wave Flow" if is_continuous_wave_flow else "Competitive Round Robin"
             QMessageBox.warning(
                 self, 
                 "Pre-Seeding Required", 
-                f"{mode_name} requires pre-seeded skill ratings.\n\n"
+                f"{current_mode} requires pre-seeded skill ratings.\n\n"
                 "Please enable 'Pre-Seed Skill Ratings' and add player ratings."
             )
             return
@@ -2460,11 +2534,15 @@ class SetupDialog(QDialog):
                     "Click 'Start Session' to begin playing."
                 )
         else:
+            # Both Competitive Round Robin and Competitive Continuous Round Robin use the same dialog
             from python.pickleball_types import SessionConfig, CompetitiveRoundRobinConfig
+            
+            # Determine the actual mode to use
+            actual_mode = 'competitive-continuous-round-robin' if is_competitive_continuous else 'competitive-round-robin'
             
             config = CompetitiveRoundRobinConfig()
             temp_session_config = SessionConfig(
-                mode='competitive-round-robin',
+                mode=actual_mode,
                 session_type='doubles',
                 players=players,
                 courts=self.courts_spin.value(),
@@ -2476,15 +2554,18 @@ class SetupDialog(QDialog):
             )
             temp_session = create_session(temp_session_config)
             
-            # Open manage matches dialog
+            # Open manage matches dialog (same for both modes)
             dialog = ManageMatchesDialog(temp_session, config, self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 # Store the finalized config
                 self._competitive_round_robin_config = dialog.get_finalized_config()
+                
+                mode_description = "Continuous mode: courts fill as players become available." if is_competitive_continuous else "Rounds-based mode: all courts finish before next round starts."
                 QMessageBox.information(
                     self,
                     "Matches Scheduled",
                     f"Successfully scheduled {len([m for m in self._competitive_round_robin_config.scheduled_matches if m.status == 'approved'])} matches.\n\n"
+                    f"{mode_description}\n\n"
                     "Click 'Start Session' to begin playing."
                 )
 
@@ -2647,6 +2728,8 @@ class SetupDialog(QDialog):
                 mode: GameMode = 'king-of-court'
             elif mode_text == "Competitive Round Robin":
                 mode: GameMode = 'competitive-round-robin'
+            elif mode_text == "Competitive Continuous Round Robin":
+                mode: GameMode = 'competitive-continuous-round-robin'
             elif mode_text == "Continuous Wave Flow":
                 mode: GameMode = 'continuous-wave-flow'
             else:
@@ -2676,9 +2759,9 @@ class SetupDialog(QDialog):
                     court_ordering=court_ordering
                 )
             
-            # Create Competitive Round Robin config if needed
+            # Create Competitive Round Robin config if needed (shared by both rounds-based and continuous modes)
             crr_config = None
-            if mode == 'competitive-round-robin':
+            if mode in ('competitive-round-robin', 'competitive-continuous-round-robin'):
                 from python.pickleball_types import CompetitiveRoundRobinConfig
                 crr_config = getattr(self, '_competitive_round_robin_config', None)
                 if crr_config is None:
@@ -2687,7 +2770,7 @@ class SetupDialog(QDialog):
                     # Generate schedule and auto-approve all matches
                     from python.competitive_round_robin import generate_initial_schedule
                     temp_session_config = SessionConfig(
-                        mode='competitive-round-robin',
+                        mode=mode,  # Use actual mode
                         session_type=session_type,
                         players=players,
                         courts=courts,

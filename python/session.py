@@ -62,10 +62,10 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     # Use provided advanced config or defaults
     advanced_config = config.advanced_config or get_default_advanced_config()
     
-    # For competitive-variety, competitive-round-robin, and continuous-wave-flow modes, 
-    # start all players in waiting list
+    # For competitive-variety, competitive-round-robin, competitive-continuous-round-robin, 
+    # and continuous-wave-flow modes, start all players in waiting list
     waiting_players = []
-    if final_config.mode in ('competitive-variety', 'competitive-round-robin', 'continuous-wave-flow'):
+    if final_config.mode in ('competitive-variety', 'competitive-round-robin', 'competitive-continuous-round-robin', 'continuous-wave-flow'):
         waiting_players = [p.id for p in players_to_use]
     
     # Start the session timing if not already started
@@ -571,6 +571,9 @@ def evaluate_and_create_matches(session: Session) -> Session:
     elif session.config.mode == 'competitive-round-robin':
         from python.competitive_round_robin import populate_courts_from_schedule
         populate_courts_from_schedule(session)
+    elif session.config.mode == 'competitive-continuous-round-robin':
+        from python.competitive_round_robin import populate_courts_continuous
+        populate_courts_continuous(session)
     elif session.config.mode == 'continuous-wave-flow':
         from python.continuous_wave_flow import populate_courts_continuous_wave_flow
         populate_courts_continuous_wave_flow(session)
