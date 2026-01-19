@@ -23,8 +23,21 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     # Randomize if requested
     players_to_use = shuffle_list(config.players) if config.randomize_player_order else config.players
     
+    # Get first bye players set for priority initialization
+    first_bye_set = set(config.first_bye_players) if config.first_bye_players else set()
+    
     for player in players_to_use:
-        player_stats[player.id] = create_player_stats(player.id)
+        stats = create_player_stats(player.id)
+        
+        # First bye players start with courts_completed_since_last_play = num_courts
+        # This ensures they get priority after the first round of matches complete
+        # (since they're excluded from the first round but should play in the second)
+        if player.id in first_bye_set and config.mode == 'competitive-variety':
+            # Set to number of courts so they hit the threshold after 0 additional courts complete
+            # This ensures they're prioritized immediately after the first round
+            stats.courts_completed_since_last_play = config.courts
+        
+        player_stats[player.id] = stats
         active_players.add(player.id)
     
     # Update config with potentially shuffled players

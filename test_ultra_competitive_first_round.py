@@ -328,6 +328,202 @@ def test_update_match_teams_resets_wait_count():
     print(f"✓ Players swapped OUT (p1, p2) have wait count reset to 0")
 
 
+def test_first_bye_player_gets_priority():
+    """Test that first bye players get priority to play after first round."""
+    print("\n=== Test: First Bye Player Gets Priority ===")
+    
+    from python.session import create_session
+    from python.competitive_variety import COURTS_WAIT_THRESHOLD
+    from python.time_manager import initialize_time_manager
+    
+    # Initialize time manager (required for session creation)
+    initialize_time_manager()
+    
+    # Create session with first bye player
+    players = []
+    for i in range(19):  # 19 players, 4 courts = 16 playing + 3 waiting
+        skill = 3.0 + (i / 19) * 1.5
+        players.append(Player(id=f"p{i+1}", name=f"Player {i+1}", skill_rating=skill))
+    
+    config = SessionConfig(
+        mode='competitive-variety',
+        session_type='doubles',
+        courts=4,
+        players=players,
+        pre_seeded_ratings=True,
+        first_bye_players=["p10"]  # p10 is explicitly first bye
+    )
+    
+    session = create_session(config)
+    
+    # First bye player should start with courts_completed_since_last_play = num_courts
+    first_bye_wait = session.player_stats["p10"].courts_completed_since_last_play
+    print(f"First bye player (p10) initial wait count: {first_bye_wait}")
+    
+    # Should be set to number of courts (4) to ensure priority after first round
+    assert first_bye_wait == 4, \
+        f"First bye player should start with wait count = num_courts (4), got {first_bye_wait}"
+    print(f"✓ First bye player starts with courts_completed_since_last_play = {first_bye_wait}")
+    
+    # Non-first-bye players should start at 0
+    for p in ["p1", "p2", "p3", "p5"]:
+        non_bye_wait = session.player_stats[p].courts_completed_since_last_play
+        assert non_bye_wait == 0, \
+            f"Non-first-bye player {p} should start with wait count 0, got {non_bye_wait}"
+    print(f"✓ Non-first-bye players start with courts_completed_since_last_play = 0")
+    
+    # First bye player should already exceed the threshold (4 >= 2)
+    assert first_bye_wait >= COURTS_WAIT_THRESHOLD, \
+        f"First bye player should exceed threshold {COURTS_WAIT_THRESHOLD}"
+    print(f"✓ First bye player already exceeds threshold ({first_bye_wait} >= {COURTS_WAIT_THRESHOLD})")
+    
+    # Check that first bye player is in the must_play list
+    from python.competitive_variety import get_must_play_players
+    available_players = list(session.active_players)
+    must_play = get_must_play_players(session, available_players)
+    
+    assert "p10" in must_play, f"First bye player should be in must_play list, got {must_play}"
+    print(f"✓ First bye player (p10) is in the must_play list")
+
+
+def test_preseeded_session_respects_must_play_priority():
+    """
+    Test that pre-seeded sessions respect the 2-court-wait must-play priority.
+    
+    This reproduces a bug where create_skill_based_matches_for_pre_seeded() 
+    only sorts by ELO rating and ignores players who have waited 2+ courts.
+    
+    Scenario from pickleball_session_20260118_200913.txt:
+    - 19 players, 4 courts
+    - First bye player (mid-level rating) is Ibraheem
+    - After 3 matches complete, Ibraheem is STILL on the waitlist (bug!)
+    - Expected: First-bye player should play after at most 2 courts complete
+    """
+    print("\n=== Test: Pre-seeded Session Respects Must-Play Priority ===")
+    
+    from python.session import create_session, complete_match
+    from python.competitive_variety import (
+        COURTS_WAIT_THRESHOLD,
+        get_must_play_players,
+        create_skill_based_matches_for_pre_seeded,
+        populate_empty_courts_competitive_variety
+    )
+    from python.time_manager import initialize_time_manager
+    
+    # Initialize time manager
+    initialize_time_manager()
+    
+    # Create session matching the real scenario: 19 players, mid-level first-bye player
+    players = []
+    # Use actual ELO-like skill ratings similar to the session file
+    skill_ratings = [
+        ("p1", 4.5),   # Top tier
+        ("p2", 4.4),
+        ("p3", 4.3),
+        ("p4", 4.2),
+        ("p5", 4.0),
+        ("p6", 3.9),
+        ("p7", 3.8),
+        ("p8", 3.7),
+        ("p9", 3.6),   # Mid tier
+        ("p10_ibraheem", 3.5),  # MID-LEVEL FIRST BYE PLAYER - like Ibraheem at ELO 1800
+        ("p11", 3.4),
+        ("p12", 3.3),
+        ("p13", 3.2),
+        ("p14", 3.0),
+        ("p15", 2.8),  # Lower tier
+        ("p16", 2.6),
+        ("p17", 2.4),
+        ("p18", 2.2),
+        ("p19", 2.0),
+    ]
+    
+    for pid, skill in skill_ratings:
+        players.append(Player(id=pid, name=pid, skill_rating=skill))
+    
+    config = SessionConfig(
+        mode='competitive-variety',
+        session_type='doubles',
+        courts=4,
+        players=players,
+        pre_seeded_ratings=True,
+        first_bye_players=["p10_ibraheem"]  # Mid-level player as first bye
+    )
+    
+    session = create_session(config)
+    
+    # Verify first-bye player starts with correct wait count
+    first_bye_wait = session.player_stats["p10_ibraheem"].courts_completed_since_last_play
+    print(f"First bye player (p10_ibraheem) initial wait count: {first_bye_wait}")
+    assert first_bye_wait == 4, f"First bye should start with wait=4, got {first_bye_wait}"
+    
+    # Fill courts for first round
+    populate_empty_courts_competitive_variety(session)
+    
+    # Verify first round created (4 matches)
+    active_matches = [m for m in session.matches if m.status in ['waiting', 'in-progress']]
+    print(f"First round: {len(active_matches)} matches created")
+    assert len(active_matches) == 4, f"Expected 4 matches in first round, got {len(active_matches)}"
+    
+    # First-bye player should NOT be in any first-round match
+    players_in_matches = set()
+    for m in active_matches:
+        players_in_matches.update(m.team1 + m.team2)
+    
+    print(f"Players in first round: {sorted(players_in_matches)}")
+    assert "p10_ibraheem" not in players_in_matches, "First-bye player should sit out first round"
+    print("✓ First-bye player correctly sits out first round")
+    
+    # Complete first match
+    first_match = active_matches[0]
+    first_match.status = 'in-progress'
+    complete_match(session, first_match.id, 11, 5)
+    
+    # First-bye player's wait count should increase by 1 (now 5)
+    first_bye_wait_after = session.player_stats["p10_ibraheem"].courts_completed_since_last_play
+    print(f"After 1 match completes, first-bye wait count: {first_bye_wait_after}")
+    
+    # Now fill empty court - THIS IS WHERE THE BUG MANIFESTS
+    # The first-bye player should be in the must_play list and included in match creation
+    
+    # Get available players (not in active matches)
+    players_in_active = set()
+    for m in session.matches:
+        if m.status in ['waiting', 'in-progress']:
+            players_in_active.update(m.team1 + m.team2)
+    available = [p for p in session.active_players if p not in players_in_active]
+    
+    # Check must_play list
+    must_play = get_must_play_players(session, available)
+    print(f"Must-play players: {must_play}")
+    assert "p10_ibraheem" in must_play, f"First-bye player should be in must_play list!"
+    
+    # Now test create_skill_based_matches_for_pre_seeded - IT SHOULD INCLUDE MUST-PLAY PLAYERS
+    # This is the core bug - the function ignores must-play players
+    new_matches = create_skill_based_matches_for_pre_seeded(session, available, 1)
+    
+    if new_matches:
+        new_match_players = set(new_matches[0].team1 + new_matches[0].team2)
+        print(f"Players in new match: {new_match_players}")
+        
+        # BUG CHECK: First-bye player MUST be in the new match
+        # If they're not, the bug exists!
+        if "p10_ibraheem" not in new_match_players:
+            print(f"❌ BUG REPRODUCED: First-bye player NOT in new match!")
+            print(f"   Must-play players: {must_play}")
+            print(f"   Players chosen: {new_match_players}")
+            # After fix, this should not happen
+            assert "p10_ibraheem" in new_match_players, \
+                f"First-bye player (must-play) should be in new match, but got {new_match_players}"
+        else:
+            print(f"✓ First-bye player correctly included in new match")
+    else:
+        print(f"❌ No match created - available players: {available}")
+        assert False, "Should have created a match"
+    
+    print("✓ Pre-seeded session correctly respects must-play priority")
+
+
 if __name__ == "__main__":
     print("=" * 70)
     print("ULTRA-COMPETITIVE FIRST ROUND & SIMPLE WAIT PRIORITY TEST SUITE")
@@ -340,6 +536,8 @@ if __name__ == "__main__":
     test_player_swap_resets_wait_count()
     test_add_player_gets_priority()
     test_update_match_teams_resets_wait_count()
+    test_first_bye_player_gets_priority()
+    test_preseeded_session_respects_must_play_priority()
     
     print("\n" + "=" * 70)
     print("ALL TESTS PASSED!")

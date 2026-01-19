@@ -334,6 +334,8 @@ def create_skill_based_matches_for_pre_seeded(session: Session, available_player
     
     Uses a hybrid approach: simplified skill-based sorting with balance-weighted scoring
     to ensure both good balance and constraint compliance.
+    
+    CRITICAL: Must-play players (waited >= 2 courts) are ALWAYS included first.
     """
     if not session.config.pre_seeded_ratings or len(available_players) < 4:
         return []
@@ -342,7 +344,10 @@ def create_skill_based_matches_for_pre_seeded(session: Session, available_player
     constraints = get_adaptive_constraints(session)
     balance_weight = constraints['balance_weight']
     
-    # Sort players by their ELO rating (highest to lowest)
+    # CRITICAL: Get must-play players first - they MUST be included
+    must_play = get_must_play_players(session, available_players)
+    
+    # Sort all players by their ELO rating (highest to lowest)
     player_ratings = []
     for player_id in available_players:
         rating = calculate_player_elo_rating(session, player_id)
@@ -355,6 +360,9 @@ def create_skill_based_matches_for_pre_seeded(session: Session, available_player
     matches = []
     players_used = set()
     
+    # Track which must-play players still need to be placed
+    must_play_remaining = set(must_play)
+    
     # Create balanced matches
     for court_idx in range(courts_needed):
         available_sorted = [p for p in sorted_players if p not in players_used]
@@ -365,56 +373,111 @@ def create_skill_based_matches_for_pre_seeded(session: Session, available_player
         best_match = None
         best_score = -float('inf')
         
-        # Try multiple player combinations, prioritizing balanced teams
-        max_combinations_to_try = min(35, len(available_sorted) // 2)  # Don't try too many
+        # Check if we have must-play players that need to be placed
+        must_play_for_this_court = [p for p in must_play_remaining if p not in players_used]
         
         from itertools import combinations
-        for four_players in combinations(available_sorted, 4):
-            players_list = list(four_players)
+        
+        if must_play_for_this_court:
+            # PRIORITY: Include must-play players in combinations
+            # We need to ensure at least one must-play player is in each combination we try
             
-            # Check if these 4 players can form a valid match
-            if not _can_form_valid_teams(session, players_list, allow_cross_bracket=False):
-                continue
+            # Get non-must-play available players for filling out the match
+            other_available = [p for p in available_sorted if p not in must_play_for_this_court]
             
-            # Try all three possible team configurations
-            team_configs = [
-                ([players_list[0], players_list[1]], [players_list[2], players_list[3]]),
-                ([players_list[0], players_list[2]], [players_list[1], players_list[3]]),
-                ([players_list[0], players_list[3]], [players_list[1], players_list[2]])
-            ]
+            # Try combinations that include must-play players
+            # Strategy: Take 1-4 must-play players + fill rest from other available
+            num_must_play = min(4, len(must_play_for_this_court))
             
-            for team1, team2 in team_configs:
-                # Check if this team configuration is valid
-                if not _is_team_configuration_valid(session, team1, team2):
+            for mp_count in range(num_must_play, 0, -1):  # Try more must-play first
+                for mp_combo in combinations(must_play_for_this_court, mp_count):
+                    fill_needed = 4 - mp_count
+                    fill_candidates = other_available[:12]  # Top 12 by rating
+                    
+                    if len(fill_candidates) < fill_needed:
+                        continue
+                    
+                    for fill_combo in combinations(fill_candidates, fill_needed):
+                        four_players = list(mp_combo) + list(fill_combo)
+                        
+                        # Check if these 4 players can form a valid match
+                        if not _can_form_valid_teams(session, four_players, allow_cross_bracket=False):
+                            continue
+                        
+                        # Try all three possible team configurations
+                        team_configs = [
+                            ([four_players[0], four_players[1]], [four_players[2], four_players[3]]),
+                            ([four_players[0], four_players[2]], [four_players[1], four_players[3]]),
+                            ([four_players[0], four_players[3]], [four_players[1], four_players[2]])
+                        ]
+                        
+                        for team1, team2 in team_configs:
+                            if not _is_team_configuration_valid(session, team1, team2):
+                                continue
+                            
+                            original_weight = getattr(session, '_effective_adaptive_balance_weight', None)
+                            try:
+                                session._effective_adaptive_balance_weight = max(3.0, balance_weight)
+                                score = score_potential_match(session, team1, team2)
+                                
+                                if score > best_score:
+                                    best_score = score
+                                    best_match = QueuedMatch(team1=list(team1), team2=list(team2))
+                            finally:
+                                if original_weight is not None:
+                                    session._effective_adaptive_balance_weight = original_weight
+                                elif hasattr(session, '_effective_adaptive_balance_weight'):
+                                    delattr(session, '_effective_adaptive_balance_weight')
+                    
+                    # If we found a match with this many must-play players, use it
+                    if best_match:
+                        break
+                if best_match:
+                    break
+        
+        # If no must-play players or couldn't form match with them, fall back to regular logic
+        if not best_match:
+            max_combinations_to_try = min(35, len(available_sorted) // 2)
+            
+            for four_players in combinations(available_sorted, 4):
+                players_list = list(four_players)
+                
+                if not _can_form_valid_teams(session, players_list, allow_cross_bracket=False):
                     continue
                 
-                # Score this match, giving it enhanced balance weight for pre-seeded sessions
-                original_weight = getattr(session, '_effective_adaptive_balance_weight', None)
+                team_configs = [
+                    ([players_list[0], players_list[1]], [players_list[2], players_list[3]]),
+                    ([players_list[0], players_list[2]], [players_list[1], players_list[3]]),
+                    ([players_list[0], players_list[3]], [players_list[1], players_list[2]])
+                ]
                 
-                try:
-                    # Use at least 3.0x balance weight for pre-seeded sessions (mid-level priority)
-                    session._effective_adaptive_balance_weight = max(3.0, balance_weight)
-                    score = score_potential_match(session, team1, team2)
+                for team1, team2 in team_configs:
+                    if not _is_team_configuration_valid(session, team1, team2):
+                        continue
                     
-                    if score > best_score:
-                        best_score = score
-                        best_match = QueuedMatch(team1=list(team1), team2=list(team2))
-                finally:
-                    # Restore original weight
-                    if original_weight is not None:
-                        session._effective_adaptive_balance_weight = original_weight
-                    else:
-                        if hasattr(session, '_effective_adaptive_balance_weight'):
+                    original_weight = getattr(session, '_effective_adaptive_balance_weight', None)
+                    try:
+                        session._effective_adaptive_balance_weight = max(3.0, balance_weight)
+                        score = score_potential_match(session, team1, team2)
+                        
+                        if score > best_score:
+                            best_score = score
+                            best_match = QueuedMatch(team1=list(team1), team2=list(team2))
+                    finally:
+                        if original_weight is not None:
+                            session._effective_adaptive_balance_weight = original_weight
+                        elif hasattr(session, '_effective_adaptive_balance_weight'):
                             delattr(session, '_effective_adaptive_balance_weight')
-            
-            # Limit combinations tried to avoid performance issues
-            max_combinations_to_try -= 1
-            if max_combinations_to_try <= 0:
-                break
+                
+                max_combinations_to_try -= 1
+                if max_combinations_to_try <= 0:
+                    break
         
         if best_match:
             matches.append(best_match)
             players_used.update(best_match.team1 + best_match.team2)
+            # Update remaining must-play set
+            must_play_remaining -= set(best_match.team1 + best_match.team2)
     
     return matches
 
