@@ -4,12 +4,13 @@ Test ultra-competitive first round for competitive variety matchmaking.
 Tests:
 1. First round uses top 4/bottom 4 alternating pattern
 2. Simple 2-court-wait rule is enforced in later rounds
+3. Player swap behavior correctly resets wait counters
 """
 
 import sys
 sys.path.insert(0, 'python')
 
-from python.pickleball_types import Session, SessionConfig, Player, PlayerStats
+from python.pickleball_types import Session, SessionConfig, Player, PlayerStats, Match
 from python.competitive_variety import (
     create_ultra_competitive_first_round_matches,
     get_must_play_players,
@@ -17,6 +18,8 @@ from python.competitive_variety import (
     calculate_player_elo_rating,
     COURTS_WAIT_THRESHOLD
 )
+from python.session import add_player_to_session, create_manual_match, update_match_teams
+from python.utils import generate_id
 
 
 def create_test_session(num_players: int, num_courts: int = 4) -> Session:
@@ -204,6 +207,127 @@ def test_threshold_constant():
     print(f"✓ COURTS_WAIT_THRESHOLD = {COURTS_WAIT_THRESHOLD}")
 
 
+def test_player_swap_resets_wait_count():
+    """Test that swapping players in/out of matches correctly resets their wait counters."""
+    print("\n=== Test: Player Swap Resets Wait Count ===")
+    
+    # Create session with 12 players, 2 courts
+    session = create_test_session(12, 2)
+    
+    # Simulate some players having waited different amounts
+    session.player_stats["p1"].courts_completed_since_last_play = 3
+    session.player_stats["p2"].courts_completed_since_last_play = 2
+    session.player_stats["p3"].courts_completed_since_last_play = 1
+    session.player_stats["p4"].courts_completed_since_last_play = 0
+    session.player_stats["p9"].courts_completed_since_last_play = 5  # Long waiter on bench
+    session.player_stats["p10"].courts_completed_since_last_play = 4  # Long waiter on bench
+    
+    # Create a match with p1, p2, p3, p4 on court 1
+    from python.time_manager import now
+    match = Match(
+        id="test_match_1",
+        court_number=1,
+        team1=["p1", "p2"],
+        team2=["p3", "p4"],
+        status='waiting',
+        start_time=now()
+    )
+    session.matches.append(match)
+    
+    print(f"Before swap - p1 wait count: {session.player_stats['p1'].courts_completed_since_last_play}")
+    print(f"Before swap - p9 wait count: {session.player_stats['p9'].courts_completed_since_last_play}")
+    
+    # Now use create_manual_match to swap p1 out and p9 in
+    result = create_manual_match(session, 1, ["p9", "p2"], ["p3", "p4"])
+    
+    assert result['success'], f"create_manual_match failed: {result['error']}"
+    
+    # p9 was swapped IN - should have wait count reset to 0
+    assert session.player_stats["p9"].courts_completed_since_last_play == 0, \
+        f"p9 (swapped IN) should have wait count 0, got {session.player_stats['p9'].courts_completed_since_last_play}"
+    print(f"✓ Player swapped INTO match (p9) has wait count reset to 0")
+    
+    # p1 was swapped OUT - should have wait count reset to 0 (they just played/were about to play)
+    assert session.player_stats["p1"].courts_completed_since_last_play == 0, \
+        f"p1 (swapped OUT) should have wait count 0, got {session.player_stats['p1'].courts_completed_since_last_play}"
+    print(f"✓ Player swapped OUT of match (p1) has wait count reset to 0")
+    
+    # p2, p3, p4 stayed in match - should also have 0
+    for p in ["p2", "p3", "p4"]:
+        assert session.player_stats[p].courts_completed_since_last_play == 0, \
+            f"{p} (stayed in match) should have wait count 0"
+    print(f"✓ Players who stayed in match have wait count 0")
+
+
+def test_add_player_gets_priority():
+    """Test that a newly added player gets priority in the wait system."""
+    print("\n=== Test: Added Player Gets Wait Priority ===")
+    
+    session = create_test_session(8, 2)
+    
+    # Simulate some wait counts
+    session.player_stats["p1"].courts_completed_since_last_play = 2
+    session.player_stats["p2"].courts_completed_since_last_play = 1
+    session.player_stats["p3"].courts_completed_since_last_play = 3
+    
+    max_wait = max(s.courts_completed_since_last_play for s in session.player_stats.values())
+    print(f"Max current wait count: {max_wait}")
+    
+    # Add a new player
+    new_player = Player(id="p_new", name="New Player", skill_rating=3.5)
+    add_player_to_session(session, new_player)
+    
+    # New player should have wait count = max + 1 for priority
+    new_stats = session.player_stats["p_new"]
+    expected_wait = max_wait + 1
+    assert new_stats.courts_completed_since_last_play == expected_wait, \
+        f"New player should have wait count {expected_wait}, got {new_stats.courts_completed_since_last_play}"
+    
+    print(f"✓ New player added with courts_completed_since_last_play = {new_stats.courts_completed_since_last_play}")
+    print(f"✓ This gives them priority to play in the next match")
+
+
+def test_update_match_teams_resets_wait_count():
+    """Test that updating match teams correctly resets wait counters."""
+    print("\n=== Test: Update Match Teams Resets Wait Count ===")
+    
+    session = create_test_session(12, 2)
+    
+    # Set up wait counts
+    session.player_stats["p5"].courts_completed_since_last_play = 4  # On waitlist, long wait
+    session.player_stats["p6"].courts_completed_since_last_play = 3  # On waitlist
+    
+    # Create a match
+    from python.time_manager import now
+    match = Match(
+        id="test_match_update",
+        court_number=1,
+        team1=["p1", "p2"],
+        team2=["p3", "p4"],
+        status='waiting',
+        start_time=now()
+    )
+    session.matches.append(match)
+    
+    print(f"Before update - p5 wait count: {session.player_stats['p5'].courts_completed_since_last_play}")
+    print(f"Before update - p1 wait count: {session.player_stats['p1'].courts_completed_since_last_play}")
+    
+    # Update match to swap p1 and p2 out, p5 and p6 in
+    success = update_match_teams(session, "test_match_update", ["p5", "p6"], ["p3", "p4"])
+    
+    assert success, "update_match_teams should succeed"
+    
+    # p5 and p6 swapped IN - should have wait count 0
+    assert session.player_stats["p5"].courts_completed_since_last_play == 0
+    assert session.player_stats["p6"].courts_completed_since_last_play == 0
+    print(f"✓ Players swapped IN (p5, p6) have wait count reset to 0")
+    
+    # p1 and p2 swapped OUT - should have wait count 0
+    assert session.player_stats["p1"].courts_completed_since_last_play == 0
+    assert session.player_stats["p2"].courts_completed_since_last_play == 0
+    print(f"✓ Players swapped OUT (p1, p2) have wait count reset to 0")
+
+
 if __name__ == "__main__":
     print("=" * 70)
     print("ULTRA-COMPETITIVE FIRST ROUND & SIMPLE WAIT PRIORITY TEST SUITE")
@@ -213,6 +337,9 @@ if __name__ == "__main__":
     test_ultra_competitive_first_round_pattern()
     test_simple_wait_priority()
     test_courts_completed_tracking()
+    test_player_swap_resets_wait_count()
+    test_add_player_gets_priority()
+    test_update_match_teams_resets_wait_count()
     
     print("\n" + "=" * 70)
     print("ALL TESTS PASSED!")

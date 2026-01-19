@@ -133,14 +133,19 @@ def add_player_to_session(session: Session, player: Player) -> Session:
     active_players = session.active_players.copy()
     active_players.add(player.id)
     
-    # Create stats with max waited + 1
+    # Create stats with max waited + 1 to give new player priority
     max_waited = 0
+    max_courts_waited = 0
     for stats in session.player_stats.values():
         if stats.games_waited > max_waited:
             max_waited = stats.games_waited
+        if stats.courts_completed_since_last_play > max_courts_waited:
+            max_courts_waited = stats.courts_completed_since_last_play
     
     new_stats = create_player_stats(player.id)
     new_stats.games_waited = max_waited + 1
+    # Give new player priority in the simple 2-court-wait system
+    new_stats.courts_completed_since_last_play = max_courts_waited + 1
     session.player_stats[player.id] = new_stats
     
     # Update config
@@ -631,11 +636,30 @@ def create_manual_match(session: Session, court_number: int, team1_ids: List[str
     # Analyze match balance before creating
     balance_analysis = analyze_match_balance(session, team1_ids, team2_ids)
     
+    # Track players currently on this court before removing the match
+    old_players_on_court = set()
+    for match in session.matches:
+        if match.court_number == court_number and match.status in ['waiting', 'in-progress']:
+            old_players_on_court.update(match.team1 + match.team2)
+    
     # Remove any existing match on this court
     for match in session.matches[:]:
         if match.court_number == court_number and match.status in ['waiting', 'in-progress']:
             match.status = 'forfeited'
             match.end_time = now()
+    
+    # Reset courts_completed_since_last_play for new players going INTO the match
+    # They are now playing, so their wait counter resets
+    for player_id in all_player_ids:
+        if player_id in session.player_stats:
+            session.player_stats[player_id].courts_completed_since_last_play = 0
+    
+    # Reset courts_completed_since_last_play for old players going ONTO the waitlist
+    # They just played (or were about to), so their wait counter resets
+    swapped_out_players = old_players_on_court - all_player_ids
+    for player_id in swapped_out_players:
+        if player_id in session.player_stats:
+            session.player_stats[player_id].courts_completed_since_last_play = 0
     
     # Create new match
     match = Match(
@@ -681,9 +705,23 @@ def update_match_teams(session: Session, match_id: str, team1_ids: List[str], te
     if not match or match.status not in ['waiting', 'in-progress']:
         return False
     
+    # Track old players before update
+    old_players = set(match.team1 + match.team2)
+    
     # Update teams
     match.team1 = team1_ids
     match.team2 = team2_ids
+    
+    # Reset courts_completed_since_last_play for new players going INTO the match
+    for player_id in all_player_ids:
+        if player_id in session.player_stats:
+            session.player_stats[player_id].courts_completed_since_last_play = 0
+    
+    # Reset courts_completed_since_last_play for old players going ONTO the waitlist
+    swapped_out_players = old_players - all_player_ids
+    for player_id in swapped_out_players:
+        if player_id in session.player_stats:
+            session.player_stats[player_id].courts_completed_since_last_play = 0
     
     return True
 
