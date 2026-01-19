@@ -2,15 +2,17 @@
 Competitive Variety Matchmaking - ELO-based skill-balanced matchmaking with adaptive variety constraints
 
 Key feature: Constraints progressively relax as session advances to prioritize balance over variety.
+
+Wait Priority System: Simple 2-court-wait rule - a player MUST be placed in the next match 
+after 2 courts have completed while they were waiting.
 """
 
 from typing import List, Dict, Tuple, Set, Optional
 from datetime import datetime
-from .pickleball_types import Player, QueuedMatch, Session, Match
+from .pickleball_types import Player, QueuedMatch, Session, Match, PlayerStats
 from .time_manager import now
 import math
 from itertools import combinations
-from .wait_priority import get_priority_aware_candidates, should_prioritize_wait_differences
 
 # Constants for ELO system
 BASE_RATING = 1500
@@ -21,6 +23,9 @@ MIN_RATING = 800
 # Hard constraints for repetition
 PARTNER_REPETITION_GAMES_REQUIRED = 3  # Must wait 3 games before playing with same partner
 OPPONENT_REPETITION_GAMES_REQUIRED = 2  # Must wait 2 games before playing against same opponent
+
+# Wait priority: player must play after this many courts complete
+COURTS_WAIT_THRESHOLD = 2
 
 # Roaming Range for Matchmaking
 ROAMING_RANK_PERCENTAGE = 0.5  # Players can play with others within +/- 50% of total players range
@@ -1054,6 +1059,132 @@ def _is_team_configuration_valid(session: Session, team1: List[str], team2: List
     return True
 
 
+def get_must_play_players(session: Session, available_players: List[str]) -> List[str]:
+    """
+    Get players who MUST be placed in the next match due to the 2-court-wait rule.
+    
+    A player must play if they have waited through 2+ court completions.
+    """
+    must_play = []
+    for player_id in available_players:
+        stats = session.player_stats.get(player_id)
+        if stats and stats.courts_completed_since_last_play >= COURTS_WAIT_THRESHOLD:
+            must_play.append(player_id)
+    return must_play
+
+
+def get_simple_wait_priority_candidates(session: Session, available_players: List[str]) -> List[str]:
+    """
+    Get candidates sorted by simple wait priority (courts_completed_since_last_play).
+    
+    Priority order:
+    1. Players who MUST play (waited >= 2 courts) - sorted by courts waited (highest first)
+    2. Players who have waited 1 court
+    3. Players who haven't waited (most recent players)
+    """
+    # Get wait counts for each player
+    player_wait_counts = []
+    for player_id in available_players:
+        stats = session.player_stats.get(player_id)
+        courts_waited = stats.courts_completed_since_last_play if stats else 0
+        player_wait_counts.append((player_id, courts_waited))
+    
+    # Sort by courts waited (highest first), then by player_id for determinism
+    player_wait_counts.sort(key=lambda x: (-x[1], x[0]))
+    
+    return [p[0] for p in player_wait_counts]
+
+
+def create_ultra_competitive_first_round_matches(
+    session: Session, 
+    available_players: List[str], 
+    courts_needed: int
+) -> List[QueuedMatch]:
+    """
+    Create ultra-competitive first round matches using the top 4/bottom 4 alternating pattern.
+    
+    Pattern: Fill courts by alternating between top-rated and bottom-rated players:
+    - Court 1: Top 4 players (ranks 1, 2, 3, 4)
+    - Court 2: Bottom 4 players (ranks n, n-1, n-2, n-3)
+    - Court 3: Next top 4 (ranks 5, 6, 7, 8)
+    - Court 4: Next bottom 4 (ranks n-4, n-5, n-6, n-7)
+    - And so on...
+    
+    This creates skill-homogeneous courts where players compete against similar-skill opponents.
+    """
+    if len(available_players) < 4:
+        return []
+    
+    # Sort players by ELO rating (highest first)
+    player_ratings = [(p, calculate_player_elo_rating(session, p)) for p in available_players]
+    player_ratings.sort(key=lambda x: x[1], reverse=True)
+    sorted_players = [p[0] for p in player_ratings]
+    
+    matches = []
+    players_used = set()
+    
+    # Pointers for top and bottom of the sorted list
+    top_idx = 0
+    bottom_idx = len(sorted_players) - 1
+    use_top = True  # Alternate between top and bottom
+    
+    for court_idx in range(courts_needed):
+        # Select 4 players from either top or bottom
+        if use_top:
+            # Take from top
+            court_players = []
+            while len(court_players) < 4 and top_idx <= bottom_idx:
+                if sorted_players[top_idx] not in players_used:
+                    court_players.append(sorted_players[top_idx])
+                top_idx += 1
+        else:
+            # Take from bottom
+            court_players = []
+            while len(court_players) < 4 and bottom_idx >= top_idx:
+                if sorted_players[bottom_idx] not in players_used:
+                    court_players.append(sorted_players[bottom_idx])
+                bottom_idx -= 1
+        
+        # Alternate for next court
+        use_top = not use_top
+        
+        if len(court_players) < 4:
+            break
+        
+        # Find best team configuration for these 4 players
+        best_match = None
+        best_score = float('-inf')
+        
+        # Get ratings for balance calculation
+        court_ratings = {p: calculate_player_elo_rating(session, p) for p in court_players}
+        
+        # Try all 3 possible team configurations
+        configs = [
+            ([court_players[0], court_players[1]], [court_players[2], court_players[3]]),
+            ([court_players[0], court_players[2]], [court_players[1], court_players[3]]),
+            ([court_players[0], court_players[3]], [court_players[1], court_players[2]])
+        ]
+        
+        for team1, team2 in configs:
+            # Check if valid configuration (may not matter in first round, but be safe)
+            if not _is_team_configuration_valid(session, team1, team2):
+                continue
+            
+            # Score by balance
+            team1_rating = sum(court_ratings[p] for p in team1)
+            team2_rating = sum(court_ratings[p] for p in team2)
+            balance_score = 500 - abs(team1_rating - team2_rating)
+            
+            if balance_score > best_score:
+                best_score = balance_score
+                best_match = QueuedMatch(team1=list(team1), team2=list(team2))
+        
+        if best_match:
+            matches.append(best_match)
+            players_used.update(court_players)
+    
+    return matches
+
 def populate_empty_courts_competitive_variety(session: Session) -> None:
     """
     Populate empty courts using competitive variety matchmaking with adaptive balance weighting.
@@ -1323,68 +1454,132 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                     is_first_round = len(completed_matches) == 0
                     
                     if is_first_round:
-                        # First round: Use all available players to ensure we can fill all courts
-                        # Since everyone has equal wait time, no need for priority filtering
-                        candidates_for_matching = available_players
-                        search_limit = len(candidates_for_matching)
-                    else:
-                        # Later rounds: Use sophisticated wait time priority system to select candidates
-                        # This considers actual wait time, not just game counts
-                        
-                        # Calculate optimal number of candidates for matching
-                        # Need enough for ELO mixing flexibility while prioritizing waiters
-                        base_candidates = max(12, len(available_players) // 2)
-                        max_candidates = min(16, max(12, base_candidates))
-                        
-                        # Get priority-aware candidates using the new wait time system
-                        candidates_for_matching = get_priority_aware_candidates(
-                            session, available_players, max_candidates
+                        # First round: Use ultra-competitive matching (top 4/bottom 4 pattern)
+                        # This creates skill-homogeneous courts for competitive play
+                        remaining_courts = len(empty_courts) - court_idx
+                        ultra_comp_matches = create_ultra_competitive_first_round_matches(
+                            session, available_players, remaining_courts
                         )
                         
-                        # Limit combination search to maintain performance
-                        # The candidates are already sorted by wait priority
+                        if ultra_comp_matches:
+                            # Assign ultra-competitive matches to remaining courts
+                            for i, uc_match in enumerate(ultra_comp_matches):
+                                if court_idx + i < len(empty_courts):
+                                    c_num = empty_courts[court_idx + i]
+                                    session.matches.append(Match(
+                                        id=f"match_{now().timestamp()}_{c_num}",
+                                        court_number=c_num,
+                                        team1=uc_match.team1,
+                                        team2=uc_match.team2,
+                                        status='waiting',
+                                        start_time=now()
+                                    ))
+                                    players_in_matches.update(uc_match.team1 + uc_match.team2)
+                                    
+                                    # Initialize stats for players
+                                    for player_id in (uc_match.team1 + uc_match.team2):
+                                        if player_id not in session.player_stats:
+                                            session.player_stats[player_id] = PlayerStats(player_id=player_id)
+                            break  # Exit the court loop since we filled all courts
+                    else:
+                        # Later rounds: Use simple 2-court-wait priority system
+                        # Players who have waited 2+ courts MUST play next
+                        
+                        # Get players sorted by wait priority (simple courts-waited count)
+                        candidates_for_matching = get_simple_wait_priority_candidates(
+                            session, available_players
+                        )
+                        
+                        # Get players who MUST play (waited >= 2 courts)
+                        must_play = get_must_play_players(session, available_players)
+                        
+                        # Search limit for combinations
                         search_limit = min(12, len(candidates_for_matching))
                     
-                    # Maintain skill bracket quality - no cross-bracket matching
-                    allow_cross = False
-                    
-                    for combo in combinations(candidates_for_matching[:search_limit], 4):
-                        if _can_form_valid_teams(session, list(combo), allow_cross_bracket=allow_cross):
-                            # Evaluate all valid team configurations and pick the most balanced
-                            configs = [
-                                ([combo[0], combo[1]], [combo[2], combo[3]]),
-                                ([combo[0], combo[2]], [combo[1], combo[3]]),
-                                ([combo[0], combo[3]], [combo[1], combo[2]]),
-                            ]
-                            
-                            best_score = float('-inf')
-                            best_config = None
-                            
-                            for team1, team2 in configs:
-                                if (can_play_with_player(session, team1[0], team1[1], 'partner', allow_cross) and
-                                    can_play_with_player(session, team2[0], team2[1], 'partner', allow_cross)):
-                                    # Check all opponent pairs
-                                    valid = True
-                                    for p1 in team1:
-                                        for p2 in team2:
-                                            if not can_play_with_player(session, p1, p2, 'opponent', allow_cross):
-                                                valid = False
-                                                break
-                                        if not valid:
-                                            break
+                        # Maintain skill bracket quality - no cross-bracket matching
+                        allow_cross = False
+                        
+                        # Try to form matches with must-play players first
+                        found_match = False
+                        
+                        if must_play:
+                            # Prioritize combinations that include must-play players
+                            # Try combinations starting from those with most must-play players
+                            for combo in combinations(candidates_for_matching[:search_limit], 4):
+                                # Count how many must-play players are in this combo
+                                must_play_count = sum(1 for p in combo if p in must_play)
+                                
+                                # Skip combos that don't include must-play players if we have any
+                                if must_play and must_play_count == 0:
+                                    continue
+                                
+                                if _can_form_valid_teams(session, list(combo), allow_cross_bracket=allow_cross):
+                                    configs = [
+                                        ([combo[0], combo[1]], [combo[2], combo[3]]),
+                                        ([combo[0], combo[2]], [combo[1], combo[3]]),
+                                        ([combo[0], combo[3]], [combo[1], combo[2]]),
+                                    ]
                                     
-                                    if valid:
-                                        # First check: Must meet hard balance constraints (filters out severely imbalanced matches)
-                                        if meets_balance_constraints(session, team1, team2):
-                                            # Score this configuration for balance and variety
-                                            score = score_potential_match(session, team1, team2)
-                                            if score > best_score:
-                                                best_score = score
-                                                best_config = (list(team1), list(team2))
-                            
-                            if best_config:
-                                best_team1, best_team2 = best_config
-                                break
+                                    best_score = float('-inf')
+                                    best_config = None
+                                    
+                                    for team1, team2 in configs:
+                                        if (can_play_with_player(session, team1[0], team1[1], 'partner', allow_cross) and
+                                            can_play_with_player(session, team2[0], team2[1], 'partner', allow_cross)):
+                                            valid = True
+                                            for p1 in team1:
+                                                for p2 in team2:
+                                                    if not can_play_with_player(session, p1, p2, 'opponent', allow_cross):
+                                                        valid = False
+                                                        break
+                                                if not valid:
+                                                    break
+                                            
+                                            if valid and meets_balance_constraints(session, team1, team2):
+                                                score = score_potential_match(session, team1, team2)
+                                                if score > best_score:
+                                                    best_score = score
+                                                    best_config = (list(team1), list(team2))
+                                    
+                                    if best_config:
+                                        best_team1, best_team2 = best_config
+                                        found_match = True
+                                        break
+                        
+                        if not found_match:
+                            # Fallback: try any valid combination
+                            for combo in combinations(candidates_for_matching[:search_limit], 4):
+                                if _can_form_valid_teams(session, list(combo), allow_cross_bracket=allow_cross):
+                                    configs = [
+                                        ([combo[0], combo[1]], [combo[2], combo[3]]),
+                                        ([combo[0], combo[2]], [combo[1], combo[3]]),
+                                        ([combo[0], combo[3]], [combo[1], combo[2]]),
+                                    ]
+                                    
+                                    best_score = float('-inf')
+                                    best_config = None
+                                    
+                                    for team1, team2 in configs:
+                                        if (can_play_with_player(session, team1[0], team1[1], 'partner', allow_cross) and
+                                            can_play_with_player(session, team2[0], team2[1], 'partner', allow_cross)):
+                                            valid = True
+                                            for p1 in team1:
+                                                for p2 in team2:
+                                                    if not can_play_with_player(session, p1, p2, 'opponent', allow_cross):
+                                                        valid = False
+                                                        break
+                                                if not valid:
+                                                    break
+                                            
+                                            if valid and meets_balance_constraints(session, team1, team2):
+                                                score = score_potential_match(session, team1, team2)
+                                                if score > best_score:
+                                                    best_score = score
+                                                    best_config = (list(team1), list(team2))
+                                    
+                                    if best_config:
+                                        best_team1, best_team2 = best_config
+                                        break
                 
                 if best_team1 and best_team2:
                     match = Match(

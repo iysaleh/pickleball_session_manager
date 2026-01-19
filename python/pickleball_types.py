@@ -40,6 +40,9 @@ class PlayerStats:
     wait_start_time: Optional[datetime] = None
     # Total accumulated wait time in seconds
     total_wait_time: int = 0
+    # Simple wait priority: count of courts completed since this player last played
+    # Player MUST be placed in next match when this reaches 2
+    courts_completed_since_last_play: int = 0
 
 
 @dataclass

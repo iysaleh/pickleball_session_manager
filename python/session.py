@@ -257,7 +257,8 @@ def _create_session_snapshot(session: Session, match_id: str) -> MatchSnapshot:
             "opponent_last_game": dict(stats.opponent_last_game),
             "court_history": list(stats.court_history),
             "total_wait_time": stats.total_wait_time,
-            "wait_start_time": stats.wait_start_time.isoformat() if stats.wait_start_time else None
+            "wait_start_time": stats.wait_start_time.isoformat() if stats.wait_start_time else None,
+            "courts_completed_since_last_play": stats.courts_completed_since_last_play
         }
     
     # Serialize queue
@@ -330,7 +331,8 @@ def load_session_from_snapshot(session: Session, snapshot: MatchSnapshot) -> boo
                 opponent_last_game=dict(stats_data["opponent_last_game"]),
                 court_history=list(stats_data["court_history"]),
                 total_wait_time=stats_data["total_wait_time"],
-                wait_start_time=wait_start_time
+                wait_start_time=wait_start_time,
+                courts_completed_since_last_play=stats_data.get("courts_completed_since_last_play", 0)
             )
         
         # Restore waiting players
@@ -439,6 +441,13 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
         if player_id not in players_in_match:
             if player_id in session.player_stats:
                 session.player_stats[player_id].games_waited += 1
+                # Track courts completed since last play for simple 2-court-wait rule
+                session.player_stats[player_id].courts_completed_since_last_play += 1
+    
+    # Reset courts_completed_since_last_play for players who just played
+    for player_id in players_in_match:
+        if player_id in session.player_stats:
+            session.player_stats[player_id].courts_completed_since_last_play = 0
     
     # Update variety tracking for competitive-variety mode
     if session.config.mode == 'competitive-variety':
