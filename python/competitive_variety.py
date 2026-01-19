@@ -1380,15 +1380,26 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
             # Get available players
             available_players = [p for p in session.active_players if p not in players_in_matches and p not in first_bye_players_set]
             
-            # For pre-seeded sessions, ALWAYS use skill-based court filling (not just first round)
+            # For pre-seeded sessions:
+            # - FIRST ROUND: Use ultra-competitive matching (top 4 / bottom 4 homogeneous pattern)
+            # - LATER ROUNDS: Use skill-based matching with must-play priority
             if session.config.pre_seeded_ratings and len(available_players) >= 4:
-                # Calculate how many courts we can still fill
-                remaining_courts = len(empty_courts) - court_idx
-                skill_matches = create_skill_based_matches_for_pre_seeded(
-                    session, available_players, remaining_courts
-                )
+                if is_first_round:
+                    # FIRST ROUND: Ultra-competitive homogeneous matching
+                    # Creates courts where all 4 players have similar skill levels
+                    # Court 1: Top 4 players, Court 2: Bottom 4 players, etc.
+                    remaining_courts = len(empty_courts) - court_idx
+                    skill_matches = create_ultra_competitive_first_round_matches(
+                        session, available_players, remaining_courts
+                    )
+                else:
+                    # LATER ROUNDS: Skill-based matching with must-play priority
+                    remaining_courts = len(empty_courts) - court_idx
+                    skill_matches = create_skill_based_matches_for_pre_seeded(
+                        session, available_players, remaining_courts
+                    )
                 
-                # Assign skill-based matches to remaining courts
+                # Assign matches to remaining courts
                 courts_filled = 0
                 for i, skill_match in enumerate(skill_matches):
                     if court_idx + i < len(empty_courts):
