@@ -731,6 +731,33 @@ Look at @pickleball_session_20251218_191723.txt -- Ibraheem Saleh, Patrick Carro
 * Rework the initial round creation for competetive variety matchmaking, it should instead try to be ultra-competetive as it is in competetive-round-robin -- basically filling the courts top 4 players from list, bottom 4 players from list, top 4 players, bottom 4 players, and so on, until all the courts that can be made are made.
 * Delete the complex time-waited override system for competetive variety matchmaking. Instead, use a simple system that requires a player to be put in the next match as soon as 2 courts have completed. Remember to keep track of this stat on a per-player basis.
 
+# Pooled Continuous RR with Crossover
+* We are creating a new game mode titled "Pooled Continuous RR with Crossover" it works as follows: Players are put into different pools (2 pools are the default but more can be added). A round robin algorithm is used to schedule all the matches for a pool -- everybody should play everybody exactly once in their pool. Once each pool plays all the matches assigned to it, a crossover event happens where the top #1 ranked player from each pool plays against each other, and the top #2 ranked player from each pool plays against each other, and the top #3 ranked player from each pool plays against each other, and so on.
+** Add a label to the right of the court name label on the Active Session window, when crossover matches are happening, the label should say "Crossover Rank 1", "Crossover Rank 2", etc, depending on where the crossover is happening in the pool (top 1, top 2, etc)
+** When a court frees, the next match that gets selected should include players with the least number of games played, that way the pool finishes in the most even/rapid time possible (otherwise if the same player plays all their matches first, then they will wait a long time for other playesr to finish theirs-- we need to be balanced and fair with play time here).
+* Add a button in the "Session Setup" window labeled "Manage Pools" -- When clicked, this opens a new dialog for managing which players belong to which pools. It should be located where "Manage Matches" is when "Competetive Round Robin" is selected (The "Manage Matches" button shouldn't appear when "Pooled Continuous RR with Crossover" is selected since that's not used with this mode).
+** The "Pool Manager" window should automatically randomize putting all the players into two pools split evenly. There should be a button to "Add Pool" which adds another pool and again randomly distributes all the players evenly across all the current pools. Similarly, a user should be able to delete a pool. There can be no less than 2 pools for this mode. 
+*** In the "Pool Manager" window, a user should be able to drag and drop players between pools, similar to how they can be dragged and dropped in the "Manage Matches" window. 
+*** In the "Pool Manager" window, there needs to be a way to dedicate certain courts to certain pools. By default, any pool matches can be played on any court, but we should be able to limit which pools play where -- for example, Pool 1 should be able to be limited to playing only on Court 1 and Court 2, while Pool 2 can be limited to playing only on Court 3 and Court 4. When all the matches in a pool are played, but matches in other pools still need to be played, they will be assigned to any available courts that were dedicated to the now finished pool (they are no longer pool locked).
+* When "Pooled Continuous RR with Crossover" is being played, the Active Session window should have a new button next to "Show Statistics" titled "Show Pool Statistics" -- When clicked, it should show the relative statistics for each pool, and where each player stands with respect to wins/losses/pt differential/etc -- every stat that we currently track in "Show Statistics".  The "Show Pool Statistics" window should also have a concise table view showing who has defeated who in previous matches. 
+* When all the round robin and crossover matches are played, a window should pop up titled "Winners!" showing the top 3 players and having Gold/Silver/Bronze medals next to their names. The window should use big font and look celebratory --- these are the winners of the session!!!!!!
+* Be careful not to break any of the other game modes or existing functionality, we are mostly just adding new stuff here.
+
+## Pooled Cont RR - 2
+* In the "Session Setup" window, "Pooled Continuous RR with Crossover" should only support "Singles" session type -- when selected, remove "Doubles" from the "Session Type" dropdown options.
+* The "Match Queue" doesn't show the queued matches for "Pooled Continuous RR with Crossover" mode, but we know all the matches that need to be played, so it should show them. Please add all the queued pool matches to the "Match Queue"
+* [bug]"Show Pool Statistics" throws an error: 
+Traceback (most recent call last):
+  File "\\wsl.localhost\fedoraremix\home\isaleh\dev\pickleball\python\gui.py", line 6745, in show_pool_statistics
+    win_pct = (standing['wins'] / standing['games'] * 100) if standing['games'] > 0 else 0
+                                                              ~~~~~~~~^^^^^^^^^
+KeyError: 'games'
+* [bug] All of the matches finished in "Pooled Continuous RR with Crossover" mode, but no winner dialog was displayed. The winners dialog code should probably trigger on match completion, after doing a simple check of if there are any more matches queued (obviously, this trigger needs to happen after the cross-over matches trigger happens).
+
+## Pooled Cont RR - 3
+* [bug] When selecting "New Session with Previous Players" when the game mode was "Pooled Continuous RR with Crossover", the "Session Setup" window shows "Competetive Variety" instead of "Pooled Continuous RR with Crossover"... Make it so that New Session with Previous Players properly selects "Pooled Continuous RR with Crossover" when the last match played was "Pooled Continuous RR with Crossover".
+* Using the same label that we have for "Crossover Rank", when the pool matches are being played, have the label say which Pool the match is from, EG "Pool 1 Match", "Pool 2 Match", etc...
+
 # Not sent -- TBD
 * Look at @pickleball_session_20260105_221745.txt , the algorithm insists on having players that played together play against each other in the next round, or having players that played against each other play together in the next round... That SHOULD NOT HAPPEN SO REGULARLY. If we have 8 rounds configured, those back to back configurations should happen as spread apart as possible. Analyze the session distribution that gets generated, and shuffle rounds around to make inter-round variety much better. 
 

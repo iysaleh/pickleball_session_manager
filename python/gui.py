@@ -2088,6 +2088,555 @@ class ManageByesDialog(QDialog):
             self.refresh_bye_list()
 
 
+class WinnersCelebrationDialog(QDialog):
+    """
+    Celebratory dialog showing the top 3 winners of a Pooled RR session.
+    
+    Features:
+    - Gold, Silver, Bronze medals
+    - Large celebratory fonts
+    - Exciting visual styling
+    """
+    
+    def __init__(self, top_3_standings: list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("🎉 Session Complete! 🎉")
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(500)
+        
+        self.init_ui(top_3_standings)
+    
+    def init_ui(self, standings):
+        layout = QVBoxLayout()
+        layout.setSpacing(20)
+        
+        # Celebratory header
+        header = QLabel("🏆 CHAMPIONS! 🏆")
+        header.setFont(QFont("Arial", 32, QFont.Weight.Bold))
+        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header.setStyleSheet("QLabel { color: #FFD700; background-color: transparent; }")
+        layout.addWidget(header)
+        
+        subheader = QLabel("Pooled Round Robin Complete!")
+        subheader.setFont(QFont("Arial", 16))
+        subheader.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subheader.setStyleSheet("QLabel { color: white; background-color: transparent; }")
+        layout.addWidget(subheader)
+        
+        layout.addSpacing(20)
+        
+        # Winners section
+        medals = ["🥇", "🥈", "🥉"]
+        medal_colors = ["#FFD700", "#C0C0C0", "#CD7F32"]  # Gold, Silver, Bronze
+        place_names = ["1st Place", "2nd Place", "3rd Place"]
+        
+        for i, (medal, color, place) in enumerate(zip(medals, medal_colors, place_names)):
+            if i >= len(standings):
+                break
+                
+            winner = standings[i]
+            
+            # Winner container
+            winner_frame = QFrame()
+            winner_frame.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {color}20;
+                    border: 3px solid {color};
+                    border-radius: 15px;
+                    padding: 10px;
+                }}
+            """)
+            winner_layout = QHBoxLayout(winner_frame)
+            
+            # Medal emoji
+            medal_label = QLabel(medal)
+            medal_label.setFont(QFont("Arial", 48))
+            medal_label.setStyleSheet("QLabel { background-color: transparent; }")
+            winner_layout.addWidget(medal_label)
+            
+            # Name and stats
+            info_layout = QVBoxLayout()
+            
+            name_label = QLabel(winner['name'])
+            name_label.setFont(QFont("Arial", 24, QFont.Weight.Bold))
+            name_label.setStyleSheet(f"QLabel {{ color: {color}; background-color: transparent; }}")
+            info_layout.addWidget(name_label)
+            
+            stats_text = f"{place} • {winner['wins']}-{winner['losses']} • {winner['pt_diff']:+d} pts"
+            stats_label = QLabel(stats_text)
+            stats_label.setFont(QFont("Arial", 14))
+            stats_label.setStyleSheet("QLabel { color: white; background-color: transparent; }")
+            info_layout.addWidget(stats_label)
+            
+            winner_layout.addLayout(info_layout)
+            winner_layout.addStretch()
+            
+            layout.addWidget(winner_frame)
+        
+        layout.addStretch()
+        
+        # Close button
+        close_btn = QPushButton("🎊 Celebrate & Close 🎊")
+        close_btn.setMinimumHeight(50)
+        close_btn.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 10px;
+                padding: 15px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn)
+        
+        self.setLayout(layout)
+        
+        # Apply celebratory dark theme with festive touches
+        self.setStyleSheet("""
+            QDialog {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #1a1a2e, stop:0.5 #16213e, stop:1 #0f3460);
+            }
+        """)
+
+
+class ManagePoolsDialog(QDialog):
+    """
+    Dialog for managing player pools in Pooled Continuous RR mode.
+    
+    Allows users to:
+    - Create/delete pools (minimum 2)
+    - Drag and drop players between pools
+    - Assign courts to specific pools
+    - Randomize player distribution
+    """
+    
+    def __init__(self, session: Session, config, parent=None):
+        super().__init__(parent)
+        self.session = session
+        self.config = config
+        self.init_ui()
+        self.initialize_pools()
+    
+    def init_ui(self):
+        self.setWindowTitle("Manage Pools - Pooled Continuous RR with Crossover")
+        self.resize(1000, 700)
+        
+        layout = QVBoxLayout()
+        
+        # Header
+        header_layout = QHBoxLayout()
+        
+        self.stats_label = QLabel("Configure player pools for round robin")
+        self.stats_label.setStyleSheet("QLabel { color: #4CAF50; font-size: 14px; font-weight: bold; }")
+        header_layout.addWidget(self.stats_label)
+        
+        header_layout.addStretch()
+        
+        # Add/Remove pool buttons
+        add_pool_btn = QPushButton("➕ Add Pool")
+        add_pool_btn.clicked.connect(self.add_pool)
+        header_layout.addWidget(add_pool_btn)
+        
+        remove_pool_btn = QPushButton("➖ Remove Pool")
+        remove_pool_btn.clicked.connect(self.remove_pool)
+        header_layout.addWidget(remove_pool_btn)
+        
+        randomize_btn = QPushButton("🔀 Randomize All")
+        randomize_btn.clicked.connect(self.randomize_pools)
+        header_layout.addWidget(randomize_btn)
+        
+        layout.addLayout(header_layout)
+        
+        # Pool containers (will be populated dynamically)
+        self.pools_scroll = QScrollArea()
+        self.pools_scroll.setWidgetResizable(True)
+        self.pools_scroll.setStyleSheet("""
+            QScrollArea { border: none; background-color: #2a2a2a; }
+            QScrollBar:horizontal { background-color: #3a3a3a; height: 12px; }
+            QScrollBar::handle:horizontal { background-color: #555; border-radius: 4px; min-width: 30px; }
+        """)
+        
+        self.pools_container = QWidget()
+        self.pools_layout = QHBoxLayout(self.pools_container)
+        self.pools_layout.setSpacing(15)
+        
+        self.pools_scroll.setWidget(self.pools_container)
+        layout.addWidget(self.pools_scroll)
+        
+        # Court assignment section
+        court_group = QGroupBox("Court Assignments (Optional)")
+        court_group.setStyleSheet("""
+            QGroupBox { 
+                color: white; 
+                border: 1px solid #555; 
+                border-radius: 5px; 
+                margin-top: 10px; 
+                padding: 10px;
+            }
+            QGroupBox::title { subcontrol-origin: margin; padding: 0 5px; }
+        """)
+        court_layout = QVBoxLayout()
+        
+        court_info = QLabel("Leave unchecked to allow pool matches on any court. "
+                           "Check specific courts to restrict where each pool can play.")
+        court_info.setWordWrap(True)
+        court_info.setStyleSheet("QLabel { color: #aaa; font-size: 11px; }")
+        court_layout.addWidget(court_info)
+        
+        self.court_checkboxes_container = QWidget()
+        self.court_checkboxes_layout = QHBoxLayout(self.court_checkboxes_container)
+        court_layout.addWidget(self.court_checkboxes_container)
+        
+        court_group.setLayout(court_layout)
+        layout.addWidget(court_group)
+        
+        # Schedule preview
+        preview_group = QGroupBox("Schedule Preview")
+        preview_group.setStyleSheet("""
+            QGroupBox { 
+                color: white; 
+                border: 1px solid #555; 
+                border-radius: 5px; 
+                margin-top: 10px; 
+                padding: 10px;
+            }
+            QGroupBox::title { subcontrol-origin: margin; padding: 0 5px; }
+        """)
+        preview_layout = QVBoxLayout()
+        self.preview_label = QLabel("")
+        self.preview_label.setWordWrap(True)
+        self.preview_label.setStyleSheet("QLabel { color: #aaa; font-size: 11px; }")
+        preview_layout.addWidget(self.preview_label)
+        preview_group.setLayout(preview_layout)
+        layout.addWidget(preview_group)
+        
+        # Bottom buttons
+        button_layout = QHBoxLayout()
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        button_layout.addStretch()
+        
+        self.finalize_btn = QPushButton("✅ Finalize Pools & Generate Schedule")
+        self.finalize_btn.setStyleSheet("""
+            QPushButton { 
+                background-color: #4CAF50; 
+                color: white; 
+                font-size: 14px; 
+                font-weight: bold;
+                padding: 10px 20px;
+                border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #66BB6A; }
+        """)
+        self.finalize_btn.clicked.connect(self.finalize_pools)
+        button_layout.addWidget(self.finalize_btn)
+        
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+        
+        # Apply dark theme
+        self.setStyleSheet("""
+            QDialog { background-color: #2a2a2a; color: white; }
+            QLabel { color: white; }
+            QPushButton { 
+                background-color: #0d47a1; 
+                color: white; 
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #1565c0; }
+            QGroupBox { color: white; }
+        """)
+    
+    def initialize_pools(self):
+        """Initialize with 2 pools by default"""
+        from python.pooled_continuous_rr import initialize_pools
+        
+        self.config.pools = initialize_pools(self.session, num_pools=2)
+        self.refresh_pool_display()
+        self.update_court_assignments_ui()
+        self.update_preview()
+    
+    def refresh_pool_display(self):
+        """Refresh the pool display widgets"""
+        # Clear existing pool widgets
+        while self.pools_layout.count():
+            item = self.pools_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Create widget for each pool
+        for pool_id in sorted(self.config.pools.keys()):
+            pool_widget = self.create_pool_widget(pool_id)
+            self.pools_layout.addWidget(pool_widget)
+        
+        self.pools_layout.addStretch()
+        self.update_stats()
+    
+    def create_pool_widget(self, pool_id: str) -> QWidget:
+        """Create a widget for a single pool"""
+        widget = QGroupBox(pool_id)
+        widget.setStyleSheet("""
+            QGroupBox { 
+                color: #4CAF50; 
+                font-weight: bold;
+                border: 2px solid #4CAF50; 
+                border-radius: 8px; 
+                margin-top: 15px; 
+                padding: 10px;
+                min-width: 200px;
+            }
+            QGroupBox::title { 
+                subcontrol-origin: margin; 
+                padding: 0 10px; 
+                color: #4CAF50;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        
+        # Player list
+        player_list = QListWidget()
+        player_list.setDragDropMode(QListWidget.DragDropMode.DragDrop)
+        player_list.setDefaultDropAction(Qt.DropAction.MoveAction)
+        player_list.setAcceptDrops(True)
+        player_list.setProperty("pool_id", pool_id)
+        player_list.setStyleSheet("""
+            QListWidget { 
+                background-color: #3a3a3a; 
+                border: 1px solid #555; 
+                border-radius: 4px;
+                min-height: 200px;
+            }
+            QListWidget::item { 
+                padding: 5px;
+                color: white;
+            }
+            QListWidget::item:selected { 
+                background-color: #2196F3; 
+            }
+            QListWidget::item:hover { 
+                background-color: rgba(255,255,255,0.1);
+            }
+        """)
+        
+        # Populate with players
+        player_ids = self.config.pools.get(pool_id, [])
+        for pid in player_ids:
+            player = next((p for p in self.session.config.players if p.id == pid), None)
+            if player:
+                item = QListWidgetItem(player.name)
+                item.setData(Qt.ItemDataRole.UserRole, pid)
+                player_list.addItem(item)
+        
+        # Connect drop event for manual pool transfers
+        player_list.model().rowsInserted.connect(
+            lambda: self.on_pool_changed(player_list, pool_id)
+        )
+        
+        layout.addWidget(player_list)
+        
+        # Player count
+        count_label = QLabel(f"{len(player_ids)} players")
+        count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        count_label.setStyleSheet("QLabel { color: #aaa; font-size: 11px; }")
+        layout.addWidget(count_label)
+        
+        widget.setLayout(layout)
+        return widget
+    
+    def on_pool_changed(self, list_widget: QListWidget, pool_id: str):
+        """Handle when players are dragged between pools"""
+        # Update config from list widget contents
+        new_player_ids = []
+        for i in range(list_widget.count()):
+            item = list_widget.item(i)
+            pid = item.data(Qt.ItemDataRole.UserRole)
+            if pid:
+                new_player_ids.append(pid)
+        
+        # Remove these players from other pools
+        for other_pool_id in self.config.pools:
+            if other_pool_id != pool_id:
+                self.config.pools[other_pool_id] = [
+                    p for p in self.config.pools[other_pool_id] 
+                    if p not in new_player_ids
+                ]
+        
+        self.config.pools[pool_id] = new_player_ids
+        self.update_preview()
+    
+    def add_pool(self):
+        """Add a new pool and redistribute players"""
+        from python.pooled_continuous_rr import redistribute_pools
+        
+        current_count = len(self.config.pools)
+        self.config.pools = redistribute_pools(self.config.pools, current_count + 1)
+        self.refresh_pool_display()
+        self.update_court_assignments_ui()
+        self.update_preview()
+    
+    def remove_pool(self):
+        """Remove a pool (minimum 2)"""
+        from python.pooled_continuous_rr import redistribute_pools
+        
+        current_count = len(self.config.pools)
+        if current_count <= 2:
+            QMessageBox.warning(self, "Cannot Remove", "Minimum 2 pools required")
+            return
+        
+        self.config.pools = redistribute_pools(self.config.pools, current_count - 1)
+        self.refresh_pool_display()
+        self.update_court_assignments_ui()
+        self.update_preview()
+    
+    def randomize_pools(self):
+        """Randomize player distribution across pools"""
+        from python.pooled_continuous_rr import redistribute_pools
+        
+        current_count = len(self.config.pools)
+        self.config.pools = redistribute_pools(self.config.pools, current_count)
+        self.refresh_pool_display()
+        self.update_preview()
+    
+    def update_court_assignments_ui(self):
+        """Update the court assignment checkboxes"""
+        # Clear existing
+        while self.court_checkboxes_layout.count():
+            item = self.court_checkboxes_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        num_courts = self.session.config.courts
+        
+        for pool_id in sorted(self.config.pools.keys()):
+            pool_group = QGroupBox(pool_id)
+            pool_group.setStyleSheet("""
+                QGroupBox { 
+                    color: white; 
+                    border: 1px solid #555; 
+                    border-radius: 3px;
+                    margin-top: 10px;
+                    padding: 5px;
+                }
+            """)
+            group_layout = QHBoxLayout()
+            
+            for court_num in range(1, num_courts + 1):
+                cb = QCheckBox(f"Court {court_num}")
+                cb.setStyleSheet("QCheckBox { color: white; }")
+                cb.setProperty("pool_id", pool_id)
+                cb.setProperty("court_num", court_num)
+                cb.stateChanged.connect(self.on_court_assignment_changed)
+                group_layout.addWidget(cb)
+            
+            pool_group.setLayout(group_layout)
+            self.court_checkboxes_layout.addWidget(pool_group)
+        
+        self.court_checkboxes_layout.addStretch()
+    
+    def on_court_assignment_changed(self):
+        """Update court assignments when checkboxes change"""
+        self.config.pool_court_assignments = {}
+        
+        # Find all checkboxes and update assignments
+        for i in range(self.court_checkboxes_layout.count()):
+            item = self.court_checkboxes_layout.itemAt(i)
+            if item and item.widget():
+                group = item.widget()
+                if isinstance(group, QGroupBox):
+                    pool_id = group.title()
+                    courts = []
+                    
+                    for j in range(group.layout().count()):
+                        cb_item = group.layout().itemAt(j)
+                        if cb_item and cb_item.widget():
+                            cb = cb_item.widget()
+                            if isinstance(cb, QCheckBox) and cb.isChecked():
+                                court_num = cb.property("court_num")
+                                if court_num:
+                                    courts.append(court_num)
+                    
+                    if courts:  # Only add if specific courts selected
+                        self.config.pool_court_assignments[pool_id] = courts
+    
+    def update_stats(self):
+        """Update the header stats label"""
+        pool_count = len(self.config.pools)
+        total_players = sum(len(p) for p in self.config.pools.values())
+        self.stats_label.setText(
+            f"{pool_count} Pools | {total_players} Players"
+        )
+    
+    def update_preview(self):
+        """Update the schedule preview"""
+        from python.pooled_continuous_rr import generate_all_pool_schedules
+        
+        # Generate schedules to get match counts
+        matches = generate_all_pool_schedules(self.session, self.config)
+        
+        pool_info = []
+        for pool_id in sorted(self.config.pools.keys()):
+            player_count = len(self.config.pools[pool_id])
+            pool_matches = len([m for m in matches if m.pool_id == pool_id])
+            pool_info.append(f"{pool_id}: {player_count} players, {pool_matches} matches")
+        
+        session_type = self.session.config.session_type
+        mode_desc = "Each player plays every other player once." if session_type == 'singles' else "Teams are formed to maximize variety."
+        
+        crossover_estimate = len(self.config.pools) - 1  # Matches per rank in crossover
+        max_players = max(len(p) for p in self.config.pools.values()) if self.config.pools else 0
+        total_crossover = crossover_estimate * max_players
+        
+        self.preview_label.setText(
+            f"Pool Matches:\n" +
+            "\n".join(pool_info) +
+            f"\n\nTotal Pool Matches: {len(matches)}\n"
+            f"Estimated Crossover Matches: ~{total_crossover}\n\n"
+            f"Mode: {mode_desc}"
+        )
+    
+    def finalize_pools(self):
+        """Finalize pools and generate the full schedule"""
+        from python.pooled_continuous_rr import generate_all_pool_schedules
+        
+        # Validate pools
+        for pool_id, players in self.config.pools.items():
+            if len(players) < 2:
+                QMessageBox.warning(
+                    self, 
+                    "Invalid Pool", 
+                    f"{pool_id} needs at least 2 players"
+                )
+                return
+        
+        # Generate all pool match schedules
+        self.config.scheduled_pool_matches = generate_all_pool_schedules(self.session, self.config)
+        
+        # Initialize pool completion tracking
+        self.config.pool_completed = {pool_id: False for pool_id in self.config.pools}
+        
+        # Mark as finalized
+        self.config.pools_finalized = True
+        
+        self.accept()
+    
+    def get_finalized_config(self):
+        """Return the finalized configuration"""
+        return self.config
+
+
 class SetupDialog(QDialog):
     """Dialog for session setup"""
     
@@ -2120,7 +2669,7 @@ class SetupDialog(QDialog):
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel("Game Mode:"))
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Round Robin", "King of the Court", "Competitive Variety", "Competitive Round Robin", "Competitive Continuous Round Robin", "Continuous Wave Flow"])
+        self.mode_combo.addItems(["Round Robin", "King of the Court", "Competitive Variety", "Competitive Round Robin", "Competitive Continuous Round Robin", "Continuous Wave Flow", "Pooled Continuous RR with Crossover"])
         # Set default to 'Competitive Variety'
         self.mode_combo.setCurrentIndex(self.mode_combo.findText("Competitive Variety"))
         mode_layout.addWidget(self.mode_combo)
@@ -2207,6 +2756,12 @@ class SetupDialog(QDialog):
         self.manage_matches_btn.clicked.connect(self.manage_matches)
         self.manage_matches_btn.setVisible(False)  # Hidden by default
         layout.addWidget(self.manage_matches_btn)
+        
+        # Manage Pools Button (only for Pooled Continuous RR)
+        self.manage_pools_btn = QPushButton("🎱 Manage Pools")
+        self.manage_pools_btn.clicked.connect(self.manage_pools)
+        self.manage_pools_btn.setVisible(False)  # Hidden by default
+        layout.addWidget(self.manage_pools_btn)
         
         # Add previous players if available
         if self.previous_players:
@@ -2372,6 +2927,7 @@ class SetupDialog(QDialog):
         is_competitive_round_robin = mode_text == "Competitive Round Robin"
         is_competitive_continuous = mode_text == "Competitive Continuous Round Robin"
         is_continuous_wave_flow = mode_text == "Continuous Wave Flow"
+        is_pooled_rr = mode_text == "Pooled Continuous RR with Crossover"
         
         # Show pre-seed checkbox for modes that can use skill ratings
         self.pre_seed_checkbox.setVisible(
@@ -2381,10 +2937,15 @@ class SetupDialog(QDialog):
         self.koc_seeding_combo.setVisible(is_king_of_court)
         
         # Show Manage Matches button for Competitive Round Robin modes and Continuous Wave Flow
+        # BUT NOT for Pooled RR (which uses Manage Pools instead)
         if hasattr(self, 'manage_matches_btn'):
             self.manage_matches_btn.setVisible(
                 is_competitive_round_robin or is_competitive_continuous or is_continuous_wave_flow
             )
+        
+        # Show Manage Pools button for Pooled Continuous RR
+        if hasattr(self, 'manage_pools_btn'):
+            self.manage_pools_btn.setVisible(is_pooled_rr)
         
         # Auto-enable pre-seeding for Competitive Round Robin modes and Continuous Wave Flow
         if is_competitive_round_robin or is_competitive_continuous or is_continuous_wave_flow:
@@ -2399,6 +2960,19 @@ class SetupDialog(QDialog):
         if not (is_competitive_variety or is_king_of_court or 
                 is_competitive_round_robin or is_competitive_continuous or is_continuous_wave_flow):
             self.pre_seed_checkbox.setChecked(False)
+        
+        # Pooled Continuous RR only supports Singles - update session type dropdown
+        if is_pooled_rr:
+            # Force Singles and disable Doubles option
+            self.type_combo.setCurrentText("Singles")
+            # Remove Doubles if present, keep only Singles
+            self.type_combo.clear()
+            self.type_combo.addItem("Singles")
+        else:
+            # Restore both options if not already present
+            if self.type_combo.count() < 2:
+                self.type_combo.clear()
+                self.type_combo.addItems(["Doubles", "Singles"])
     
     def on_koc_seeding_changed(self, seeding_text):
         """Handle King of Court seeding option change"""
@@ -2568,6 +3142,46 @@ class SetupDialog(QDialog):
                     f"{mode_description}\n\n"
                     "Click 'Start Session' to begin playing."
                 )
+    
+    def manage_pools(self):
+        """Open the Manage Pools dialog for Pooled Continuous RR mode"""
+        players = self.player_widget.get_players()
+        if len(players) < 4:
+            QMessageBox.warning(self, "Error", "Need at least 4 players to manage pools")
+            return
+        
+        # Create temporary session for pool setup
+        from python.session import create_session
+        from python.pickleball_types import SessionConfig, PooledContinuousRRConfig
+        
+        config = PooledContinuousRRConfig()
+        temp_session_config = SessionConfig(
+            mode='pooled-continuous-rr',
+            session_type='singles' if self.type_combo.currentText() == "Singles" else 'doubles',
+            players=players,
+            courts=self.courts_spin.value(),
+            banned_pairs=self.banned_pairs,
+            locked_teams=self.locked_teams,
+            first_bye_players=self.first_bye_players,
+            pre_seeded_ratings=self.pre_seed_checkbox.isChecked(),
+            pooled_continuous_rr_config=config
+        )
+        temp_session = create_session(temp_session_config)
+        
+        # Open manage pools dialog
+        dialog = ManagePoolsDialog(temp_session, config, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Store the finalized config
+            self._pooled_rr_config = dialog.get_finalized_config()
+            pool_count = len(self._pooled_rr_config.pools)
+            match_count = len(self._pooled_rr_config.scheduled_pool_matches)
+            QMessageBox.information(
+                self,
+                "Pools Configured",
+                f"Successfully configured {pool_count} pools with {match_count} total matches.\n\n"
+                "Crossover matches will be generated after all pools complete.\n\n"
+                "Click 'Start Session' to begin playing."
+            )
 
     def export_players(self):
         """Export current player list with ratings to JSON file"""
@@ -2732,6 +3346,8 @@ class SetupDialog(QDialog):
                 mode: GameMode = 'competitive-continuous-round-robin'
             elif mode_text == "Continuous Wave Flow":
                 mode: GameMode = 'continuous-wave-flow'
+            elif mode_text == "Pooled Continuous RR with Crossover":
+                mode: GameMode = 'pooled-continuous-rr'
             else:
                 mode: GameMode = 'competitive-variety'
             
@@ -2820,6 +3436,35 @@ class SetupDialog(QDialog):
                     cwf_config.scheduled_matches = scheduled_matches
                     cwf_config.schedule_finalized = True
             
+            # Create Pooled Continuous RR config if needed
+            pooled_rr_config = None
+            if mode == 'pooled-continuous-rr':
+                from python.pickleball_types import PooledContinuousRRConfig
+                from python.pooled_continuous_rr import initialize_pools, generate_all_pool_schedules
+                
+                pooled_rr_config = getattr(self, '_pooled_rr_config', None)
+                if pooled_rr_config is None:
+                    # User didn't manually manage pools - auto-initialize with 2 pools
+                    pooled_rr_config = PooledContinuousRRConfig()
+                    temp_session_config = SessionConfig(
+                        mode='pooled-continuous-rr',
+                        session_type=session_type,
+                        players=players,
+                        courts=courts,
+                        banned_pairs=self.banned_pairs,
+                        locked_teams=self.locked_teams,
+                        first_bye_players=self.first_bye_players,
+                        court_sliding_mode=self.sliding_combo.currentText(),
+                        randomize_player_order=False,
+                        pre_seeded_ratings=self.pre_seed_checkbox.isChecked(),
+                        pooled_continuous_rr_config=pooled_rr_config
+                    )
+                    temp_session = create_session(temp_session_config)
+                    pooled_rr_config.pools = initialize_pools(temp_session, num_pools=2)
+                    pooled_rr_config.scheduled_pool_matches = generate_all_pool_schedules(temp_session, pooled_rr_config)
+                    pooled_rr_config.pool_completed = {pool_id: False for pool_id in pooled_rr_config.pools}
+                    pooled_rr_config.pools_finalized = True
+            
             config = SessionConfig(
                 mode=mode,
                 session_type=session_type,
@@ -2833,7 +3478,8 @@ class SetupDialog(QDialog):
                 pre_seeded_ratings=self.pre_seed_checkbox.isChecked(),
                 king_of_court_config=koc_config,
                 competitive_round_robin_config=crr_config,
-                continuous_wave_flow_config=cwf_config
+                continuous_wave_flow_config=cwf_config,
+                pooled_continuous_rr_config=pooled_rr_config
             )
             
             self.session = create_session(config)
@@ -2898,6 +3544,14 @@ class CourtDisplayWidget(QWidget):
         self.title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         self.title.setStyleSheet("QLabel { color: black; }")
         header.addWidget(self.title)
+        
+        # Crossover rank label (visible only during crossover matches in pooled RR mode)
+        self.crossover_label = QLabel("")
+        self.crossover_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        self.crossover_label.setStyleSheet("QLabel { color: #9c27b0; background-color: #e1bee7; border: 1px solid #9c27b0; border-radius: 3px; padding: 2px 5px; }")
+        self.crossover_label.setVisible(False)
+        header.addWidget(self.crossover_label)
+        
         header.addStretch()
         layout.addLayout(header)
         
@@ -2993,6 +3647,9 @@ class CourtDisplayWidget(QWidget):
         self.timer.stop()
         self.current_match = match
         
+        # Update crossover label for pooled RR mode
+        self._update_crossover_label(match)
+        
         if not match:
             self.team1_label.setText("Waiting for\nplayers...")
             self.team2_label.setText("Waiting for\nplayers...")
@@ -3060,6 +3717,31 @@ class CourtDisplayWidget(QWidget):
         # Don't expand the court - instead optimize fonts to fit within current space
         self._auto_size_label_font(self.team1_label)
         self._auto_size_label_font(self.team2_label)
+    
+    def _update_crossover_label(self, match: Optional['Match']):
+        """Update crossover label visibility and text for pooled RR mode"""
+        # Hide by default
+        self.crossover_label.setVisible(False)
+        
+        if not match or not self.session:
+            return
+            
+        # Check if we're in pooled continuous RR mode
+        if self.session.config.mode != 'pooled-continuous-rr':
+            return
+            
+        # Check if this match is a crossover match
+        pooled_config = self.session.config.pooled_continuous_rr_config
+        if not pooled_config or not pooled_config.crossover_active:
+            return
+            
+        # Find matching crossover match
+        for crossover_match in pooled_config.crossover_matches:
+            if crossover_match.id == match.id:
+                rank = crossover_match.crossover_rank
+                self.crossover_label.setText(f"🏆 Crossover Rank {rank}")
+                self.crossover_label.setVisible(True)
+                return
     
     def _calculate_available_label_width(self):
         """Calculate the available width for each team label within current court constraints"""
@@ -3701,6 +4383,13 @@ class SessionWindow(QMainWindow):
         stats_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
         stats_btn.clicked.connect(self.show_statistics)
         button_layout.addWidget(stats_btn)
+        
+        # Pool Statistics button (only shown for Pooled Continuous RR mode)
+        self.pool_stats_btn = QPushButton("🏊 Show Pool Statistics")
+        self.pool_stats_btn.setStyleSheet("QPushButton { background-color: #9C27B0; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
+        self.pool_stats_btn.clicked.connect(self.show_pool_statistics)
+        self.pool_stats_btn.setVisible(self.session.config.mode == 'pooled-continuous-rr')
+        button_layout.addWidget(self.pool_stats_btn)
         
         export_btn = QPushButton("📥 Export Session")
         export_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
@@ -5051,6 +5740,11 @@ class SessionWindow(QMainWindow):
             # Update adaptive constraints slider if in competitive-variety mode
             if self.session.config.mode == 'competitive-variety' and hasattr(self, 'adaptive_constraints_slider'):
                 self.update_adaptive_constraints_slider()
+            
+            # Check for pooled RR session completion and show winners celebration
+            if self.session.config.mode == 'pooled-continuous-rr':
+                self._check_pooled_rr_completion()
+                
         except Exception as e:
             error_msg = f"Error in refresh_display:\n{str(e)}"
             print(f"REFRESH ERROR: {error_msg}")
@@ -5147,6 +5841,33 @@ class SessionWindow(QMainWindow):
             item = list_widget.item(i)
             if item:
                 item.setFont(font)
+    
+    def _check_pooled_rr_completion(self):
+        """Check if pooled RR session is complete and show winners celebration"""
+        pooled_config = self.session.config.pooled_continuous_rr_config
+        if not pooled_config:
+            return
+        
+        # Check if we already showed the celebration
+        if hasattr(self, '_celebration_shown') and self._celebration_shown:
+            return
+        
+        # Use the proper completion check function
+        from python.pooled_continuous_rr import check_session_complete
+        
+        if not check_session_complete(self.session, pooled_config):
+            return
+        
+        # All matches done - show celebration!
+        self._celebration_shown = True
+        
+        # Calculate final standings
+        from python.pooled_continuous_rr import calculate_overall_standings
+        final_standings = calculate_overall_standings(self.session)
+        
+        # Show celebration dialog
+        dialog = WinnersCelebrationDialog(final_standings[:3], self)
+        dialog.exec()
     
     def export_session(self):
         """Export session results to a file"""
@@ -5959,6 +6680,257 @@ class SessionWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error showing statistics:\n{str(e)}")
     
+    def show_pool_statistics(self):
+        """Show pool-specific statistics for Pooled Continuous RR mode"""
+        try:
+            from python.pooled_continuous_rr import calculate_pool_standings
+            
+            pooled_config = self.session.config.pooled_continuous_rr_config
+            if not pooled_config:
+                QMessageBox.warning(self, "Error", "Not in Pooled RR mode")
+                return
+            
+            # Create dialog with tabs for each pool
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Pool Statistics")
+            dialog.setStyleSheet("QDialog { background-color: #2a2a2a; } QLabel { color: white; background-color: #2a2a2a; }")
+            dialog.setMinimumWidth(1100)
+            dialog.setMinimumHeight(700)
+            
+            layout = QVBoxLayout()
+            
+            # Status header
+            completed_pools = sum(1 for p in pooled_config.pool_completed.values() if p)
+            total_pools = len(pooled_config.pools)
+            status_text = f"Pools Completed: {completed_pools}/{total_pools}"
+            if pooled_config.crossover_active:
+                status_text += " | 🏆 CROSSOVER PHASE ACTIVE"
+            
+            status_label = QLabel(status_text)
+            status_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+            status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            status_label.setStyleSheet("QLabel { color: #4CAF50; padding: 10px; }")
+            layout.addWidget(status_label)
+            
+            # Tab widget for pools
+            tabs = QTabWidget()
+            tabs.setStyleSheet("""
+                QTabWidget::pane { border: 1px solid #555; background: #2a2a2a; }
+                QTabBar::tab { background: #3a3a3a; color: white; padding: 10px 20px; margin: 2px; border-radius: 5px; }
+                QTabBar::tab:selected { background: #9C27B0; }
+            """)
+            
+            # Create a tab for each pool
+            for pool_id, player_ids in pooled_config.pools.items():
+                pool_widget = QWidget()
+                pool_layout = QVBoxLayout()
+                
+                # Get pool standings
+                standings = calculate_pool_standings(self.session, pool_id)
+                
+                # Pool status
+                pool_status = "✅ Complete" if pooled_config.pool_completed.get(pool_id, False) else "⏳ In Progress"
+                pool_status_label = QLabel(f"Status: {pool_status}")
+                pool_status_label.setStyleSheet("QLabel { color: #4CAF50 if pool_status else '#FF9800'; font-weight: bold; padding: 5px; }")
+                pool_layout.addWidget(pool_status_label)
+                
+                # Standings table
+                standings_table = QTableWidget()
+                standings_table.setColumnCount(8)
+                standings_table.setHorizontalHeaderLabels([
+                    "Rank", "Player", "W-L", "Games", "Win %", "Pts For", "Pts Against", "Pt Diff"
+                ])
+                standings_table.setStyleSheet("""
+                    QTableWidget { background-color: #3a3a3a; color: white; gridline-color: #555; }
+                    QTableWidget::item { padding: 5px; color: white; }
+                    QHeaderView::section { background-color: #1a1a1a; color: white; padding: 5px; font-weight: bold; }
+                """)
+                
+                for rank, standing in enumerate(standings, 1):
+                    row = standings_table.rowCount()
+                    standings_table.insertRow(row)
+                    
+                    games_played = standing.get('games_played', 0)
+                    win_pct = (standing['wins'] / games_played * 100) if games_played > 0 else 0
+                    
+                    items = [
+                        f"#{rank}",
+                        standing['name'],
+                        f"{standing['wins']}-{standing['losses']}",
+                        str(games_played),
+                        f"{win_pct:.1f}%",
+                        str(standing['pts_for']),
+                        str(standing['pts_against']),
+                        f"{standing['pt_diff']:+d}"
+                    ]
+                    
+                    for col, text in enumerate(items):
+                        item = QTableWidgetItem(text)
+                        item.setForeground(QColor("white"))
+                        # Highlight top 3 with medals
+                        if rank == 1:
+                            item.setBackground(QColor("#FFD700"))  # Gold
+                            item.setForeground(QColor("black"))
+                        elif rank == 2:
+                            item.setBackground(QColor("#C0C0C0"))  # Silver
+                            item.setForeground(QColor("black"))
+                        elif rank == 3:
+                            item.setBackground(QColor("#CD7F32"))  # Bronze
+                            item.setForeground(QColor("white"))
+                        standings_table.setItem(row, col, item)
+                
+                standings_table.resizeColumnsToContents()
+                pool_layout.addWidget(standings_table)
+                
+                # Head-to-head matrix
+                h2h_label = QLabel("Head-to-Head Results:")
+                h2h_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+                h2h_label.setStyleSheet("QLabel { color: white; padding: 10px 0 5px 0; }")
+                pool_layout.addWidget(h2h_label)
+                
+                h2h_table = QTableWidget()
+                player_names = [s['name'] for s in standings]
+                h2h_table.setRowCount(len(player_names))
+                h2h_table.setColumnCount(len(player_names))
+                h2h_table.setHorizontalHeaderLabels(player_names)
+                h2h_table.setVerticalHeaderLabels(player_names)
+                h2h_table.setStyleSheet("""
+                    QTableWidget { background-color: #3a3a3a; color: white; gridline-color: #555; }
+                    QTableWidget::item { padding: 5px; text-align: center; }
+                    QHeaderView::section { background-color: #1a1a1a; color: white; padding: 5px; }
+                """)
+                
+                # Build head-to-head data
+                player_id_map = {s['player_id']: i for i, s in enumerate(standings)}
+                for i, s1 in enumerate(standings):
+                    for j, s2 in enumerate(standings):
+                        if i == j:
+                            item = QTableWidgetItem("—")
+                            item.setForeground(QColor("#666"))
+                        else:
+                            # Find if s1 beat s2
+                            result = self._get_h2h_result(s1['player_id'], s2['player_id'], pool_id)
+                            item = QTableWidgetItem(result)
+                            if result == "W":
+                                item.setForeground(QColor("#4CAF50"))
+                            elif result == "L":
+                                item.setForeground(QColor("#f44336"))
+                            else:
+                                item.setForeground(QColor("#666"))
+                        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        h2h_table.setItem(i, j, item)
+                
+                h2h_table.resizeColumnsToContents()
+                pool_layout.addWidget(h2h_table)
+                
+                pool_widget.setLayout(pool_layout)
+                tabs.addTab(pool_widget, f"🏊 {pool_id}")
+            
+            # Add crossover tab if crossover is active
+            if pooled_config.crossover_active or pooled_config.crossover_matches:
+                crossover_widget = QWidget()
+                crossover_layout = QVBoxLayout()
+                
+                crossover_title = QLabel("🏆 Crossover Matches - Rank vs Rank")
+                crossover_title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+                crossover_title.setStyleSheet("QLabel { color: #9C27B0; padding: 10px; }")
+                crossover_layout.addWidget(crossover_title)
+                
+                crossover_table = QTableWidget()
+                crossover_table.setColumnCount(5)
+                crossover_table.setHorizontalHeaderLabels(["Rank", "Player 1", "vs", "Player 2", "Result"])
+                crossover_table.setStyleSheet("""
+                    QTableWidget { background-color: #3a3a3a; color: white; gridline-color: #555; }
+                    QTableWidget::item { padding: 5px; color: white; }
+                    QHeaderView::section { background-color: #1a1a1a; color: white; padding: 5px; font-weight: bold; }
+                """)
+                
+                for cm in pooled_config.crossover_matches:
+                    row = crossover_table.rowCount()
+                    crossover_table.insertRow(row)
+                    
+                    p1_names = [self._get_player_name(pid) for pid in cm.team1]
+                    p2_names = [self._get_player_name(pid) for pid in cm.team2]
+                    
+                    # Find result if match completed
+                    result = "Pending"
+                    for m in self.session.matches:
+                        if m.id == cm.id and m.status == 'completed' and m.score:
+                            t1_score = m.score.get('team1_score', 0)
+                            t2_score = m.score.get('team2_score', 0)
+                            result = f"{t1_score} - {t2_score}"
+                            break
+                    
+                    items = [
+                        f"#{cm.crossover_rank}",
+                        ", ".join(p1_names),
+                        "vs",
+                        ", ".join(p2_names),
+                        result
+                    ]
+                    
+                    for col, text in enumerate(items):
+                        item = QTableWidgetItem(text)
+                        item.setForeground(QColor("white"))
+                        crossover_table.setItem(row, col, item)
+                
+                crossover_table.resizeColumnsToContents()
+                crossover_layout.addWidget(crossover_table)
+                
+                crossover_widget.setLayout(crossover_layout)
+                tabs.addTab(crossover_widget, "🏆 Crossover")
+            
+            layout.addWidget(tabs)
+            
+            # Close button
+            close_btn = QPushButton("Close")
+            close_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 8px; border-radius: 3px; }")
+            close_btn.clicked.connect(dialog.accept)
+            layout.addWidget(close_btn)
+            
+            dialog.setLayout(layout)
+            dialog.exec()
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Error", f"Error showing pool statistics:\n{str(e)}")
+    
+    def _get_h2h_result(self, player1_id: str, player2_id: str, pool_id: str) -> str:
+        """Get head-to-head result for two players in a pool"""
+        pooled_config = self.session.config.pooled_continuous_rr_config
+        if not pooled_config:
+            return "-"
+        
+        # Find completed match between these players in this pool
+        for pm in pooled_config.scheduled_pool_matches:
+            if pm.pool_id != pool_id or pm.status != 'completed':
+                continue
+            
+            all_players = pm.team1 + pm.team2
+            if player1_id in all_players and player2_id in all_players:
+                # Find the actual match result
+                for m in self.session.matches:
+                    if m.id == pm.id and m.status == 'completed' and m.score:
+                        t1_score = m.score.get('team1_score', 0)
+                        t2_score = m.score.get('team2_score', 0)
+                        
+                        p1_on_team1 = player1_id in pm.team1
+                        
+                        if p1_on_team1:
+                            return "W" if t1_score > t2_score else "L"
+                        else:
+                            return "W" if t2_score > t1_score else "L"
+        
+        return "-"
+    
+    def _get_player_name(self, player_id: str) -> str:
+        """Get player name from ID"""
+        for p in self.session.config.players:
+            if p.id == player_id:
+                return p.name
+        return player_id
+
     def make_court(self):
         """Open dialog to manually create a match on an empty court"""
         try:

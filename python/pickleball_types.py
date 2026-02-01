@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import List, Set, Dict, Optional, Literal, Any
 from datetime import datetime
 
-GameMode = Literal['king-of-court', 'round-robin', 'competitive-variety', 'competitive-round-robin', 'competitive-continuous-round-robin', 'continuous-wave-flow']
+GameMode = Literal['king-of-court', 'round-robin', 'competitive-variety', 'competitive-round-robin', 'competitive-continuous-round-robin', 'continuous-wave-flow', 'pooled-continuous-rr']
 SessionType = Literal['doubles', 'singles']
 MatchStatus = Literal['waiting', 'in-progress', 'completed', 'forfeited']
 
@@ -182,6 +182,56 @@ class ContinuousWaveFlowConfig:
 
 
 @dataclass
+class PooledContinuousRRConfig:
+    """
+    Configuration for Pooled Continuous Round Robin with Crossover mode.
+    
+    This mode:
+    - Divides players into pools (default 2, can add more)
+    - Within each pool, everyone plays everyone once (round robin)
+    - After all pools complete, crossover matches happen (rank vs rank across pools)
+    - Courts can be dedicated to specific pools
+    - Match selection prioritizes players with fewest games for balanced completion
+    """
+    # Pool assignments: pool_id -> list of player_ids
+    pools: Dict[str, List[str]] = field(default_factory=dict)
+    # Court assignments per pool: pool_id -> list of court_numbers (empty list = any court)
+    pool_court_assignments: Dict[str, List[int]] = field(default_factory=dict)
+    # All scheduled pool matches with pool_id tracking
+    scheduled_pool_matches: List['PooledMatch'] = field(default_factory=list)
+    # Crossover matches generated after pools complete
+    crossover_matches: List['PooledMatch'] = field(default_factory=list)
+    # Track which pools have completed all their matches
+    pool_completed: Dict[str, bool] = field(default_factory=dict)
+    # Whether we're in the crossover phase
+    crossover_active: bool = False
+    # Whether pools have been finalized
+    pools_finalized: bool = False
+
+
+@dataclass
+class PooledMatch:
+    """
+    A match in the Pooled Continuous RR mode.
+    Extends ScheduledMatch with pool and crossover tracking.
+    """
+    id: str
+    team1: List[str]  # Player IDs
+    team2: List[str]  # Player IDs
+    status: ScheduledMatchStatus = 'pending'
+    match_number: int = 0
+    balance_score: float = 0.0
+    # Pool-specific fields
+    pool_id: str = ''  # Which pool this match belongs to (empty for crossover)
+    is_crossover: bool = False  # True if this is a crossover match
+    crossover_rank: int = 0  # For crossover matches: rank being played (1 = top ranked, etc.)
+    
+    def get_all_players(self) -> List[str]:
+        """Return all player IDs in this match"""
+        return self.team1 + self.team2
+
+
+@dataclass
 class AdvancedConfig:
     """Advanced configuration settings"""
     king_of_court: KingOfCourtConfig = field(default_factory=KingOfCourtConfig)
@@ -209,6 +259,7 @@ class SessionConfig:
     king_of_court_config: Optional[KingOfCourtConfig] = None  # King of Court specific settings
     competitive_round_robin_config: Optional[CompetitiveRoundRobinConfig] = None  # Competitive Round Robin settings
     continuous_wave_flow_config: Optional['ContinuousWaveFlowConfig'] = None  # Continuous Wave Flow settings
+    pooled_continuous_rr_config: Optional['PooledContinuousRRConfig'] = None  # Pooled Continuous RR settings
 
 
 @dataclass

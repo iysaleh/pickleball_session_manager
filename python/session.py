@@ -55,7 +55,8 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
         pre_seeded_ratings=config.pre_seeded_ratings,
         king_of_court_config=config.king_of_court_config,
         competitive_round_robin_config=config.competitive_round_robin_config,
-        continuous_wave_flow_config=config.continuous_wave_flow_config
+        continuous_wave_flow_config=config.continuous_wave_flow_config,
+        pooled_continuous_rr_config=config.pooled_continuous_rr_config
     )
     
     # Generate match queue for round-robin mode
@@ -76,9 +77,9 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
     advanced_config = config.advanced_config or get_default_advanced_config()
     
     # For competitive-variety, competitive-round-robin, competitive-continuous-round-robin, 
-    # and continuous-wave-flow modes, start all players in waiting list
+    # continuous-wave-flow, and pooled-continuous-rr modes, start all players in waiting list
     waiting_players = []
-    if final_config.mode in ('competitive-variety', 'competitive-round-robin', 'competitive-continuous-round-robin', 'continuous-wave-flow'):
+    if final_config.mode in ('competitive-variety', 'competitive-round-robin', 'competitive-continuous-round-robin', 'continuous-wave-flow', 'pooled-continuous-rr'):
         waiting_players = [p.id for p in players_to_use]
     
     # Start the session timing if not already started
@@ -584,6 +585,7 @@ def evaluate_and_create_matches(session: Session) -> Session:
     For king-of-court mode, manages rounds-based progression.
     For competitive-round-robin mode, populates from pre-approved schedule (rounds-based).
     For continuous-wave-flow mode, dynamically generates matches as courts finish.
+    For pooled-continuous-rr mode, manages pool matches and crossover.
     """
     
     if session.config.mode == 'competitive-variety':
@@ -604,8 +606,9 @@ def evaluate_and_create_matches(session: Session) -> Session:
     elif session.config.mode == 'continuous-wave-flow':
         from python.continuous_wave_flow import populate_courts_continuous_wave_flow
         populate_courts_continuous_wave_flow(session)
-    
-    return session
+    elif session.config.mode == 'pooled-continuous-rr':
+        from python.pooled_continuous_rr import populate_courts_pooled_rr
+        populate_courts_pooled_rr(session)
     
     return session
 
@@ -848,3 +851,39 @@ def analyze_match_balance(session: Session, team1_ids: List[str], team2_ids: Lis
         'alternative_configs': alternative_configs,
         'constraints_violated': constraints_violated
     }
+
+
+def create_match_from_pooled(session: Session, pooled_match, court_number: int) -> Match:
+    """
+    Create a real Match from a PooledMatch and add it to the session.
+    
+    Args:
+        session: The session
+        pooled_match: PooledMatch to create from
+        court_number: Court to assign the match to
+    
+    Returns:
+        The created Match
+    """
+    from .pickleball_types import PooledMatch
+    
+    match = Match(
+        id=pooled_match.id,  # Keep same ID for tracking
+        court_number=court_number,
+        team1=list(pooled_match.team1),
+        team2=list(pooled_match.team2),
+        status='waiting',
+        start_time=now()
+    )
+    
+    session.matches.append(match)
+    
+    # Remove players from waiting list
+    for player_id in match.team1 + match.team2:
+        if player_id in session.waiting_players:
+            session.waiting_players.remove(player_id)
+    
+    # Update pooled match status
+    pooled_match.status = 'approved'
+    
+    return match

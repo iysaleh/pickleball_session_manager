@@ -355,6 +355,35 @@ def get_queued_matches_for_display(session: Session) -> List[tuple]:
     from .session import get_player_name
     
     result = []
+    
+    # Handle pooled continuous RR mode - show pending pool matches and crossover matches
+    if session.config.mode == 'pooled-continuous-rr':
+        pooled_config = session.config.pooled_continuous_rr_config
+        if pooled_config:
+            # Get pending pool matches (status='pending')
+            for pm in pooled_config.scheduled_pool_matches:
+                if pm.status == 'pending':
+                    team1_names = [get_player_name(session, pid) for pid in pm.team1]
+                    team2_names = [get_player_name(session, pid) for pid in pm.team2]
+                    team1_str = ", ".join(team1_names)
+                    team2_str = ", ".join(team2_names)
+                    # Add pool indicator
+                    pool_label = pm.pool_id.replace('_', ' ').title()
+                    result.append((f"[{pool_label}] {team1_str}", team2_str))
+            
+            # Get pending crossover matches if crossover is active
+            if pooled_config.crossover_active:
+                for cm in pooled_config.crossover_matches:
+                    if cm.status == 'pending':
+                        team1_names = [get_player_name(session, pid) for pid in cm.team1]
+                        team2_names = [get_player_name(session, pid) for pid in cm.team2]
+                        team1_str = ", ".join(team1_names)
+                        team2_str = ", ".join(team2_names)
+                        result.append((f"[Crossover #{cm.crossover_rank}] {team1_str}", team2_str))
+        
+        return result
+    
+    # Standard handling for other modes
     for queued_match in session.match_queue:
         team1_names = [get_player_name(session, pid) for pid in queued_match.team1]
         team2_names = [get_player_name(session, pid) for pid in queued_match.team2]
