@@ -37,6 +37,10 @@ def parse_player_statistics(content):
             player_name = match.group(1).strip()
             elo = match.group(2)
             wl = match.group(3)
+            try:
+                wins, losses = map(int, wl.split('-'))
+            except ValueError:
+                wins, losses = 0, 0
             games = match.group(4)
             win_pct = match.group(5)
             wait_time = match.group(6)
@@ -47,6 +51,8 @@ def parse_player_statistics(content):
             player_stats[player_name] = {
                 'elo': int(elo),
                 'wl': wl,
+                'wins': wins,
+                'losses': losses,
                 'games': int(games),
                 'win_pct': win_pct,
                 'wait_time': wait_time,
@@ -132,11 +138,12 @@ def analyze_session(filename):
     
     # Player Statistics Table
     if player_stats:
-        print("PLAYER STATISTICS (sorted by ELO):")
+        print("PLAYER STATISTICS (sorted by Wins, Losses, then Pt Diff):")
         print(f"{'Rank':<5} {'Player':<25} {'ELO':<7} {'W-L':<8} {'Games':<7} {'Win%':<8} {'Wait Time':<10} {'Avg Pt Diff':<13} {'Pts For':<10} {'Pts Against':<12}")
         print("-" * 110)
         
-        sorted_players = sorted(player_stats.items(), key=lambda x: int(x[1]['elo']), reverse=True)
+        # Sort by Wins (desc), then Losses (asc -> -losses desc), then Avg Pt Diff (desc)
+        sorted_players = sorted(player_stats.items(), key=lambda x: (x[1]['wins'], -x[1]['losses'], x[1]['avg_pt_diff']), reverse=True)
         for rank, (player, stats) in enumerate(sorted_players, 1):
             print(f"{rank:<5} {player:<25} {stats['elo']:<7} {stats['wl']:<8} {stats['games']:<7} {stats['win_pct']:<8} {stats['wait_time']:<10} {stats['avg_pt_diff']:<13.1f} {stats['pts_for']:<10} {stats['pts_against']:<12}")
         print()
@@ -147,8 +154,8 @@ def analyze_session(filename):
         print("-" * 70)
         print("Rank,Player,ELO,W-L,Games,Win%,WaitTime,AvgPtDiff,PtsFor,PtsAgainst")
         
-        # Sort by ELO descending
-        sorted_players = sorted(player_stats.items(), key=lambda x: int(x[1]['elo']), reverse=True)
+        # Sort by Wins (desc), then Losses (asc), then Avg Pt Diff (desc)
+        sorted_players = sorted(player_stats.items(), key=lambda x: (x[1]['wins'], -x[1]['losses'], x[1]['avg_pt_diff']), reverse=True)
         for rank, (player, stats) in enumerate(sorted_players, 1):
             print(f"{rank},{player},{stats['elo']},{stats['wl']},{stats['games']},{stats['win_pct']},{stats['wait_time']},{stats['avg_pt_diff']},{stats['pts_for']},{stats['pts_against']}")
         print()
