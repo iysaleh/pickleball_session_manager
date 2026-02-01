@@ -757,6 +757,16 @@ KeyError: 'games'
 ## Pooled Cont RR - 3
 * [bug] When selecting "New Session with Previous Players" when the game mode was "Pooled Continuous RR with Crossover", the "Session Setup" window shows "Competetive Variety" instead of "Pooled Continuous RR with Crossover"... Make it so that New Session with Previous Players properly selects "Pooled Continuous RR with Crossover" when the last match played was "Pooled Continuous RR with Crossover".
 * Using the same label that we have for "Crossover Rank", when the pool matches are being played, have the label say which Pool the match is from, EG "Pool 1 Match", "Pool 2 Match", etc...
+* "Show Pool Statistics" shows Gold/Silver/Bronze while the Pools are in progress, only show that once all the pool matches are complete.
+* [bug] In "Show Pool Statistics", the "Head to Head Results" table doesn't actually show any results for who defeated who.
+* [bug] If you resume a "Pooled Continuous RR with Crossover" session and click "Show Pool Statistics", an error pops up "Not in Pooled RR mode", but we are resuming a pooled RR mode so it should work.
+* When in "Pooled Continuous RR with Crossover" there are no Partnerships or Bans, so that button shouldn't exist in this case. Remove "Manage Partnerships Bans" from the Active Session and Session Setup windows when "Pooled Continuous RR with Crossover" is selected or running.
+* Text shows "Pooled-Continuous-Rr" with Rr being capital then lower case, update it so that RR is both capital, IE: "Pooled-Continuous-RR"
+* When a "Pooled Continuous RR with Crossover" match finishes, add a "Show Winners" button at the bottom of the Active Session window that manually brings up the Winners dialog that automatically pops up at match completion.
+
+## Pooled Cont RR - 3
+* Update "Show Winners" so that the button only appears after all the cross-over matches have been played. Do not display the button until the match is complete.
+
 
 # Not sent -- TBD
 * Look at @pickleball_session_20260105_221745.txt , the algorithm insists on having players that played together play against each other in the next round, or having players that played against each other play together in the next round... That SHOULD NOT HAPPEN SO REGULARLY. If we have 8 rounds configured, those back to back configurations should happen as spread apart as possible. Analyze the session distribution that gets generated, and shuffle rounds around to make inter-round variety much better. 

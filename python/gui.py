@@ -2730,10 +2730,10 @@ class SetupDialog(QDialog):
         self.player_widget = PlayerListWidget()
         layout.addWidget(self.player_widget)
         
-        # Manage Locks Button
-        manage_btn = QPushButton("🤝 Manage Partnerships & Bans")
-        manage_btn.clicked.connect(self.manage_locks)
-        layout.addWidget(manage_btn)
+        # Manage Locks Button (hidden for pooled RR mode - no partnerships/bans)
+        self.manage_locks_btn = QPushButton("🤝 Manage Partnerships & Bans")
+        self.manage_locks_btn.clicked.connect(self.manage_locks)
+        layout.addWidget(self.manage_locks_btn)
         
         # Manage Byes Button
         byes_btn = QPushButton("📋 Manage Byes")
@@ -2893,7 +2893,8 @@ class SetupDialog(QDialog):
                 'king-of-court': 'King of the Court',
                 'competitive-round-robin': 'Competitive Round Robin',
                 'competitive-continuous-round-robin': 'Competitive Continuous Round Robin',
-                'continuous-wave-flow': 'Continuous Wave Flow'
+                'continuous-wave-flow': 'Continuous Wave Flow',
+                'pooled-continuous-rr': 'Pooled Continuous RR with Crossover'
             }
             display_mode = mode_mapping.get(self.previous_game_mode, 'Competitive Variety')
             
@@ -2973,6 +2974,10 @@ class SetupDialog(QDialog):
             if self.type_combo.count() < 2:
                 self.type_combo.clear()
                 self.type_combo.addItems(["Doubles", "Singles"])
+        
+        # Hide Manage Partnerships & Bans for pooled RR (no partnerships/bans in this mode)
+        if hasattr(self, 'manage_locks_btn'):
+            self.manage_locks_btn.setVisible(not is_pooled_rr)
     
     def on_koc_seeding_changed(self, seeding_text):
         """Handle King of Court seeding option change"""
@@ -3719,7 +3724,7 @@ class CourtDisplayWidget(QWidget):
         self._auto_size_label_font(self.team2_label)
     
     def _update_crossover_label(self, match: Optional['Match']):
-        """Update crossover label visibility and text for pooled RR mode"""
+        """Update crossover/pool label visibility and text for pooled RR mode"""
         # Hide by default
         self.crossover_label.setVisible(False)
         
@@ -3730,16 +3735,27 @@ class CourtDisplayWidget(QWidget):
         if self.session.config.mode != 'pooled-continuous-rr':
             return
             
-        # Check if this match is a crossover match
         pooled_config = self.session.config.pooled_continuous_rr_config
-        if not pooled_config or not pooled_config.crossover_active:
+        if not pooled_config:
             return
-            
-        # Find matching crossover match
-        for crossover_match in pooled_config.crossover_matches:
-            if crossover_match.id == match.id:
-                rank = crossover_match.crossover_rank
-                self.crossover_label.setText(f"🏆 Crossover Rank {rank}")
+        
+        # Check if this match is a crossover match
+        if pooled_config.crossover_active:
+            for crossover_match in pooled_config.crossover_matches:
+                if crossover_match.id == match.id:
+                    rank = crossover_match.crossover_rank
+                    self.crossover_label.setText(f"🏆 Crossover Rank {rank}")
+                    self.crossover_label.setStyleSheet("QLabel { color: #9c27b0; background-color: #e1bee7; border: 1px solid #9c27b0; border-radius: 3px; padding: 2px 5px; }")
+                    self.crossover_label.setVisible(True)
+                    return
+        
+        # Check if this is a pool match (not crossover)
+        for pool_match in pooled_config.scheduled_pool_matches:
+            if pool_match.id == match.id:
+                # Format pool name nicely (pool_1 -> Pool 1)
+                pool_name = pool_match.pool_id.replace('_', ' ').title()
+                self.crossover_label.setText(f"🏊 {pool_name} Match")
+                self.crossover_label.setStyleSheet("QLabel { color: #1976D2; background-color: #BBDEFB; border: 1px solid #1976D2; border-radius: 3px; padding: 2px 5px; }")
                 self.crossover_label.setVisible(True)
                 return
     
@@ -4176,7 +4192,8 @@ class SessionWindow(QMainWindow):
         main_layout = QVBoxLayout()
         
         # Title with info
-        self.title = QLabel(f"{self.session.config.mode} - {self.session.config.session_type.title()}")
+        mode_display = self._format_mode_display(self.session.config.mode)
+        self.title = QLabel(f"{mode_display} - {self.session.config.session_type.title()}")
         self.title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         self.title.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 10px; border-radius: 3px; }")
         main_layout.addWidget(self.title)
@@ -4374,10 +4391,12 @@ class SessionWindow(QMainWindow):
         players_btn.clicked.connect(self.manage_players)
         button_layout.addWidget(players_btn)
         
-        locks_btn = QPushButton("🤝 Manage Partnerships & Bans")
-        locks_btn.setStyleSheet("QPushButton { background-color: #607D8B; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
-        locks_btn.clicked.connect(self.manage_locks)
-        button_layout.addWidget(locks_btn)
+        # Manage Partnerships & Bans button (hidden for pooled RR mode)
+        self.locks_btn = QPushButton("🤝 Manage Partnerships & Bans")
+        self.locks_btn.setStyleSheet("QPushButton { background-color: #607D8B; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
+        self.locks_btn.clicked.connect(self.manage_locks)
+        self.locks_btn.setVisible(self.session.config.mode != 'pooled-continuous-rr')
+        button_layout.addWidget(self.locks_btn)
         
         stats_btn = QPushButton("📊 Show Statistics")
         stats_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
@@ -4390,6 +4409,13 @@ class SessionWindow(QMainWindow):
         self.pool_stats_btn.clicked.connect(self.show_pool_statistics)
         self.pool_stats_btn.setVisible(self.session.config.mode == 'pooled-continuous-rr')
         button_layout.addWidget(self.pool_stats_btn)
+        
+        # Show Winners button (only shown after all crossover matches complete)
+        self.show_winners_btn = QPushButton("🏆 Show Winners")
+        self.show_winners_btn.setStyleSheet("QPushButton { background-color: #FFD700; color: black; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
+        self.show_winners_btn.clicked.connect(self.show_winners_dialog)
+        self.show_winners_btn.setVisible(False)  # Hidden until session complete
+        button_layout.addWidget(self.show_winners_btn)
         
         export_btn = QPushButton("📥 Export Session")
         export_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 8px 16px; border-radius: 3px; }")
@@ -5244,12 +5270,26 @@ class SessionWindow(QMainWindow):
 
     def update_title(self, summary: Dict):
         """Update title with session info"""
-        info = f"{self.session.config.mode.title()} - {self.session.config.session_type.title()} | "
+        mode_display = self._format_mode_display(self.session.config.mode)
+        info = f"{mode_display} - {self.session.config.session_type.title()} | "
         info += f"Courts: {summary['active_matches']}/{summary['total_courts']} | "
         info += f"Queued: {summary['queued_matches']} | "
         info += f"Completed: {summary['completed_matches']}"
         
         self.title.setText(info)
+    
+    def _format_mode_display(self, mode: str) -> str:
+        """Format mode name for display, handling special cases like 'pooled-continuous-rr'"""
+        mode_display_names = {
+            'pooled-continuous-rr': 'Pooled Continuous RR',
+            'competitive-variety': 'Competitive Variety',
+            'round-robin': 'Round Robin',
+            'king-of-court': 'King of the Court',
+            'competitive-round-robin': 'Competitive Round Robin',
+            'competitive-continuous-round-robin': 'Competitive Continuous Round Robin',
+            'continuous-wave-flow': 'Continuous Wave Flow'
+        }
+        return mode_display_names.get(mode, mode.replace('-', ' ').title())
     
     def manage_locks(self):
         """Open dialog to manage locks and bans"""
@@ -5848,14 +5888,20 @@ class SessionWindow(QMainWindow):
         if not pooled_config:
             return
         
-        # Check if we already showed the celebration
-        if hasattr(self, '_celebration_shown') and self._celebration_shown:
-            return
-        
         # Use the proper completion check function
         from python.pooled_continuous_rr import check_session_complete
         
-        if not check_session_complete(self.session, pooled_config):
+        is_complete = check_session_complete(self.session, pooled_config)
+        
+        # Show/hide the Show Winners button based on completion
+        if hasattr(self, 'show_winners_btn'):
+            self.show_winners_btn.setVisible(is_complete)
+        
+        if not is_complete:
+            return
+        
+        # Check if we already showed the celebration
+        if hasattr(self, '_celebration_shown') and self._celebration_shown:
             return
         
         # All matches done - show celebration!
@@ -5868,6 +5914,33 @@ class SessionWindow(QMainWindow):
         # Show celebration dialog
         dialog = WinnersCelebrationDialog(final_standings[:3], self)
         dialog.exec()
+    
+    def show_winners_dialog(self):
+        """Manually show the winners celebration dialog"""
+        try:
+            from python.pooled_continuous_rr import calculate_overall_standings
+            
+            pooled_config = self.session.config.pooled_continuous_rr_config
+            if not pooled_config:
+                QMessageBox.warning(self, "Error", "Not in Pooled Continuous RR mode")
+                return
+            
+            # Calculate current standings
+            final_standings = calculate_overall_standings(self.session)
+            
+            if not final_standings:
+                QMessageBox.information(self, "No Results", "No match results yet. Play some matches first!")
+                return
+            
+            # Show celebration dialog with top 3 (or fewer if not enough players)
+            top_players = final_standings[:3]
+            dialog = WinnersCelebrationDialog(top_players, self)
+            dialog.exec()
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Error", f"Error showing winners:\n{str(e)}")
     
     def export_session(self):
         """Export session results to a file"""
@@ -5883,7 +5956,7 @@ class SessionWindow(QMainWindow):
             export_lines.append(f"Pickleball Session Export")
             export_lines.append(f"{'='*70}")
             export_lines.append(f"Date/Time: {now().strftime('%Y-%m-%d %H:%M:%S')}")
-            export_lines.append(f"Mode: {self.session.config.mode.title()}")
+            export_lines.append(f"Mode: {self._format_mode_display(self.session.config.mode)}")
             export_lines.append(f"Type: {self.session.config.session_type.title()}")
             export_lines.append(f"Courts: {self.session.config.courts}")
             export_lines.append("")
@@ -6685,9 +6758,14 @@ class SessionWindow(QMainWindow):
         try:
             from python.pooled_continuous_rr import calculate_pool_standings
             
+            # Check mode first
+            if self.session.config.mode != 'pooled-continuous-rr':
+                QMessageBox.warning(self, "Error", "Not in Pooled Continuous RR mode")
+                return
+            
             pooled_config = self.session.config.pooled_continuous_rr_config
             if not pooled_config:
-                QMessageBox.warning(self, "Error", "Not in Pooled RR mode")
+                QMessageBox.warning(self, "Error", "Pool configuration not available. This can happen if the session was saved before pool setup was complete.")
                 return
             
             # Create dialog with tabs for each pool
@@ -6729,7 +6807,8 @@ class SessionWindow(QMainWindow):
                 standings = calculate_pool_standings(self.session, pool_id)
                 
                 # Pool status
-                pool_status = "✅ Complete" if pooled_config.pool_completed.get(pool_id, False) else "⏳ In Progress"
+                pool_complete = pooled_config.pool_completed.get(pool_id, False)
+                pool_status = "✅ Complete" if pool_complete else "⏳ In Progress"
                 pool_status_label = QLabel(f"Status: {pool_status}")
                 pool_status_label.setStyleSheet("QLabel { color: #4CAF50 if pool_status else '#FF9800'; font-weight: bold; padding: 5px; }")
                 pool_layout.addWidget(pool_status_label)
@@ -6767,15 +6846,16 @@ class SessionWindow(QMainWindow):
                     for col, text in enumerate(items):
                         item = QTableWidgetItem(text)
                         item.setForeground(QColor("white"))
-                        # Highlight top 3 with medals
-                        if rank == 1:
-                            item.setBackground(QColor("#FFD700"))  # Gold
-                            item.setForeground(QColor("black"))
-                        elif rank == 2:
-                            item.setBackground(QColor("#C0C0C0"))  # Silver
-                            item.setForeground(QColor("black"))
-                        elif rank == 3:
-                            item.setBackground(QColor("#CD7F32"))  # Bronze
+                        # Only highlight top 3 with medals if pool is complete
+                        if pool_complete:
+                            if rank == 1:
+                                item.setBackground(QColor("#FFD700"))  # Gold
+                                item.setForeground(QColor("black"))
+                            elif rank == 2:
+                                item.setBackground(QColor("#C0C0C0"))  # Silver
+                                item.setForeground(QColor("black"))
+                            elif rank == 3:
+                                item.setBackground(QColor("#CD7F32"))  # Bronze
                             item.setForeground(QColor("white"))
                         standings_table.setItem(row, col, item)
                 
@@ -6904,12 +6984,12 @@ class SessionWindow(QMainWindow):
         
         # Find completed match between these players in this pool
         for pm in pooled_config.scheduled_pool_matches:
-            if pm.pool_id != pool_id or pm.status != 'completed':
+            if pm.pool_id != pool_id:
                 continue
             
             all_players = pm.team1 + pm.team2
             if player1_id in all_players and player2_id in all_players:
-                # Find the actual match result
+                # Find the actual match result in session.matches
                 for m in self.session.matches:
                     if m.id == pm.id and m.status == 'completed' and m.score:
                         t1_score = m.score.get('team1_score', 0)

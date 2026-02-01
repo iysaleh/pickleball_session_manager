@@ -188,6 +188,46 @@ def serialize_session(session) -> Dict:
         }
         snapshots_data.append(snapshot_data)
     
+    # Serialize pooled continuous RR config if present
+    pooled_rr_config_data = None
+    if session.config.pooled_continuous_rr_config:
+        prc = session.config.pooled_continuous_rr_config
+        pooled_rr_config_data = {
+            "pools": prc.pools,
+            "pool_court_assignments": prc.pool_court_assignments,
+            "scheduled_pool_matches": [
+                {
+                    "id": pm.id,
+                    "team1": pm.team1,
+                    "team2": pm.team2,
+                    "status": pm.status,
+                    "match_number": pm.match_number,
+                    "pool_id": pm.pool_id,
+                    "is_crossover": pm.is_crossover,
+                    "crossover_rank": pm.crossover_rank,
+                    "balance_score": pm.balance_score
+                }
+                for pm in prc.scheduled_pool_matches
+            ],
+            "crossover_matches": [
+                {
+                    "id": cm.id,
+                    "team1": cm.team1,
+                    "team2": cm.team2,
+                    "status": cm.status,
+                    "match_number": cm.match_number,
+                    "pool_id": cm.pool_id,
+                    "is_crossover": cm.is_crossover,
+                    "crossover_rank": cm.crossover_rank,
+                    "balance_score": cm.balance_score
+                }
+                for cm in prc.crossover_matches
+            ],
+            "pool_completed": prc.pool_completed,
+            "crossover_active": prc.crossover_active,
+            "pools_finalized": prc.pools_finalized
+        }
+    
     return {
         "session_id": session.id,
         "config": {
@@ -198,7 +238,8 @@ def serialize_session(session) -> Dict:
             "banned_pairs": session.config.banned_pairs,
             "locked_teams": session.config.locked_teams,
             "first_bye_players": session.config.first_bye_players,
-            "randomize_player_order": session.config.randomize_player_order
+            "randomize_player_order": session.config.randomize_player_order,
+            "pooled_continuous_rr_config": pooled_rr_config_data
         },
         "matches": matches_data,
         "waiting_players": session.waiting_players,
@@ -316,6 +357,53 @@ def deserialize_session(data: Dict):
         first_bye_players=data["config"].get("first_bye_players", []),
         randomize_player_order=data["config"]["randomize_player_order"]
     )
+    
+    # Reconstruct pooled continuous RR config if present
+    pooled_config_data = data["config"].get("pooled_continuous_rr_config")
+    if pooled_config_data:
+        from python.pickleball_types import PooledContinuousRRConfig, PooledMatch
+        
+        # Reconstruct pool matches
+        scheduled_matches = [
+            PooledMatch(
+                id=pm["id"],
+                team1=pm["team1"],
+                team2=pm["team2"],
+                status=pm["status"],
+                match_number=pm["match_number"],
+                pool_id=pm["pool_id"],
+                is_crossover=pm["is_crossover"],
+                crossover_rank=pm.get("crossover_rank"),
+                balance_score=pm.get("balance_score", 0.0)
+            )
+            for pm in pooled_config_data.get("scheduled_pool_matches", [])
+        ]
+        
+        # Reconstruct crossover matches
+        crossover_matches = [
+            PooledMatch(
+                id=cm["id"],
+                team1=cm["team1"],
+                team2=cm["team2"],
+                status=cm["status"],
+                match_number=cm["match_number"],
+                pool_id=cm["pool_id"],
+                is_crossover=cm["is_crossover"],
+                crossover_rank=cm.get("crossover_rank"),
+                balance_score=cm.get("balance_score", 0.0)
+            )
+            for cm in pooled_config_data.get("crossover_matches", [])
+        ]
+        
+        config.pooled_continuous_rr_config = PooledContinuousRRConfig(
+            pools=pooled_config_data["pools"],
+            pool_court_assignments=pooled_config_data.get("pool_court_assignments", {}),
+            scheduled_pool_matches=scheduled_matches,
+            crossover_matches=crossover_matches,
+            pool_completed=pooled_config_data.get("pool_completed", {}),
+            crossover_active=pooled_config_data.get("crossover_active", False),
+            pools_finalized=pooled_config_data.get("pools_finalized", False)
+        )
     
     # Reconstruct player stats
     player_stats = {}
