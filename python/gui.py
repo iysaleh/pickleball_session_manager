@@ -1880,7 +1880,12 @@ class WinnersCelebrationDialog(QDialog):
             name_label.setStyleSheet(f"QLabel {{ color: {color}; background-color: transparent; }}")
             info_layout.addWidget(name_label)
             
-            stats_text = f"{place} • {winner['wins']}-{winner['losses']} • {winner['pt_diff']:+d} pts"
+            # Show crossover result if available, otherwise show stats
+            crossover_result = winner.get('crossover_result', '')
+            if crossover_result:
+                stats_text = f"{place} • {crossover_result}"
+            else:
+                stats_text = f"{place} • {winner.get('wins', 0)}-{winner.get('losses', 0)} • {winner.get('pt_diff', 0):+d} pts"
             stats_label = QLabel(stats_text)
             stats_label.setFont(QFont("Arial", 14))
             stats_label.setStyleSheet("QLabel { color: white; background-color: transparent; }")
@@ -5801,6 +5806,96 @@ class SessionWindow(QMainWindow):
             
             export_lines.append("")
             
+            # Player Statistics CSV section (same data, CSV format)
+            export_lines.append("PLAYER STATISTICS CSV:")
+            export_lines.append("-" * 70)
+            export_lines.append("Player,ELO,Wins,Losses,Games,Win%,WaitTime,AvgPtDiff,PtsFor,PtsAgainst")
+            for player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against in player_data:
+                wins, losses = record.split('-')
+                win_pct_csv = f"{win_pct:.1f}" if games_played > 0 else "0"
+                avg_pt_diff_csv = f"{avg_pt_diff:.1f}" if games_played > 0 else "0"
+                # Escape commas in player names
+                player_name_csv = f'"{player_name}"' if ',' in player_name else player_name
+                export_lines.append(f"{player_name_csv},{elo:.0f},{wins},{losses},{games_played},{win_pct_csv},{total_wait_seconds},{avg_pt_diff_csv},{pts_for},{pts_against}")
+            
+            export_lines.append("")
+            
+            # Pooled Continuous RR specific exports
+            if self.session.config.mode == 'pooled-continuous-rr':
+                pooled_config = self.session.config.pooled_continuous_rr_config
+                if pooled_config:
+                    # Session Winners (from crossover matches)
+                    export_lines.append("SESSION WINNERS:")
+                    export_lines.append("-" * 70)
+                    
+                    from python.pooled_continuous_rr import get_final_rankings
+                    winners = get_final_rankings(self.session, pooled_config)
+                    
+                    medals = ["🥇 GOLD", "🥈 SILVER", "🥉 BRONZE"]
+                    for i, winner in enumerate(winners[:3]):
+                        medal = medals[i] if i < 3 else f"#{i+1}"
+                        crossover_result = winner.get('crossover_result', '')
+                        if crossover_result:
+                            export_lines.append(f"{medal}: {winner['name']} - {crossover_result}")
+                        else:
+                            export_lines.append(f"{medal}: {winner['name']} - {winner.get('wins', 0)}-{winner.get('losses', 0)}, {winner.get('pt_diff', 0):+d} pts")
+                    
+                    export_lines.append("")
+                    
+                    # Pool Statistics
+                    export_lines.append("POOL STATISTICS:")
+                    export_lines.append("-" * 70)
+                    
+                    from python.pooled_continuous_rr import calculate_pool_standings
+                    
+                    for pool_id, player_ids in pooled_config.pools.items():
+                        pool_complete = pooled_config.pool_completed.get(pool_id, False)
+                        status = "✅ Complete" if pool_complete else "⏳ In Progress"
+                        export_lines.append(f"\n{pool_id} ({status}):")
+                        export_lines.append(f"{'Rank':<6} {'Player':<25} {'W-L':<8} {'Games':<8} {'Win%':<8} {'Pt Diff':<10}")
+                        
+                        standings = calculate_pool_standings(self.session, pool_id)
+                        for rank, standing in enumerate(standings, 1):
+                            games_played = standing.get('games_played', 0)
+                            win_pct = (standing['wins'] / games_played * 100) if games_played > 0 else 0
+                            record = f"{standing['wins']}-{standing['losses']}"
+                            export_lines.append(f"#{rank:<5} {standing['name']:<25} {record:<8} {games_played:<8} {win_pct:.1f}%{'':<3} {standing['pt_diff']:+d}")
+                    
+                    export_lines.append("")
+                    
+                    # Crossover Match Results
+                    if pooled_config.crossover_matches:
+                        export_lines.append("CROSSOVER MATCH RESULTS:")
+                        export_lines.append("-" * 70)
+                        
+                        for cm in pooled_config.crossover_matches:
+                            # Find the completed match
+                            completed_match = next(
+                                (m for m in self.session.matches if m.id == cm.id and m.status == 'completed'),
+                                None
+                            )
+                            
+                            if completed_match and completed_match.score:
+                                t1_score = completed_match.score.get('team1_score', 0)
+                                t2_score = completed_match.score.get('team2_score', 0)
+                                
+                                # Use Match's teams (may have been swapped)
+                                p1_names = [get_player_name(self.session, pid) for pid in completed_match.team1]
+                                p2_names = [get_player_name(self.session, pid) for pid in completed_match.team2]
+                                
+                                winner_names = p1_names if t1_score > t2_score else p2_names
+                                loser_names = p2_names if t1_score > t2_score else p1_names
+                                winner_score = max(t1_score, t2_score)
+                                loser_score = min(t1_score, t2_score)
+                                
+                                export_lines.append(f"Crossover #{cm.crossover_rank}: {', '.join(winner_names)} ({winner_score}) beat {', '.join(loser_names)} ({loser_score})")
+                            else:
+                                p1_names = [get_player_name(self.session, pid) for pid in cm.team1]
+                                p2_names = [get_player_name(self.session, pid) for pid in cm.team2]
+                                export_lines.append(f"Crossover #{cm.crossover_rank}: {', '.join(p1_names)} vs {', '.join(p2_names)} - Pending")
+                        
+                        export_lines.append("")
+            
             # Match History (most recent first)
             completed_matches = [m for m in self.session.matches if m.status == 'completed']
             if completed_matches:
@@ -5853,7 +5948,7 @@ class SessionWindow(QMainWindow):
             filename = f"pickleball_session_{timestamp}.txt"
             filepath = os.path.join(os.getcwd(), filename)
             
-            with open(filepath, 'w') as f:
+            with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(export_text)
             
             QMessageBox.information(
@@ -6598,17 +6693,24 @@ class SessionWindow(QMainWindow):
                     row = crossover_table.rowCount()
                     crossover_table.insertRow(row)
                     
-                    p1_names = [self._get_player_name(pid) for pid in cm.team1]
-                    p2_names = [self._get_player_name(pid) for pid in cm.team2]
-                    
-                    # Find result if match completed
+                    # Find the match result if completed
                     result = "Pending"
+                    display_team1 = cm.team1
+                    display_team2 = cm.team2
+                    
                     for m in self.session.matches:
                         if m.id == cm.id and m.status == 'completed' and m.score:
                             t1_score = m.score.get('team1_score', 0)
                             t2_score = m.score.get('team2_score', 0)
+                            # Use the Match's team1/team2 (may have been swapped during creation)
+                            display_team1 = m.team1
+                            display_team2 = m.team2
+                            # Show scores in correct orientation: Player 1 score - Player 2 score
                             result = f"{t1_score} - {t2_score}"
                             break
+                    
+                    p1_names = [self._get_player_name(pid) for pid in display_team1]
+                    p2_names = [self._get_player_name(pid) for pid in display_team2]
                     
                     items = [
                         f"#{cm.crossover_rank}",
@@ -6664,7 +6766,8 @@ class SessionWindow(QMainWindow):
                         t1_score = m.score.get('team1_score', 0)
                         t2_score = m.score.get('team2_score', 0)
                         
-                        p1_on_team1 = player1_id in pm.team1
+                        # Use Match's team1/team2 (may have been swapped during randomization)
+                        p1_on_team1 = player1_id in m.team1
                         
                         if p1_on_team1:
                             return "W" if t1_score > t2_score else "L"
@@ -7242,6 +7345,7 @@ class SessionWindow(QMainWindow):
     def _configure_queue_visibility(self):
         """Configure match queue visibility based on game mode"""
         is_competitive_variety = self.session.config.mode == 'competitive-variety'
+        is_pooled_rr = self.session.config.mode == 'pooled-continuous-rr'
         
         # Hide queue widgets for competitive variety mode
         if is_competitive_variety:
@@ -7253,8 +7357,9 @@ class SessionWindow(QMainWindow):
             self.queue_list.show()
             self.queue_count.show()
         
-        # Adjust waitlist and history stretch factors based on queue visibility
-        if is_competitive_variety:
+        # Adjust waitlist and history stretch factors based on mode
+        # Both competitive-variety and pooled-continuous-rr need expandable waitlist with auto-sizing
+        if is_competitive_variety or is_pooled_rr:
             # Remove height restriction and give waitlist the stretch that queue had
             self.waiting_list.setMaximumHeight(16777215)  # Max int value for unlimited
             # Set waitlist to take the space that queue would have had

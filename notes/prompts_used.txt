@@ -773,7 +773,30 @@ KeyError: 'games'
 * Delete "Continuous Wave Flow" mode -- that is a failed algorithm.
 * For "Pooled Continuous RR with Crossover" in the "Manage Pools" window, the schedule preview didn't automatically recalculate after dragging/dropping players between the pools. Fix the Schedule preview to automatically recalculate after the user drags and drops players between the pools. In fact, it seems that there is a bug when dragging and dropping a player from pool 1 into pool 2, the player that was dragged is dropped. This is a critical bug that needs to be fixed.
 
+* In "Pooled Continuous RR with Crossover" for the active session window title at the top showing Courts Queued Completed -- Queued is 0 even though there are many games queued.
 
+* For "Pooled Continuous RR with Crossover" the winners aren't the players with the most point differential or highest stats, they're the top players and winners of the crossover match -- if there are 2 pools, #1 gold is the winner of the #1 crossover match, #2 silver is the loser of the #1 crossover match, and #3 bronze is the winner of the #2 crossover match. If there are 3 pools, the top three players are all from the #1 crossover matches ranked by how many crossover matches they won and point differential.
+
+* For "Pooled Continuous RR with Crossover" update the "Export Session" option to export the session winners based on how we just calculated them from the crossover matches. Also, update the "Export Session" option to export pool statistics and crossover match results.
+* Update the "Export Session" feature for all modes to also export a PLAYER STATISTICS CSV section right after the PLAYER STATISTICS with the exact same data, just in CSV formatting.
+* [bug] In "Pool Statistics" for the crossover matches results page, the results always show 11 - something , with the winning score being on the left and the losing on the right, but the table is printed in an ordered fashion where the winner might be on the right and the loser on the left. Fix the crossover matches pool statistics page to make sure the result orientation is correct for where player1 and player2 are on the table given who won.
+
+* [bug] In "Pool Statistics", the head to head results table is not showing correct wins/losses due to player side randomization.
+* [bug] there is an export error now: EXPORT ERROR: Error exporting session:
+'charmap' codec can't encode character '\U0001f947' in position 2998: character maps to <undefined>
+Traceback (most recent call last):
+  File "\\wsl.localhost\fedoraremix\home\isaleh\dev\pickleball\python\gui.py", line 5952, in export_session
+    f.write(export_text)
+    ~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\Ibraheem Saleh\AppData\Local\Python\pythoncore-3.14-64\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f947' in position 2998: character maps to <undefined>
+
+
+* Auto text resizing for the Waitlist in "Pooled Continuous RR with Crossover" doesn't seem to be happening, make sure the "Waitlist" text automatically resizes to use as much space as it can.
+* [bug] See @pickleball_session_20260201_194456.txt , Ibraheem lost twice, but pool statistics shows him as 4-1. Pool statistics should be 3-2
+* 
 
 # Not sent -- TBD
 * Look at @pickleball_session_20260105_221745.txt , the algorithm insists on having players that played together play against each other in the next round, or having players that played against each other play together in the next round... That SHOULD NOT HAPPEN SO REGULARLY. If we have 8 rounds configured, those back to back configurations should happen as spread apart as possible. Analyze the session distribution that gets generated, and shuffle rounds around to make inter-round variety much better. 

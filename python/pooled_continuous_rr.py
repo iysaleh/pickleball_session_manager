@@ -296,37 +296,41 @@ def calculate_pool_standings(
         t1_score = session_match.score.get('team1_score', 0)
         t2_score = session_match.score.get('team2_score', 0)
         
+        # Use session_match teams (may have been swapped during randomization)
+        team1 = session_match.team1
+        team2 = session_match.team2
+        
         # Update stats for team1 players
-        for pid in match.team1:
+        for pid in team1:
             if pid in stats:
                 stats[pid]['pts_for'] += t1_score
                 stats[pid]['pts_against'] += t2_score
                 stats[pid]['games_played'] += 1
                 if t1_score > t2_score:
                     stats[pid]['wins'] += 1
-                    for opp in match.team2:
+                    for opp in team2:
                         if opp in stats:
                             stats[pid]['head_to_head'][opp] = 'W'
                 else:
                     stats[pid]['losses'] += 1
-                    for opp in match.team2:
+                    for opp in team2:
                         if opp in stats:
                             stats[pid]['head_to_head'][opp] = 'L'
         
         # Update stats for team2 players
-        for pid in match.team2:
+        for pid in team2:
             if pid in stats:
                 stats[pid]['pts_for'] += t2_score
                 stats[pid]['pts_against'] += t1_score
                 stats[pid]['games_played'] += 1
                 if t2_score > t1_score:
                     stats[pid]['wins'] += 1
-                    for opp in match.team1:
+                    for opp in team1:
                         if opp in stats:
                             stats[pid]['head_to_head'][opp] = 'W'
                 else:
                     stats[pid]['losses'] += 1
-                    for opp in match.team1:
+                    for opp in team1:
                         if opp in stats:
                             stats[pid]['head_to_head'][opp] = 'L'
     
@@ -689,7 +693,9 @@ def check_session_complete(session: Session, config: PooledContinuousRRConfig) -
 def get_final_rankings(session: Session, config: PooledContinuousRRConfig = None) -> List[Dict]:
     """
     Get final rankings after all matches complete.
-    Combines pool standings with crossover results.
+    Winners are determined by crossover match results:
+    - For 2 pools: Gold = winner of crossover #1, Silver = loser of crossover #1, Bronze = winner of crossover #2
+    - For 3+ pools: Top 3 from crossover #1 matches, ranked by crossover wins then point differential
     
     Args:
         session: The session
@@ -701,7 +707,152 @@ def get_final_rankings(session: Session, config: PooledContinuousRRConfig = None
     if config is None:
         config = session.config.pooled_continuous_rr_config
     
-    # Aggregate all stats
+    if not config or not config.crossover_matches:
+        # Fallback to stats-based ranking if no crossover matches
+        return _get_stats_based_rankings(session)
+    
+    # Get player name lookup
+    player_names = {p.id: p.name for p in session.config.players}
+    
+    # Find completed crossover matches and their results
+    crossover_results: Dict[int, List[Dict]] = {}  # rank -> list of {player_id, won, pt_diff}
+    
+    for crossover_match in config.crossover_matches:
+        # Find the completed match in session.matches
+        completed_match = next(
+            (m for m in session.matches if m.id == crossover_match.id and m.status == 'completed'),
+            None
+        )
+        
+        if not completed_match or not completed_match.score:
+            continue
+        
+        rank = crossover_match.crossover_rank
+        if rank not in crossover_results:
+            crossover_results[rank] = []
+        
+        team1_score = completed_match.score.get('team1_score', 0)
+        team2_score = completed_match.score.get('team2_score', 0)
+        
+        # For singles, team1 and team2 are single-player lists
+        for player_id in completed_match.team1:
+            won = team1_score > team2_score
+            pt_diff = team1_score - team2_score
+            crossover_results[rank].append({
+                'player_id': player_id,
+                'name': player_names.get(player_id, player_id),
+                'won': won,
+                'pt_diff': pt_diff,
+                'crossover_rank': rank
+            })
+        
+        for player_id in completed_match.team2:
+            won = team2_score > team1_score
+            pt_diff = team2_score - team1_score
+            crossover_results[rank].append({
+                'player_id': player_id,
+                'name': player_names.get(player_id, player_id),
+                'won': won,
+                'pt_diff': pt_diff,
+                'crossover_rank': rank
+            })
+    
+    # If no crossover results yet, fall back to stats
+    if not crossover_results:
+        return _get_stats_based_rankings(session)
+    
+    num_pools = len(config.pools)
+    rankings = []
+    
+    if num_pools == 2:
+        # For 2 pools: 
+        # Gold = winner of crossover #1
+        # Silver = loser of crossover #1  
+        # Bronze = winner of crossover #2
+        
+        # Get rank 1 results
+        rank1_results = crossover_results.get(1, [])
+        rank1_winner = next((r for r in rank1_results if r['won']), None)
+        rank1_loser = next((r for r in rank1_results if not r['won']), None)
+        
+        # Get rank 2 results
+        rank2_results = crossover_results.get(2, [])
+        rank2_winner = next((r for r in rank2_results if r['won']), None)
+        
+        if rank1_winner:
+            rankings.append({
+                'player_id': rank1_winner['player_id'],
+                'name': rank1_winner['name'],
+                'rank': 1,
+                'medal': '🥇',
+                'crossover_result': 'Crossover #1 Winner'
+            })
+        
+        if rank1_loser:
+            rankings.append({
+                'player_id': rank1_loser['player_id'],
+                'name': rank1_loser['name'],
+                'rank': 2,
+                'medal': '🥈',
+                'crossover_result': 'Crossover #1 Runner-up'
+            })
+        
+        if rank2_winner:
+            rankings.append({
+                'player_id': rank2_winner['player_id'],
+                'name': rank2_winner['name'],
+                'rank': 3,
+                'medal': '🥉',
+                'crossover_result': 'Crossover #2 Winner'
+            })
+    else:
+        # For 3+ pools: Top 3 from crossover #1 matches
+        # Ranked by: crossover wins (desc), then point differential (desc)
+        rank1_results = crossover_results.get(1, [])
+        
+        # Sort by won (True first), then by pt_diff (descending)
+        rank1_sorted = sorted(
+            rank1_results,
+            key=lambda x: (-int(x['won']), -x['pt_diff'])
+        )
+        
+        medals = ['🥇', '🥈', '🥉']
+        for i, result in enumerate(rank1_sorted[:3]):
+            rankings.append({
+                'player_id': result['player_id'],
+                'name': result['name'],
+                'rank': i + 1,
+                'medal': medals[i] if i < 3 else '',
+                'crossover_result': 'Crossover #1 Winner' if result['won'] else f'Crossover #1 (Diff: {result["pt_diff"]:+d})'
+            })
+    
+    # Add stats from session for display
+    for r in rankings:
+        stats = session.player_stats.get(r['player_id'])
+        if stats:
+            r['wins'] = stats.wins
+            r['losses'] = stats.losses
+            r['pts_for'] = stats.total_points_for
+            r['pts_against'] = stats.total_points_against
+            r['pt_diff'] = stats.total_points_for - stats.total_points_against
+            r['games_played'] = stats.games_played
+            r['win_pct'] = (stats.wins / stats.games_played * 100) if stats.games_played > 0 else 0.0
+        else:
+            r['wins'] = 0
+            r['losses'] = 0
+            r['pts_for'] = 0
+            r['pts_against'] = 0
+            r['pt_diff'] = 0
+            r['games_played'] = 0
+            r['win_pct'] = 0.0
+    
+    return rankings
+
+
+def _get_stats_based_rankings(session: Session) -> List[Dict]:
+    """
+    Fallback ranking based on overall stats (used when crossover not complete).
+    """
     all_stats: Dict[str, Dict] = {}
     
     for player in session.config.players:
