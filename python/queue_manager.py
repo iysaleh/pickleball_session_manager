@@ -281,12 +281,19 @@ def populate_empty_courts(session: Session) -> Session:
         valid_matches.sort(reverse=True, key=lambda x: x[0])
         score, match_idx, best_match, from_queue = valid_matches[0]
         
+        # Randomize team sides for round-robin mode to prevent same-side bias
+        import random
+        if random.random() < 0.5:
+            team1, team2 = best_match.team1, best_match.team2
+        else:
+            team1, team2 = best_match.team2, best_match.team1
+        
         # Create match on this court
         match = Match(
             id=generate_id(),
             court_number=court_num,
-            team1=best_match.team1,
-            team2=best_match.team2,
+            team1=team1,
+            team2=team2,
             status='waiting',
             start_time=now()
         )
@@ -329,6 +336,17 @@ def get_session_summary(session: Session) -> Dict:
     completed_matches = get_completed_matches(session)
     waiting_players = get_waiting_players(session)
     
+    # Calculate queued matches count - handle pooled-continuous-rr separately
+    queued_count = len(session.match_queue)
+    if session.config.mode == 'pooled-continuous-rr':
+        pooled_config = session.config.pooled_continuous_rr_config
+        if pooled_config:
+            # Count pending pool matches
+            queued_count = sum(1 for pm in pooled_config.scheduled_pool_matches if pm.status == 'pending')
+            # Add pending crossover matches if crossover is active
+            if pooled_config.crossover_active:
+                queued_count += sum(1 for cm in pooled_config.crossover_matches if cm.status == 'pending')
+    
     return {
         'active_matches': len(active_matches),
         'completed_matches': len(completed_matches),
@@ -336,7 +354,7 @@ def get_session_summary(session: Session) -> Dict:
         'total_players': len(session.active_players),
         'empty_courts': len(get_empty_courts(session)),
         'total_courts': session.config.courts,
-        'queued_matches': len(session.match_queue),
+        'queued_matches': queued_count,
     }
 
 

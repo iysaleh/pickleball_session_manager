@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import List, Set, Dict, Optional, Literal, Any
 from datetime import datetime
 
-GameMode = Literal['king-of-court', 'round-robin', 'competitive-variety', 'competitive-round-robin', 'competitive-continuous-round-robin', 'continuous-wave-flow', 'pooled-continuous-rr']
+GameMode = Literal['king-of-court', 'round-robin', 'competitive-variety', 'competitive-round-robin', 'competitive-continuous-round-robin', 'pooled-continuous-rr']
 SessionType = Literal['doubles', 'singles']
 MatchStatus = Literal['waiting', 'in-progress', 'completed', 'forfeited']
 
@@ -258,7 +258,6 @@ class SessionConfig:
     pre_seeded_ratings: bool = False  # Whether skill ratings were pre-seeded
     king_of_court_config: Optional[KingOfCourtConfig] = None  # King of Court specific settings
     competitive_round_robin_config: Optional[CompetitiveRoundRobinConfig] = None  # Competitive Round Robin settings
-    continuous_wave_flow_config: Optional['ContinuousWaveFlowConfig'] = None  # Continuous Wave Flow settings
     pooled_continuous_rr_config: Optional['PooledContinuousRRConfig'] = None  # Pooled Continuous RR settings
 
 

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QInputDialog, QSpinBox, QGroupBox, QCheckBox, QFrame, QScrollArea,
     QGridLayout, QSpacerItem, QSizePolicy, QSlider, QDialogButtonBox, QTextEdit
 )
-from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup, QMimeData
+from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup, QMimeData, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen, QPixmap, QDrag
 
 from python.pickleball_types import (
@@ -152,6 +152,75 @@ class DraggablePlayerLabel(QLabel):
         
         event.ignore()
         self.dragLeaveEvent(event)
+
+
+class PoolListWidget(QListWidget):
+    """QListWidget for pool player lists that properly handles drag-drop with UserRole data"""
+    
+    # Signal emitted when players are dropped into this list
+    playersDropped = pyqtSignal()
+    
+    def __init__(self, pool_id: str, parent=None):
+        super().__init__(parent)
+        self.pool_id = pool_id
+        self.setDragDropMode(QListWidget.DragDropMode.DragDrop)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.setAcceptDrops(True)
+        self.setDragEnabled(True)
+    
+    def mimeData(self, items):
+        """Encode player_id in mime data when dragging"""
+        mime = super().mimeData(items)
+        if items:
+            # Store player IDs and names as custom mime data
+            player_data = []
+            for item in items:
+                pid = item.data(Qt.ItemDataRole.UserRole)
+                if pid:
+                    player_data.append(f"{pid}:{item.text()}")
+            mime.setText('|'.join(player_data))
+        return mime
+    
+    def dropEvent(self, event):
+        """Handle drop by properly transferring player IDs"""
+        source = event.source()
+        if source and source != self and isinstance(source, PoolListWidget):
+            # Get the player data from mime data
+            mime = event.mimeData()
+            if mime.hasText():
+                # Parse player data (format: "pid:name|pid:name|...")
+                player_entries = mime.text().split('|')
+                players_to_move = []
+                for entry in player_entries:
+                    if ':' in entry:
+                        pid, name = entry.split(':', 1)
+                        if pid:
+                            players_to_move.append((pid, name))
+                
+                # Remove from source first (iterate backwards to avoid index issues)
+                for pid, _ in players_to_move:
+                    for i in range(source.count() - 1, -1, -1):
+                        item = source.item(i)
+                        if item and item.data(Qt.ItemDataRole.UserRole) == pid:
+                            source.takeItem(i)
+                            break
+                
+                # Add items to this list with proper UserRole data
+                for pid, name in players_to_move:
+                    new_item = QListWidgetItem(name)
+                    new_item.setData(Qt.ItemDataRole.UserRole, pid)
+                    self.addItem(new_item)
+                
+                # Accept the event and prevent any further processing
+                event.setDropAction(Qt.DropAction.IgnoreAction)
+                event.accept()
+                
+                # Emit signal only once from target
+                self.playersDropped.emit()
+                return
+        
+        # Ignore internal reordering - we don't support it
+        event.ignore()
 
 
 class DeselectableListWidget(QListWidget):
@@ -1618,357 +1687,6 @@ class ManageMatchesDialog(QDialog):
         return self.config
 
 
-class ManageContinuousWaveFlowDialog(QDialog):
-    """
-    Dialog for managing first round matches in Continuous Wave Flow mode.
-    
-    Unlike Competitive Round Robin which schedules all matches upfront,
-    this only schedules the first round. Subsequent matches are generated
-    dynamically as courts become available.
-    """
-    
-    def __init__(self, session: Session, config, parent=None):
-        super().__init__(parent)
-        from python.pickleball_types import ContinuousWaveFlowConfig
-        self.session = session
-        self.config: ContinuousWaveFlowConfig = config
-        self.scheduled_matches = []
-        self.waitlist_players = []
-        self.init_ui()
-        self.generate_first_round()
-    
-    def init_ui(self):
-        self.setWindowTitle("Manage First Round - Continuous Wave Flow")
-        self.resize(1000, 700)
-        
-        layout = QVBoxLayout()
-        
-        # Header info
-        info_label = QLabel(
-            "📌 Continuous Wave Flow Mode\n\n"
-            "• Only the FIRST round is scheduled here\n"
-            "• Subsequent matches are generated dynamically as courts finish\n"
-            "• Players who wait longest get priority for next match\n"
-            "• Algorithm ensures at least 2 players swap between matches"
-        )
-        info_label.setStyleSheet("QLabel { color: #4CAF50; font-size: 12px; padding: 10px; background-color: #1B5E20; border-radius: 5px; }")
-        layout.addWidget(info_label)
-        
-        # Stats
-        self.stats_label = QLabel("Loading first round...")
-        layout.addWidget(self.stats_label)
-        
-        # Waitlist display
-        self.waitlist_label = QLabel("")
-        self.waitlist_label.setStyleSheet("QLabel { color: #FFEB3B; font-size: 14px; padding: 10px; background-color: #37474F; border-radius: 5px; }")
-        layout.addWidget(self.waitlist_label)
-        
-        # Match list
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        
-        self.matches_container = QWidget()
-        self.matches_layout = QVBoxLayout(self.matches_container)
-        self.matches_layout.addStretch()
-        
-        scroll.setWidget(self.matches_container)
-        layout.addWidget(scroll)
-        
-        # Waitlist warning
-        self.waitlist_warning = QLabel("")
-        self.waitlist_warning.setStyleSheet("QLabel { color: #FF9800; font-weight: bold; }")
-        layout.addWidget(self.waitlist_warning)
-        
-        # Buttons
-        button_layout = QHBoxLayout()
-        
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(cancel_btn)
-        
-        regenerate_btn = QPushButton("🔄 Regenerate")
-        regenerate_btn.setToolTip("Regenerate first round with new random assignments")
-        regenerate_btn.clicked.connect(self.regenerate_first_round)
-        button_layout.addWidget(regenerate_btn)
-        
-        button_layout.addStretch()
-        
-        approve_all_btn = QPushButton("✅ Approve All")
-        approve_all_btn.clicked.connect(self.approve_all)
-        button_layout.addWidget(approve_all_btn)
-        
-        self.finalize_btn = QPushButton("✅ Finalize First Round")
-        self.finalize_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 10px 20px; }")
-        self.finalize_btn.clicked.connect(self.finalize)
-        button_layout.addWidget(self.finalize_btn)
-        
-        layout.addLayout(button_layout)
-        
-        self.setLayout(layout)
-        
-        # Dark theme
-        self.setStyleSheet("""
-            QDialog { background-color: #2a2a2a; color: white; }
-            QLabel { color: white; }
-            QPushButton { background-color: #0d47a1; color: white; padding: 8px 16px; border-radius: 4px; }
-            QPushButton:hover { background-color: #1565c0; }
-        """)
-    
-    def generate_first_round(self):
-        """Generate matches for the first round only"""
-        from python.continuous_wave_flow import generate_first_round_schedule
-        
-        self.scheduled_matches = generate_first_round_schedule(self.session, self.config)
-        self.config.scheduled_matches = self.scheduled_matches
-        
-        # Calculate waitlist (players not in first round)
-        players_in_matches = set()
-        for match in self.scheduled_matches:
-            players_in_matches.update(match.get_all_players())
-        
-        all_players = {p.id for p in self.session.config.players}
-        self.waitlist_players = list(all_players - players_in_matches)
-        
-        self.refresh_display()
-        self.check_waitlist_warning()
-    
-    def regenerate_first_round(self):
-        """Regenerate first round with new random assignments"""
-        from python.continuous_wave_flow import generate_first_round_schedule
-        
-        self.scheduled_matches = generate_first_round_schedule(self.session, self.config)
-        self.config.scheduled_matches = self.scheduled_matches
-        
-        # Recalculate waitlist
-        players_in_matches = set()
-        for match in self.scheduled_matches:
-            players_in_matches.update(match.get_all_players())
-        
-        all_players = {p.id for p in self.session.config.players}
-        self.waitlist_players = list(all_players - players_in_matches)
-        
-        self.refresh_display()
-        self.check_waitlist_warning()
-    
-    def refresh_display(self):
-        """Refresh the match display"""
-        from python.continuous_wave_flow import get_player_display_info
-        
-        # Clear existing
-        while self.matches_layout.count() > 1:
-            item = self.matches_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        
-        # Update waitlist display
-        if self.waitlist_players:
-            waiter_names = [get_player_display_info(self.session, p)['name'] for p in self.waitlist_players]
-            self.waitlist_label.setText(f"⏳ Initial Waitlist: {', '.join(waiter_names)}")
-        else:
-            self.waitlist_label.setText("⏳ Initial Waitlist: (none - all players in first round)")
-        
-        # Add match cards
-        for i, match in enumerate(self.scheduled_matches):
-            card = QFrame()
-            card.setFrameStyle(QFrame.Shape.StyledPanel)
-            
-            if match.status == 'approved':
-                bg_color = "#1B5E20"
-                border_color = "#4CAF50"
-            else:
-                bg_color = "#37474F"
-                border_color = "#78909C"
-            
-            card.setStyleSheet(f"QFrame {{ background-color: {bg_color}; border: 2px solid {border_color}; border-radius: 5px; padding: 10px; }}")
-            
-            card_layout = QHBoxLayout(card)
-            
-            # Match info
-            team1_names = [get_player_display_info(self.session, p)['name'] for p in match.team1]
-            team2_names = [get_player_display_info(self.session, p)['name'] for p in match.team2]
-            
-            match_label = QLabel(f"Court {i+1}: {', '.join(team1_names)} vs {', '.join(team2_names)}")
-            match_label.setStyleSheet("QLabel { font-size: 14px; font-weight: bold; }")
-            card_layout.addWidget(match_label)
-            
-            card_layout.addStretch()
-            
-            # Balance score
-            balance_label = QLabel(f"Balance: {match.balance_score:.0f}")
-            card_layout.addWidget(balance_label)
-            
-            # Action buttons
-            btn_layout = QVBoxLayout()
-            
-            # Approve/Reject buttons
-            if match.status != 'approved':
-                approve_btn = QPushButton("✅")
-                approve_btn.setFixedSize(35, 35)
-                approve_btn.setToolTip("Approve this match")
-                approve_btn.clicked.connect(lambda checked, idx=i: self.approve_match(idx))
-                btn_layout.addWidget(approve_btn)
-            else:
-                unapprove_btn = QPushButton("↩️")
-                unapprove_btn.setFixedSize(35, 35)
-                unapprove_btn.setToolTip("Unapprove (return to pending)")
-                unapprove_btn.clicked.connect(lambda checked, idx=i: self.unapprove_match(idx))
-                btn_layout.addWidget(unapprove_btn)
-            
-            # Swap button
-            swap_btn = QPushButton("🔄")
-            swap_btn.setFixedSize(35, 35)
-            swap_btn.setToolTip("Swap a player")
-            swap_btn.setStyleSheet("QPushButton { background-color: #FF9800; }")
-            swap_btn.clicked.connect(lambda checked, idx=i: self.swap_player_dialog(idx))
-            btn_layout.addWidget(swap_btn)
-            
-            card_layout.addLayout(btn_layout)
-            
-            self.matches_layout.insertWidget(i, card)
-        
-        # Update stats
-        approved = len([m for m in self.scheduled_matches if m.status == 'approved'])
-        pending = len([m for m in self.scheduled_matches if m.status == 'pending'])
-        self.stats_label.setText(f"First Round: {len(self.scheduled_matches)} matches | Approved: {approved} | Pending: {pending}")
-    
-    def swap_player_dialog(self, match_index: int):
-        """Open dialog to swap a player in a match"""
-        from python.continuous_wave_flow import get_player_display_info
-        
-        if match_index < 0 or match_index >= len(self.scheduled_matches):
-            return
-        
-        match = self.scheduled_matches[match_index]
-        
-        # Create swap dialog
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Swap Player")
-        dialog.resize(500, 350)
-        layout = QVBoxLayout()
-        
-        layout.addWidget(QLabel("Select player to replace:"))
-        player_combo = QComboBox()
-        for player_id in match.get_all_players():
-            info = get_player_display_info(self.session, player_id)
-            player_combo.addItem(f"{info['name']}", player_id)
-        layout.addWidget(player_combo)
-        
-        layout.addWidget(QLabel("Select replacement from waitlist:"))
-        replacement_combo = QComboBox()
-        replacement_combo.addItem("(Select a player)", None)
-        
-        # Add waitlist players as options
-        for player_id in self.waitlist_players:
-            info = get_player_display_info(self.session, player_id)
-            replacement_combo.addItem(f"{info['name']}", player_id)
-        layout.addWidget(replacement_combo)
-        
-        # Result label
-        result_label = QLabel("")
-        result_label.setStyleSheet("QLabel { color: #FFB74D; }")
-        layout.addWidget(result_label)
-        
-        # Buttons
-        btn_layout = QHBoxLayout()
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(dialog.reject)
-        btn_layout.addWidget(cancel_btn)
-        
-        swap_btn = QPushButton("Swap")
-        
-        def do_swap():
-            old_id = player_combo.currentData()
-            new_id = replacement_combo.currentData()
-            if not old_id or not new_id:
-                result_label.setText("Please select both players")
-                return
-            
-            # Perform the swap
-            new_team1 = [new_id if p == old_id else p for p in match.team1]
-            new_team2 = [new_id if p == old_id else p for p in match.team2]
-            
-            from python.pickleball_types import ScheduledMatch
-            from python.competitive_round_robin import calculate_team_balance_score
-            
-            new_match = ScheduledMatch(
-                id=match.id,
-                team1=new_team1,
-                team2=new_team2,
-                status=match.status,
-                match_number=match.match_number,
-                balance_score=calculate_team_balance_score(self.session, new_team1, new_team2),
-                round_number=0
-            )
-            
-            # Update match and waitlist
-            self.scheduled_matches[match_index] = new_match
-            self.waitlist_players.remove(new_id)
-            self.waitlist_players.append(old_id)
-            
-            self.refresh_display()
-            dialog.accept()
-        
-        swap_btn.clicked.connect(do_swap)
-        btn_layout.addWidget(swap_btn)
-        layout.addLayout(btn_layout)
-        
-        dialog.setLayout(layout)
-        dialog.setStyleSheet("""
-            QDialog { background-color: #2a2a2a; color: white; }
-            QLabel { color: white; }
-            QComboBox { background-color: #3a3a3a; color: white; padding: 5px; }
-            QPushButton { background-color: #0d47a1; color: white; padding: 8px; border-radius: 4px; }
-        """)
-        dialog.exec()
-    
-    def check_waitlist_warning(self):
-        """Check if waitlist size is sufficient"""
-        waiters = len(self.waitlist_players)
-        
-        if waiters < 2:
-            self.waitlist_warning.setText(
-                f"⚠️ Warning: Only {waiters} player(s) will be waiting. "
-                f"Continuous Wave Flow works best with at least 2 players waiting "
-                f"to ensure proper rotation between matches."
-            )
-        else:
-            self.waitlist_warning.setText("")
-    
-    def approve_match(self, index):
-        """Approve a single match"""
-        if 0 <= index < len(self.scheduled_matches):
-            self.scheduled_matches[index].status = 'approved'
-            self.refresh_display()
-    
-    def unapprove_match(self, index):
-        """Unapprove an approved match"""
-        if 0 <= index < len(self.scheduled_matches):
-            self.scheduled_matches[index].status = 'pending'
-            self.refresh_display()
-    
-    def approve_all(self):
-        """Approve all matches"""
-        for match in self.scheduled_matches:
-            match.status = 'approved'
-        self.refresh_display()
-    
-    def finalize(self):
-        """Finalize first round and close dialog"""
-        approved = [m for m in self.scheduled_matches if m.status == 'approved']
-        
-        if not approved:
-            QMessageBox.warning(self, "No Matches", "Please approve at least one match.")
-            return
-        
-        self.config.scheduled_matches = self.scheduled_matches
-        self.config.schedule_finalized = True
-        self.accept()
-    
-    def get_finalized_config(self):
-        """Return the finalized config"""
-        return self.config
-
-
 class ManageByesDialog(QDialog):
     """Dialog for managing first bye players"""
     
@@ -2370,11 +2088,13 @@ class ManagePoolsDialog(QDialog):
     
     def refresh_pool_display(self):
         """Refresh the pool display widgets"""
-        # Clear existing pool widgets
+        # Clear existing pool widgets and list references
         while self.pools_layout.count():
             item = self.pools_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+        
+        self.pool_lists = {}  # Clear pool list references
         
         # Create widget for each pool
         for pool_id in sorted(self.config.pools.keys()):
@@ -2406,12 +2126,8 @@ class ManagePoolsDialog(QDialog):
         
         layout = QVBoxLayout()
         
-        # Player list
-        player_list = QListWidget()
-        player_list.setDragDropMode(QListWidget.DragDropMode.DragDrop)
-        player_list.setDefaultDropAction(Qt.DropAction.MoveAction)
-        player_list.setAcceptDrops(True)
-        player_list.setProperty("pool_id", pool_id)
+        # Player list - use custom PoolListWidget for proper drag-drop handling
+        player_list = PoolListWidget(pool_id)
         player_list.setStyleSheet("""
             QListWidget { 
                 background-color: #3a3a3a; 
@@ -2440,10 +2156,13 @@ class ManagePoolsDialog(QDialog):
                 item.setData(Qt.ItemDataRole.UserRole, pid)
                 player_list.addItem(item)
         
-        # Connect drop event for manual pool transfers
-        player_list.model().rowsInserted.connect(
-            lambda: self.on_pool_changed(player_list, pool_id)
-        )
+        # Connect drop signal for pool transfers
+        player_list.playersDropped.connect(self.on_pools_changed)
+        
+        # Store reference for later access
+        if not hasattr(self, 'pool_lists'):
+            self.pool_lists = {}
+        self.pool_lists[pool_id] = player_list
         
         layout.addWidget(player_list)
         
@@ -2451,31 +2170,47 @@ class ManagePoolsDialog(QDialog):
         count_label = QLabel(f"{len(player_ids)} players")
         count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         count_label.setStyleSheet("QLabel { color: #aaa; font-size: 11px; }")
+        count_label.setObjectName(f"count_{pool_id}")
         layout.addWidget(count_label)
         
         widget.setLayout(layout)
         return widget
     
-    def on_pool_changed(self, list_widget: QListWidget, pool_id: str):
-        """Handle when players are dragged between pools"""
-        # Update config from list widget contents
-        new_player_ids = []
-        for i in range(list_widget.count()):
-            item = list_widget.item(i)
-            pid = item.data(Qt.ItemDataRole.UserRole)
-            if pid:
-                new_player_ids.append(pid)
+    def on_pools_changed(self):
+        """Handle when players are dragged between pools - sync config from list widgets"""
+        # Update config from all pool list widgets
+        for pool_id, player_list in self.pool_lists.items():
+            player_ids = []
+            for i in range(player_list.count()):
+                item = player_list.item(i)
+                pid = item.data(Qt.ItemDataRole.UserRole)
+                if pid:
+                    player_ids.append(pid)
+            self.config.pools[pool_id] = player_ids
         
-        # Remove these players from other pools
-        for other_pool_id in self.config.pools:
-            if other_pool_id != pool_id:
-                self.config.pools[other_pool_id] = [
-                    p for p in self.config.pools[other_pool_id] 
-                    if p not in new_player_ids
-                ]
-        
-        self.config.pools[pool_id] = new_player_ids
+        # Update count labels
+        self.update_pool_counts()
+        self.update_stats()
         self.update_preview()
+    
+    def update_pool_counts(self):
+        """Update player count labels for all pools"""
+        for pool_id, player_list in self.pool_lists.items():
+            count = player_list.count()
+            # Find the count label in the parent widget
+            for i in range(self.pools_layout.count()):
+                item = self.pools_layout.itemAt(i)
+                if item and item.widget():
+                    group = item.widget()
+                    if isinstance(group, QGroupBox) and group.title() == pool_id:
+                        # Find the count label
+                        for j in range(group.layout().count()):
+                            child = group.layout().itemAt(j)
+                            if child and child.widget():
+                                label = child.widget()
+                                if isinstance(label, QLabel) and label.objectName() == f"count_{pool_id}":
+                                    label.setText(f"{count} players")
+                                    break
     
     def add_pool(self):
         """Add a new pool and redistribute players"""
@@ -2669,7 +2404,7 @@ class SetupDialog(QDialog):
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel("Game Mode:"))
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Round Robin", "King of the Court", "Competitive Variety", "Competitive Round Robin", "Competitive Continuous Round Robin", "Continuous Wave Flow", "Pooled Continuous RR with Crossover"])
+        self.mode_combo.addItems(["Continuous Round Robin", "King of the Court", "Competitive Variety", "Competitive Round Robin", "Competitive Continuous Round Robin", "Pooled Continuous RR with Crossover"])
         # Set default to 'Competitive Variety'
         self.mode_combo.setCurrentIndex(self.mode_combo.findText("Competitive Variety"))
         mode_layout.addWidget(self.mode_combo)
@@ -2889,11 +2624,10 @@ class SetupDialog(QDialog):
             # Map internal mode names to display names
             mode_mapping = {
                 'competitive-variety': 'Competitive Variety',
-                'round-robin': 'Round Robin',
+                'round-robin': 'Continuous Round Robin',
                 'king-of-court': 'King of the Court',
                 'competitive-round-robin': 'Competitive Round Robin',
                 'competitive-continuous-round-robin': 'Competitive Continuous Round Robin',
-                'continuous-wave-flow': 'Continuous Wave Flow',
                 'pooled-continuous-rr': 'Pooled Continuous RR with Crossover'
             }
             display_mode = mode_mapping.get(self.previous_game_mode, 'Competitive Variety')
@@ -2927,29 +2661,28 @@ class SetupDialog(QDialog):
         is_king_of_court = mode_text == "King of the Court"
         is_competitive_round_robin = mode_text == "Competitive Round Robin"
         is_competitive_continuous = mode_text == "Competitive Continuous Round Robin"
-        is_continuous_wave_flow = mode_text == "Continuous Wave Flow"
         is_pooled_rr = mode_text == "Pooled Continuous RR with Crossover"
         
         # Show pre-seed checkbox for modes that can use skill ratings
         self.pre_seed_checkbox.setVisible(
             is_competitive_variety or is_king_of_court or 
-            is_competitive_round_robin or is_competitive_continuous or is_continuous_wave_flow
+            is_competitive_round_robin or is_competitive_continuous
         )
         self.koc_seeding_combo.setVisible(is_king_of_court)
         
-        # Show Manage Matches button for Competitive Round Robin modes and Continuous Wave Flow
-        # BUT NOT for Pooled RR (which uses Manage Pools instead)
+        # Show Manage Matches button for Competitive Round Robin modes only
+        # NOT for Pooled RR (which uses Manage Pools instead)
         if hasattr(self, 'manage_matches_btn'):
             self.manage_matches_btn.setVisible(
-                is_competitive_round_robin or is_competitive_continuous or is_continuous_wave_flow
+                is_competitive_round_robin or is_competitive_continuous
             )
         
         # Show Manage Pools button for Pooled Continuous RR
         if hasattr(self, 'manage_pools_btn'):
             self.manage_pools_btn.setVisible(is_pooled_rr)
         
-        # Auto-enable pre-seeding for Competitive Round Robin modes and Continuous Wave Flow
-        if is_competitive_round_robin or is_competitive_continuous or is_continuous_wave_flow:
+        # Auto-enable pre-seeding for Competitive Round Robin modes
+        if is_competitive_round_robin or is_competitive_continuous:
             self.pre_seed_checkbox.setChecked(True)
         
         # Connect KoC seeding change to update pre-seed visibility
@@ -2959,7 +2692,7 @@ class SetupDialog(QDialog):
         
         # If switching away from modes that use pre-seed, uncheck it
         if not (is_competitive_variety or is_king_of_court or 
-                is_competitive_round_robin or is_competitive_continuous or is_continuous_wave_flow):
+                is_competitive_round_robin or is_competitive_continuous):
             self.pre_seed_checkbox.setChecked(False)
         
         # Pooled Continuous RR only supports Singles - update session type dropdown
@@ -3049,14 +2782,13 @@ class SetupDialog(QDialog):
         dialog.exec()
     
     def manage_matches(self):
-        """Open the Manage Matches dialog for Competitive Round Robin modes or Continuous Wave Flow mode"""
+        """Open the Manage Matches dialog for Competitive Round Robin modes"""
         players = self.player_widget.get_players()
         if len(players) < 4:
             QMessageBox.warning(self, "Error", "Need at least 4 players to manage matches")
             return
         
         current_mode = self.mode_combo.currentText()
-        is_continuous_wave_flow = current_mode == "Continuous Wave Flow"
         is_competitive_continuous = current_mode == "Competitive Continuous Round Robin"
         
         # Check if pre-seeded ratings are enabled (required for these modes)
@@ -3084,65 +2816,36 @@ class SetupDialog(QDialog):
         # Create temporary session for schedule generation
         from python.session import create_session
         
-        if is_continuous_wave_flow:
-            from python.pickleball_types import SessionConfig, ContinuousWaveFlowConfig
+        # Both Competitive Round Robin and Competitive Continuous Round Robin use the same dialog
+        from python.pickleball_types import SessionConfig, CompetitiveRoundRobinConfig
+        
+        # Determine the actual mode to use
+        actual_mode = 'competitive-continuous-round-robin' if is_competitive_continuous else 'competitive-round-robin'
+        
+        config = CompetitiveRoundRobinConfig()
+        temp_session_config = SessionConfig(
+            mode=actual_mode,
+            session_type='doubles',
+            players=players,
+            courts=self.courts_spin.value(),
+            banned_pairs=self.banned_pairs,
+            locked_teams=self.locked_teams,
+            first_bye_players=self.first_bye_players,
+            pre_seeded_ratings=True,
+            competitive_round_robin_config=config
+        )
+        temp_session = create_session(temp_session_config)
+        
+        # Open manage matches dialog (same for both modes)
+        dialog = ManageMatchesDialog(temp_session, config, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Store the finalized config
+            self._competitive_round_robin_config = dialog.get_finalized_config()
             
-            config = ContinuousWaveFlowConfig()
-            temp_session_config = SessionConfig(
-                mode='continuous-wave-flow',
-                session_type='doubles',
-                players=players,
-                courts=self.courts_spin.value(),
-                banned_pairs=self.banned_pairs,
-                locked_teams=self.locked_teams,
-                first_bye_players=self.first_bye_players,
-                pre_seeded_ratings=True,
-                continuous_wave_flow_config=config
-            )
-            temp_session = create_session(temp_session_config)
-            
-            # Open manage matches dialog for continuous wave flow (first round only)
-            dialog = ManageContinuousWaveFlowDialog(temp_session, config, self)
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                self._continuous_wave_flow_config = dialog.get_finalized_config()
-                QMessageBox.information(
-                    self,
-                    "First Round Scheduled",
-                    f"Successfully scheduled first round.\n\n"
-                    "Subsequent matches will be generated dynamically.\n"
-                    "Click 'Start Session' to begin playing."
-                )
-        else:
-            # Both Competitive Round Robin and Competitive Continuous Round Robin use the same dialog
-            from python.pickleball_types import SessionConfig, CompetitiveRoundRobinConfig
-            
-            # Determine the actual mode to use
-            actual_mode = 'competitive-continuous-round-robin' if is_competitive_continuous else 'competitive-round-robin'
-            
-            config = CompetitiveRoundRobinConfig()
-            temp_session_config = SessionConfig(
-                mode=actual_mode,
-                session_type='doubles',
-                players=players,
-                courts=self.courts_spin.value(),
-                banned_pairs=self.banned_pairs,
-                locked_teams=self.locked_teams,
-                first_bye_players=self.first_bye_players,
-                pre_seeded_ratings=True,
-                competitive_round_robin_config=config
-            )
-            temp_session = create_session(temp_session_config)
-            
-            # Open manage matches dialog (same for both modes)
-            dialog = ManageMatchesDialog(temp_session, config, self)
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                # Store the finalized config
-                self._competitive_round_robin_config = dialog.get_finalized_config()
-                
-                mode_description = "Continuous mode: courts fill as players become available." if is_competitive_continuous else "Rounds-based mode: all courts finish before next round starts."
-                QMessageBox.information(
-                    self,
-                    "Matches Scheduled",
+            mode_description = "Continuous mode: courts fill as players become available." if is_competitive_continuous else "Rounds-based mode: all courts finish before next round starts."
+            QMessageBox.information(
+                self,
+                "Matches Scheduled",
                     f"Successfully scheduled {len([m for m in self._competitive_round_robin_config.scheduled_matches if m.status == 'approved'])} matches.\n\n"
                     f"{mode_description}\n\n"
                     "Click 'Start Session' to begin playing."
@@ -3341,7 +3044,7 @@ class SetupDialog(QDialog):
                 return
             
             mode_text = self.mode_combo.currentText()
-            if mode_text == "Round Robin":
+            if mode_text == "Continuous Round Robin":
                 mode: GameMode = 'round-robin'
             elif mode_text == "King of the Court":
                 mode: GameMode = 'king-of-court'
@@ -3349,8 +3052,6 @@ class SetupDialog(QDialog):
                 mode: GameMode = 'competitive-round-robin'
             elif mode_text == "Competitive Continuous Round Robin":
                 mode: GameMode = 'competitive-continuous-round-robin'
-            elif mode_text == "Continuous Wave Flow":
-                mode: GameMode = 'continuous-wave-flow'
             elif mode_text == "Pooled Continuous RR with Crossover":
                 mode: GameMode = 'pooled-continuous-rr'
             else:
@@ -3411,36 +3112,6 @@ class SetupDialog(QDialog):
                     crr_config.scheduled_matches = scheduled_matches
                     crr_config.schedule_finalized = True
             
-            # Create Continuous Wave Flow config if needed
-            cwf_config = None
-            if mode == 'continuous-wave-flow':
-                from python.pickleball_types import ContinuousWaveFlowConfig
-                cwf_config = getattr(self, '_continuous_wave_flow_config', None)
-                if cwf_config is None:
-                    # User didn't manually manage matches - auto-generate first round
-                    cwf_config = ContinuousWaveFlowConfig()
-                    from python.continuous_wave_flow import generate_first_round_schedule
-                    temp_session_config = SessionConfig(
-                        mode='continuous-wave-flow',
-                        session_type=session_type,
-                        players=players,
-                        courts=courts,
-                        banned_pairs=self.banned_pairs,
-                        locked_teams=self.locked_teams,
-                        first_bye_players=self.first_bye_players,
-                        court_sliding_mode=self.sliding_combo.currentText(),
-                        randomize_player_order=False,
-                        pre_seeded_ratings=self.pre_seed_checkbox.isChecked(),
-                        continuous_wave_flow_config=cwf_config
-                    )
-                    temp_session = create_session(temp_session_config)
-                    scheduled_matches = generate_first_round_schedule(temp_session, cwf_config)
-                    # Auto-approve first round
-                    for m in scheduled_matches:
-                        m.status = 'approved'
-                    cwf_config.scheduled_matches = scheduled_matches
-                    cwf_config.schedule_finalized = True
-            
             # Create Pooled Continuous RR config if needed
             pooled_rr_config = None
             if mode == 'pooled-continuous-rr':
@@ -3483,7 +3154,6 @@ class SetupDialog(QDialog):
                 pre_seeded_ratings=self.pre_seed_checkbox.isChecked(),
                 king_of_court_config=koc_config,
                 competitive_round_robin_config=crr_config,
-                continuous_wave_flow_config=cwf_config,
                 pooled_continuous_rr_config=pooled_rr_config
             )
             
@@ -5283,11 +4953,10 @@ class SessionWindow(QMainWindow):
         mode_display_names = {
             'pooled-continuous-rr': 'Pooled Continuous RR',
             'competitive-variety': 'Competitive Variety',
-            'round-robin': 'Round Robin',
+            'round-robin': 'Continuous Round Robin',
             'king-of-court': 'King of the Court',
             'competitive-round-robin': 'Competitive Round Robin',
-            'competitive-continuous-round-robin': 'Competitive Continuous Round Robin',
-            'continuous-wave-flow': 'Continuous Wave Flow'
+            'competitive-continuous-round-robin': 'Competitive Continuous Round Robin'
         }
         return mode_display_names.get(mode, mode.replace('-', ' ').title())
     

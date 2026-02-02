@@ -767,6 +767,13 @@ KeyError: 'games'
 ## Pooled Cont RR - 3
 * Update "Show Winners" so that the button only appears after all the cross-over matches have been played. Do not display the button until the match is complete.
 
+## Improvements
+* When filling a court with a queued match, randomize which side each team starts on for "Round Robin" and "Pooled Continuous RR with Crossover", otherwise players will always start on the same side -- be careful not to break anything that might have previously relied on which side players for a team are on!!!
+* Rename "Round Robin" mode to "Continuous Round Robin"
+* Delete "Continuous Wave Flow" mode -- that is a failed algorithm.
+* For "Pooled Continuous RR with Crossover" in the "Manage Pools" window, the schedule preview didn't automatically recalculate after dragging/dropping players between the pools. Fix the Schedule preview to automatically recalculate after the user drags and drops players between the pools. In fact, it seems that there is a bug when dragging and dropping a player from pool 1 into pool 2, the player that was dragged is dropped. This is a critical bug that needs to be fixed.
+
+
 
 # Not sent -- TBD
 * Look at @pickleball_session_20260105_221745.txt , the algorithm insists on having players that played together play against each other in the next round, or having players that played against each other play together in the next round... That SHOULD NOT HAPPEN SO REGULARLY. If we have 8 rounds configured, those back to back configurations should happen as spread apart as possible. Analyze the session distribution that gets generated, and shuffle rounds around to make inter-round variety much better. 
