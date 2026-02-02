@@ -5530,7 +5530,7 @@ class SessionWindow(QMainWindow):
         
         # Find optimal font size
         min_font_size = 9  # Increased from 8 to ensure readability
-        max_font_size = 24  # Smaller max for list items
+        max_font_size = 32  # Increased max for list items to fill expanded waitlist
         best_font_size = min_font_size
         
         # Binary search for the optimal font size based on PLAYER NAMES only
@@ -5539,11 +5539,11 @@ class SessionWindow(QMainWindow):
             font = QFont("Arial", font_size, QFont.Weight.Normal)
             metrics = QFontMetrics(font)
             
-            # Only check player name size, not dependency text
-            text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height // 2),
+            # Use full target height (not // 2) to allow larger fonts
+            text_rect = metrics.boundingRect(QRect(0, 0, target_width, target_height),
                                            Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, longest_player_name)
             
-            if text_rect.width() <= target_width and text_rect.height() <= (target_height // 2):
+            if text_rect.width() <= target_width and text_rect.height() <= target_height:
                 best_font_size = font_size
             else:
                 break
@@ -7365,12 +7365,16 @@ class SessionWindow(QMainWindow):
             # Set waitlist to take the space that queue would have had
             self.right_section.setStretchFactor(self.waiting_list, 1)
             self.right_section.setStretchFactor(self.history_list, 1)
+            # For pooled RR, also reduce queue stretch so it doesn't compete with expanded waitlist
+            self.right_section.setStretchFactor(self.queue_list, 0)
         else:
             # Restore original height restriction and stretch factors
             self.waiting_list.setMaximumHeight(150)
             # Reset to original: waitlist no stretch, history gets stretch
             self.right_section.setStretchFactor(self.waiting_list, 0)
             self.right_section.setStretchFactor(self.history_list, 1)
+            # For non-pooled modes, queue should have stretch
+            self.right_section.setStretchFactor(self.queue_list, 1)
 
     def end_session(self):
         """End the session"""
