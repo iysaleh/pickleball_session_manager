@@ -94,10 +94,16 @@ def analyze_session(filename):
         if not line or line.startswith('---') or line.startswith('='):
             continue
         
-        # Parse match: supports both formats
-        # Doubles: "Player1, Player2: 11 beat Player3, Player4: 7 [time]"
-        # Teams: "Player1 & Player2: 11 beat Player3 & Player4: 7 [time]"
-        # Try comma-separated first (doubles)
+        # Skip summary lines
+        if line.startswith('Average Match Duration'):
+            continue
+        
+        # Parse match: supports multiple formats
+        # Doubles comma: "Player1, Player2: 11 beat Player3, Player4: 7 [time]"
+        # Doubles ampersand: "Player1 & Player2: 11 beat Player3 & Player4: 7 [time]"
+        # Singles: "Player1: 11 beat Player2: 7 [time]"
+        
+        # Try doubles comma-separated first
         match = re.match(r'(.+?),\s*(.+?):\s*(\d+)\s+beat\s+(.+?),\s*(.+?):\s*(\d+)', line)
         
         # If comma format didn't match, try ampersand format (teams)
@@ -126,6 +132,16 @@ def analyze_session(filename):
             
             key_opp_2_vs_4 = tuple(sorted([p2, p4]))
             opponents[key_opp_2_vs_4] += 1
+        else:
+            # Try singles format: "Player1: 11 beat Player2: 7 [time]"
+            singles_match = re.match(r'(.+?):\s*(\d+)\s+beat\s+(.+?):\s*(\d+)', line)
+            if singles_match:
+                p1 = singles_match.group(1).strip()
+                p2 = singles_match.group(3).strip()
+                
+                # For singles, count as opponents
+                key_opp = tuple(sorted([p1, p2]))
+                opponents[key_opp] += 1
     
     if not partnerships and not opponents:
         print("Error: No matches found in session")
