@@ -215,20 +215,20 @@ def generate_round_robin_queue(
         else:
             return 4
     
-    def score_matchup(team1: List[str], team2: List[str]) -> float:
+    def score_matchup(team1: List[str], team2: List[str], reps_limit: int) -> float:
         """Score a potential matchup for quality"""
         matchup_key = get_matchup_key(team1, team2)
         
         # Already used this exact matchup
         if matchup_key in used_matchups:
-            return -1
+            return -10000.0
         
         # Invalid configuration
         if not is_valid_team_configuration(team1, team2):
-            return -1
+            return -10000.0
         
-        # Calculate dynamic threshold based on session history (not current queue)
-        allowed_reps = calculate_allowed_repetitions(len(player_ids), session_games_total)
+        # Use provided repetition limit
+        allowed_reps = reps_limit
         
         score = 1000.0
         
@@ -288,9 +288,11 @@ def generate_round_robin_queue(
             score -= 500  # Soft penalty for group repetition within threshold
         
         # Fair play: boost players with fewer games
-        for player_id in team1 + team2:
-            if games_played[player_id] < len(matches) // len(player_ids):
-                score += 30
+        if len(games_played) > 0:
+            min_games = min(games_played.values())
+            for player_id in team1 + team2:
+                if games_played.get(player_id, 0) <= min_games:
+                    score += 50
         
         return score
     
@@ -316,72 +318,88 @@ def generate_round_robin_queue(
     used_players_this_round: Set[str] = set()
     
     while iterations < max_iterations and len(matches) < max_matches:
-        # Score all remaining matchups, excluding players already in this iteration
-        scored = []
+        # Determine base allowed repetitions based on current progress
+        current_avg_games = sum(games_played.values()) / len(player_ids) if player_ids else 0
+        base_reps = calculate_allowed_repetitions(len(player_ids), int(current_avg_games))
         
-        for team1, team2 in all_matchups:
-            # Skip if any player is already scheduled in this round
-            all_players_in_matchup = set(team1 + team2)
-            if all_players_in_matchup & used_players_this_round:
-                continue
-            
-            score = score_matchup(team1, team2)
-            if score >= 0:
-                scored.append((score, team1, team2))
+        best_match = None
+        best_team1 = None
+        best_team2 = None
         
-        if not scored:
-            # No more valid matchups this round - reset for next round
-            used_players_this_round.clear()
+        # Retry loop for relaxation: if strictly compliant matches aren't found,
+        # gradually relax the repetition constraints until we find one.
+        for relaxation in range(10): # Try base, base+1, ... base+9
+            current_limit = base_reps + relaxation
             
-            # Try to find any valid matchup for next round
             scored = []
             for team1, team2 in all_matchups:
-                score = score_matchup(team1, team2)
-                if score >= 0:
+                # 1. Must not use players already scheduled in this simultaneous round
+                players_in_match = set(team1 + team2)
+                if not players_in_match.isdisjoint(used_players_this_round):
+                    continue
+                
+                score = score_matchup(team1, team2, current_limit)
+                
+                # Check for hard lock (score < -1000 means hard lock violated)
+                if score > -1000:
                     scored.append((score, team1, team2))
             
-            if not scored:
+            if scored:
+                # Found candidates with this relaxation level
+                scored.sort(reverse=True, key=lambda x: x[0])
+                score, best_team1, best_team2 = scored[0]
+                best_match = (score, best_team1, best_team2)
                 break
         
-        # Pick best matchup
-        scored.sort(reverse=True, key=lambda x: x[0])
-        _, best_team1, best_team2 = scored[0]
-        
-        # Add to results
-        matches.append(QueuedMatch(team1=best_team1, team2=best_team2))
-        matchup_key = get_matchup_key(best_team1, best_team2)
-        used_matchups.add(matchup_key)
-        
-        # Track players used in this round
-        used_players_this_round.update(best_team1)
-        used_players_this_round.update(best_team2)
-        
-        # Update tracking
-        for player_id in best_team1:
-            for teammate_id in best_team1:
-                if player_id != teammate_id:
-                    partnership_count[player_id][teammate_id] = partnership_count[player_id].get(teammate_id, 0) + 1
-            games_played[player_id] += 1
-            for opponent_id in best_team2:
-                opponent_count[player_id][opponent_id] = opponent_count[player_id].get(opponent_id, 0) + 1
-        
-        for player_id in best_team2:
-            for teammate_id in best_team2:
-                if player_id != teammate_id:
-                    partnership_count[player_id][teammate_id] = partnership_count[player_id].get(teammate_id, 0) + 1
-            games_played[player_id] += 1
-            for opponent_id in best_team1:
-                opponent_count[player_id][opponent_id] = opponent_count[player_id].get(opponent_id, 0) + 1
-        
-        four_key = get_four_player_key(best_team1, best_team2)
-        four_player_group_count[four_key] = four_player_group_count.get(four_key, 0) + 1
-        
-        # Check if we can fit more matches in this round
-        unused_players = set(player_ids) - used_players_this_round
-        if len(unused_players) < players_per_match:
-            # Not enough unused players for another match - reset for next round
-            used_players_this_round.clear()
-        
+        if best_match:
+            # Add match
+            _, best_team1, best_team2 = best_match
+            matches.append(QueuedMatch(team1=best_team1, team2=best_team2))
+            matchup_key = get_matchup_key(best_team1, best_team2)
+            used_matchups.add(matchup_key)
+            
+            # Track players used in this round
+            used_players_this_round.update(best_team1)
+            used_players_this_round.update(best_team2)
+            
+            # Update tracking
+            for player_id in best_team1:
+                for teammate_id in best_team1:
+                    if player_id != teammate_id:
+                        partnership_count[player_id][teammate_id] = partnership_count[player_id].get(teammate_id, 0) + 1
+                games_played[player_id] += 1
+                for opponent_id in best_team2:
+                    opponent_count[player_id][opponent_id] = opponent_count[player_id].get(opponent_id, 0) + 1
+            
+            for player_id in best_team2:
+                for teammate_id in best_team2:
+                    if player_id != teammate_id:
+                        partnership_count[player_id][teammate_id] = partnership_count[player_id].get(teammate_id, 0) + 1
+                games_played[player_id] += 1
+                for opponent_id in best_team1:
+                    opponent_count[player_id][opponent_id] = opponent_count[player_id].get(opponent_id, 0) + 1
+            
+            four_key = get_four_player_key(best_team1, best_team2)
+            four_player_group_count[four_key] = four_player_group_count.get(four_key, 0) + 1
+            
+            # Check if we can fit more matches in this round
+            unused_players = set(player_ids) - used_players_this_round
+            if len(unused_players) < players_per_match:
+                # Not enough unused players for another match - reset for next round
+                used_players_this_round.clear()
+            
+        else:
+            # No match found even with relaxation.
+            if used_players_this_round:
+                # If we were trying to fill a partial round, clear it and try a fresh round
+                used_players_this_round.clear()
+                continue
+            else:
+                # Stuck even with empty used_players and max relaxation.
+                # This suggests we've exhausted all possible combinations (unlikely with relaxation)
+                # or something is blocking progress.
+                break
+                
         iterations += 1
     
     # Apply first bye filtering: remove matches involving first bye players from the START of the queue
