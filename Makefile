@@ -42,14 +42,8 @@ test_king_of_court_comprehensive:
 test_king_of_court_rounds:
 	python test_king_of_court_rounds.py
 
-test_gui_integration:
-	python test_gui_integration.py
-
 test_session_manager:
 	python test_session_manager.py
-
-test_king_of_court_comprehensive:
-	python test_king_of_court_comprehensive.py
 
 test_koc_preseeded_ratings:
 	python test_koc_preseeded_ratings.py
@@ -291,9 +285,6 @@ test_match_queue_visibility:
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
-
-test_adaptive_slider:
-	python3 test_adaptive_slider.py
 
 test_disabled_adaptive:
 	python3 test_disabled_adaptive.py

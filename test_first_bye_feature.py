@@ -12,6 +12,7 @@ The feature should:
 from python.pickleball_types import SessionConfig, Player
 from python.session import create_session, evaluate_and_create_matches
 from python.session_persistence import serialize_session, deserialize_session
+from python.time_manager import initialize_time_manager
 
 
 def test_first_bye_basic():
@@ -146,6 +147,7 @@ def test_first_bye_multiple_players():
 
 
 if __name__ == '__main__':
+    initialize_time_manager()
     print("=" * 70)
     print("FIRST BYE FEATURE TESTS")
     print("=" * 70)

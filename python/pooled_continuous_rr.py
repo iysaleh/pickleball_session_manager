@@ -564,15 +564,14 @@ def get_next_match_for_court(
         if match.status in ['waiting', 'in-progress']:
             active_players.update(match.team1)
             active_players.update(match.team2)
-    
-    # Find best available match
-    best_match: Optional[PooledMatch] = None
-    best_score = float('inf')  # Lower is better (fewer games played)
-    
-    # Check pool matches first
-    if not config.crossover_active:
+            
+    def _find_best_match_in_pools(pools_to_check: Set[str]) -> Tuple[Optional[PooledMatch], float]:
+        """Helper to find best match in given pools"""
+        local_best_match = None
+        local_best_score = float('inf')
+        
         for match in config.scheduled_pool_matches:
-            if match.pool_id not in incomplete_pools:
+            if match.pool_id not in pools_to_check:
                 continue
             
             # Skip already played matches
@@ -591,9 +590,57 @@ def get_next_match_for_court(
             # Score by total games played (lower = higher priority)
             total_games = sum(games_played.get(p, 0) for p in match.get_all_players())
             
-            if total_games < best_score:
-                best_score = total_games
-                best_match = match
+            # Apply penalty for First Bye players if they haven't played yet
+            if hasattr(session.config, 'first_bye_players') and session.config.first_bye_players:
+                has_unplayed_bye_player = False
+                for p in match.get_all_players():
+                    if p in session.config.first_bye_players and games_played.get(p, 0) == 0:
+                        has_unplayed_bye_player = True
+                        break
+                
+                if has_unplayed_bye_player:
+                    # Add penalty (0.5) to ensure they are picked after 0-game players but before 1-game players
+                    total_games += 0.5
+            
+            if total_games < local_best_score:
+                local_best_score = total_games
+                local_best_match = match
+        
+        return local_best_match, local_best_score
+
+    # Find best available match
+    best_match: Optional[PooledMatch] = None
+    
+    # Check pool matches first
+    if not config.crossover_active:
+        # 1. Find best match in assigned/incomplete pools (Strict)
+        best_match, best_score = _find_best_match_in_pools(incomplete_pools)
+        
+        # 2. Check override condition for First Bye
+        # If strict match involves First Bye penalty (score approx 0.5) OR is None
+        # AND we check other pools for a better (score 0) match
+        # This handles the "Extra first bye considerations" where we should fill from other pools
+        # if the assigned pool is blocked by byes.
+        if best_match is None or (0.4 < best_score < 0.6):
+            # Check other available pools
+            all_incomplete = {p for p in config.pools.keys() if not config.pool_completed.get(p, False)}
+            other_pools = all_incomplete - incomplete_pools
+            
+            if other_pools:
+                match_other, score_other = _find_best_match_in_pools(other_pools)
+                # If we found a match in other pools that is BETTER (lower score)
+                # e.g. score 0 (perfect) vs score 0.5 (bye) or score inf (none)
+                if match_other and score_other < best_score:
+                    # Only switch if:
+                    # 1. We are avoiding a First Bye penalty (0.4 < best_score < 0.6)
+                    # 2. We are in First Round and Assigned Pool is blocked (best_score > 0.6 aka None, and score_other < 0.1)
+                    
+                    is_avoiding_bye = (0.4 < best_score < 0.6)
+                    is_first_round_fill = (best_score > 0.6 and score_other < 0.1)
+                    
+                    if is_avoiding_bye or is_first_round_fill:
+                        best_match = match_other
+                        # best_score = score_other
     else:
         # Crossover phase - select from crossover matches
         for match in config.crossover_matches:

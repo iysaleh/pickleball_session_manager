@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QInputDialog, QSpinBox, QGroupBox, QCheckBox, QFrame, QScrollArea,
     QGridLayout, QSpacerItem, QSizePolicy, QSlider, QDialogButtonBox, QTextEdit
 )
-from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup, QMimeData, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup, QMimeData, pyqtSignal, qInstallMessageHandler
 from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen, QPixmap, QDrag
 
 from python.pickleball_types import (
@@ -3024,18 +3024,23 @@ class SetupDialog(QDialog):
                 QMessageBox.warning(self, "Error", "At least 2 players are required")
                 return
             
+            mode_text = self.mode_combo.currentText()
+            type_text = self.type_combo.currentText()
+            session_type: SessionType = 'doubles' if type_text == "Doubles" else 'singles'
+            players_per_court = 2 if session_type == 'singles' else 4
+
             # Validate first bye players count
             # Calculate actual waiting players based on optimal court usage
             courts = self.courts_spin.value()
-            total_court_capacity = courts * 4
+            total_court_capacity = courts * players_per_court
             
             if len(players) >= total_court_capacity:
                 # More players than court capacity: some will wait
                 max_byes = len(players) - total_court_capacity
             else:
                 # Fewer players than court capacity: fill what we can optimally  
-                courts_we_can_fill = len(players) // 4
-                players_on_courts = courts_we_can_fill * 4
+                courts_we_can_fill = len(players) // players_per_court
+                players_on_courts = courts_we_can_fill * players_per_court
                 max_byes = len(players) - players_on_courts
             
             # Only validate bye count if we have bye players and they exceed available waiting spots
@@ -3047,8 +3052,7 @@ class SetupDialog(QDialog):
                     f"You have {len(self.first_bye_players)} selected. Please remove {len(self.first_bye_players) - max_byes} player(s) from the bye list."
                 )
                 return
-            
-            mode_text = self.mode_combo.currentText()
+
             if mode_text == "Continuous Round Robin":
                 mode: GameMode = 'round-robin'
             elif mode_text == "King of the Court":
@@ -3061,9 +3065,6 @@ class SetupDialog(QDialog):
                 mode: GameMode = 'pooled-continuous-rr'
             else:
                 mode: GameMode = 'competitive-variety'
-            
-            type_text = self.type_combo.currentText()
-            session_type: SessionType = 'doubles' if type_text == "Doubles" else 'singles'
             
             # Create King of Court config if needed
             koc_config = None
@@ -7681,8 +7682,14 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", error_msg)
 
 
+def qt_message_handler(mode, context, message):
+    if "QPainter::end: Painter ended with" in message and "saved states" in message:
+        return
+    sys.stderr.write(f"{message}\n")
+
 def main():
     """Main entry point"""
+    qInstallMessageHandler(qt_message_handler)
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()

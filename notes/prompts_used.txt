@@ -801,6 +801,11 @@ UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f947' in posit
 # Not sent -- TBD
 * Look at @pickleball_session_20260105_221745.txt , the algorithm insists on having players that played together play against each other in the next round, or having players that played against each other play together in the next round... That SHOULD NOT HAPPEN SO REGULARLY. If we have 8 rounds configured, those back to back configurations should happen as spread apart as possible. Analyze the session distribution that gets generated, and shuffle rounds around to make inter-round variety much better. 
 
+# First Bye Fixes
+* On Mac, I'm constantly seeing this annoying message: "QPainter::end: Painter ended with 2 saved states" -- make it so that this message doesn't print in the console.
+* First bye doesn't work for singles -- I get the error "With 12 players and 4 courts, maximum 0 players can have a first bye. You have 2 selected. Please remove 2 player(s) from the bye list" -- this is not correct for singles because with 12 players and 4 courts, you only need 8 players to fill the courts, so we can technically have 4 players on the first bye list with singles.
+** Extra first bye considerations need to happen for "Pooled Continuous RR with Crossover" 
+
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts
