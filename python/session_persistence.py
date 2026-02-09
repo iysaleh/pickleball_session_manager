@@ -25,7 +25,9 @@ def ensure_session_dir():
 
 def save_player_history(player_names: List[str], first_bye_players: List[str] = None, 
                        players_with_ratings: List[Player] = None, pre_seeded: bool = False,
-                       game_mode: str = None, session_type: str = None):
+                       game_mode: str = None, session_type: str = None,
+                       pool_assignments: Dict[str, List[str]] = None,
+                       pool_court_assignments: Dict[str, List[int]] = None):
     """Save the list of player names, first bye players, pre-seeded ratings, and game configuration to history"""
     ensure_session_dir()
     
@@ -53,6 +55,12 @@ def save_player_history(player_names: List[str], first_bye_players: List[str] = 
         "session_type": session_type,  # Store session type (doubles/singles)
         "last_updated": now().isoformat()
     }
+    
+    # Save pool assignments if provided (store as player names, not IDs)
+    if pool_assignments is not None:
+        history_data["pool_assignments"] = pool_assignments
+    if pool_court_assignments is not None:
+        history_data["pool_court_assignments"] = pool_court_assignments
     
     try:
         with open(PLAYER_HISTORY_FILE, 'w') as f:
@@ -84,7 +92,9 @@ def load_player_history_with_ratings() -> Dict:
             "pre_seeded": False, 
             "player_ratings": {},
             "game_mode": None,
-            "session_type": None
+            "session_type": None,
+            "pool_assignments": None,
+            "pool_court_assignments": None
         }
     
     try:
@@ -96,7 +106,9 @@ def load_player_history_with_ratings() -> Dict:
                 "pre_seeded": data.get("pre_seeded", False),
                 "player_ratings": data.get("player_ratings", {}),
                 "game_mode": data.get("game_mode", None),
-                "session_type": data.get("session_type", None)
+                "session_type": data.get("session_type", None),
+                "pool_assignments": data.get("pool_assignments", None),
+                "pool_court_assignments": data.get("pool_court_assignments", None)
             }
     except Exception as e:
         print(f"Error loading player history with ratings: {e}")
@@ -106,7 +118,9 @@ def load_player_history_with_ratings() -> Dict:
             "pre_seeded": False, 
             "player_ratings": {},
             "game_mode": None,
-            "session_type": None
+            "session_type": None,
+            "pool_assignments": None,
+            "pool_court_assignments": None
         }
 
 

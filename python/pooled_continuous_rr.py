@@ -342,14 +342,57 @@ def calculate_pool_standings(
         s['win_pct'] = (s['wins'] / games * 100) if games > 0 else 0.0
         standings.append(s)
     
-    # Sort by: wins (desc), pt_diff (desc), pts_for (desc)
+    # Sort by wins first (desc), then apply tiebreakers
     standings.sort(key=lambda x: (-x['wins'], -x['pt_diff'], -x['pts_for']))
+    
+    # Apply head-to-head tiebreaker for 2-way ties within same win count
+    standings = _apply_head_to_head_tiebreaker(standings)
     
     # Assign ranks
     for i, s in enumerate(standings):
         s['rank'] = i + 1
     
     return standings
+
+
+def _apply_head_to_head_tiebreaker(standings: List[Dict]) -> List[Dict]:
+    """
+    Apply head-to-head tiebreaker for 2-way ties, point differential for 3+ way ties.
+    
+    Rules:
+    - Players are already sorted by wins (desc)
+    - For a 2-way tie (same wins): winner of head-to-head match ranks higher
+    - For a 3+ way tie (same wins): use point differential (desc), then pts_for (desc)
+    """
+    if len(standings) <= 1:
+        return standings
+    
+    result = []
+    i = 0
+    while i < len(standings):
+        # Find group of players with same win count
+        win_count = standings[i]['wins']
+        group = [standings[i]]
+        j = i + 1
+        while j < len(standings) and standings[j]['wins'] == win_count:
+            group.append(standings[j])
+            j += 1
+        
+        if len(group) == 2:
+            # 2-way tie: use head-to-head
+            p1 = group[0]
+            p2 = group[1]
+            h2h = p1['head_to_head'].get(p2['player_id'])
+            if h2h == 'L':
+                # p1 lost to p2 head-to-head, swap them
+                group = [p2, p1]
+            # If h2h == 'W' or None, keep current order (p1 already ahead by pt_diff)
+        # For 3+ way ties, keep existing sort by pt_diff (already sorted)
+        
+        result.extend(group)
+        i = j
+    
+    return result
 
 
 def check_pool_completion(session: Session, pool_id: str, config: PooledContinuousRRConfig) -> bool:
@@ -617,30 +660,27 @@ def get_next_match_for_court(
         best_match, best_score = _find_best_match_in_pools(incomplete_pools)
         
         # 2. Check override condition for First Bye
-        # If strict match involves First Bye penalty (score approx 0.5) OR is None
-        # AND we check other pools for a better (score 0) match
-        # This handles the "Extra first bye considerations" where we should fill from other pools
-        # if the assigned pool is blocked by byes.
-        if best_match is None or (0.4 < best_score < 0.6):
+        # Only allow cross-pool switching when this court has NO specific pool assignment.
+        # If pool_court_assignments restrict this court to certain pools, never switch.
+        court_has_pool_restriction = any(
+            court_number in courts 
+            for courts in config.pool_court_assignments.values() 
+            if courts
+        )
+        
+        if not court_has_pool_restriction and (best_match is None or (0.4 < best_score < 0.6)):
             # Check other available pools
             all_incomplete = {p for p in config.pools.keys() if not config.pool_completed.get(p, False)}
             other_pools = all_incomplete - incomplete_pools
             
             if other_pools:
                 match_other, score_other = _find_best_match_in_pools(other_pools)
-                # If we found a match in other pools that is BETTER (lower score)
-                # e.g. score 0 (perfect) vs score 0.5 (bye) or score inf (none)
                 if match_other and score_other < best_score:
-                    # Only switch if:
-                    # 1. We are avoiding a First Bye penalty (0.4 < best_score < 0.6)
-                    # 2. We are in First Round and Assigned Pool is blocked (best_score > 0.6 aka None, and score_other < 0.1)
-                    
                     is_avoiding_bye = (0.4 < best_score < 0.6)
                     is_first_round_fill = (best_score > 0.6 and score_other < 0.1)
                     
                     if is_avoiding_bye or is_first_round_fill:
                         best_match = match_other
-                        # best_score = score_other
     else:
         # Crossover phase - select from crossover matches
         for match in config.crossover_matches:

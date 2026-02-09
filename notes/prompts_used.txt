@@ -806,6 +806,16 @@ UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f947' in posit
 * First bye doesn't work for singles -- I get the error "With 12 players and 4 courts, maximum 0 players can have a first bye. You have 2 selected. Please remove 2 player(s) from the bye list" -- this is not correct for singles because with 12 players and 4 courts, you only need 8 players to fill the courts, so we can technically have 4 players on the first bye list with singles.
 ** Extra first bye considerations need to happen for "Pooled Continuous RR with Crossover" 
 
+# Pooled Continuous RR with Crossover fixes
+* When we export a session, we see a "PLAYER STATISTICS CSV" section, however, there is no Rank column. There should be a Rank column as the first column that numbers each players rank (it's already sorted, so it just needs to be 1,2,3...etc) -- see @pickleball_session_20260206_182419.txt
+* POOL STATISTICS only contains "Pt Diff" for point scoring, it should also contain "Pts For", "Pts Against" like the "PLAYER STATISTICS CSV" has.
+* The word "beat" has negative connotations, change it to be "defeated" everywhere.
+* In "Pooled Continuous RR with Crossover fixes" players are ranked by wins/losses and then point differential... We need to update the "Pooled Continuous RR with Crossover fixes" algorithm to first rank players by wins/losses, and then if there is a 2 way tie, then rank those tied players by who won in the head-to-head match up, and then finally if there is a 3 way tie or more, then use the point differential to rank who is higher and lower.
+* In Pooled Continuous RR with Crossover fixes, there is a bug where setting the first bye player causes the matches where pools are supposed to play to get mixed up. Fix it so that even when first bye players are set, the courts where pools from the players are supposed to play are properly set.
+* In Pooled Continuous RR with Crossover fixes for the Session Setup screen, clicking Manage Pool after having already configured and managed the pool causes the settings to reset every time... This isn't good if minor changes need to happen. Persist the state for the managed pools so long as no players have been added or removed. Also, New Session With Previous players should load managed pool settings if the match type was "Pooled Continuous RR with Crossover fixes". 
+* In the Manage Pool screen, make it so that we can move players up or down on the list of players in each pool -- currently we can only drag and drop players between pools.
+
+* For Pooled Continuous RR with Crossover exports, please add a "POOL STATISTICS CSV" section after the "POOL STATISTICS" section which has a CSV representation of the Pool Statistics.
 
 # Useful Commands:
 npx vitest run roundrobin.test.ts

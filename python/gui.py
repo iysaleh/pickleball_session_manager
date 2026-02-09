@@ -1939,10 +1939,13 @@ class ManagePoolsDialog(QDialog):
     - Randomize player distribution
     """
     
-    def __init__(self, session: Session, config, parent=None):
+    def __init__(self, session: Session, config, parent=None, 
+                 restored_pools=None, restored_court_assignments=None):
         super().__init__(parent)
         self.session = session
         self.config = config
+        self._restored_pools = restored_pools
+        self._restored_court_assignments = restored_court_assignments
         self.init_ui()
         self.initialize_pools()
     
@@ -2083,13 +2086,38 @@ class ManagePoolsDialog(QDialog):
         """)
     
     def initialize_pools(self):
-        """Initialize with 2 pools by default"""
-        from python.pooled_continuous_rr import initialize_pools
-        
-        self.config.pools = initialize_pools(self.session, num_pools=2)
+        """Initialize pools - restore from previous config if available, otherwise default 2 pools"""
+        if self._restored_pools:
+            self.config.pools = self._restored_pools
+            if self._restored_court_assignments:
+                self.config.pool_court_assignments = self._restored_court_assignments
+        else:
+            from python.pooled_continuous_rr import initialize_pools
+            self.config.pools = initialize_pools(self.session, num_pools=2)
         self.refresh_pool_display()
         self.update_court_assignments_ui()
+        # Restore court assignment checkboxes if we have saved assignments
+        if self._restored_court_assignments:
+            self._restore_court_checkboxes()
         self.update_preview()
+    
+    def _restore_court_checkboxes(self):
+        """Restore court assignment checkbox state from saved config"""
+        for i in range(self.court_checkboxes_layout.count()):
+            item = self.court_checkboxes_layout.itemAt(i)
+            if item and item.widget():
+                group = item.widget()
+                if isinstance(group, QGroupBox):
+                    pool_id = group.title()
+                    assigned_courts = self._restored_court_assignments.get(pool_id, [])
+                    for j in range(group.layout().count()):
+                        cb_item = group.layout().itemAt(j)
+                        if cb_item and cb_item.widget():
+                            cb = cb_item.widget()
+                            if isinstance(cb, QCheckBox):
+                                court_num = cb.property("court_num")
+                                if court_num and court_num in assigned_courts:
+                                    cb.setChecked(True)
     
     def refresh_pool_display(self):
         """Refresh the pool display widgets"""
@@ -2171,6 +2199,32 @@ class ManagePoolsDialog(QDialog):
         
         layout.addWidget(player_list)
         
+        # Move up/down buttons
+        move_btn_layout = QHBoxLayout()
+        move_btn_style = """
+            QPushButton { 
+                background-color: #555; 
+                color: white; 
+                padding: 4px 12px;
+                border-radius: 3px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #777; }
+        """
+        
+        move_up_btn = QPushButton("▲ Up")
+        move_up_btn.setStyleSheet(move_btn_style)
+        move_up_btn.clicked.connect(lambda checked, pl=player_list: self.move_player_up(pl))
+        move_btn_layout.addWidget(move_up_btn)
+        
+        move_down_btn = QPushButton("▼ Down")
+        move_down_btn.setStyleSheet(move_btn_style)
+        move_down_btn.clicked.connect(lambda checked, pl=player_list: self.move_player_down(pl))
+        move_btn_layout.addWidget(move_down_btn)
+        
+        layout.addLayout(move_btn_layout)
+        
         # Player count
         count_label = QLabel(f"{len(player_ids)} players")
         count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -2180,6 +2234,24 @@ class ManagePoolsDialog(QDialog):
         
         widget.setLayout(layout)
         return widget
+    
+    def move_player_up(self, player_list):
+        """Move the selected player up in the list"""
+        current_row = player_list.currentRow()
+        if current_row > 0:
+            item = player_list.takeItem(current_row)
+            player_list.insertItem(current_row - 1, item)
+            player_list.setCurrentRow(current_row - 1)
+            self.on_pools_changed()
+    
+    def move_player_down(self, player_list):
+        """Move the selected player down in the list"""
+        current_row = player_list.currentRow()
+        if current_row >= 0 and current_row < player_list.count() - 1:
+            item = player_list.takeItem(current_row)
+            player_list.insertItem(current_row + 1, item)
+            player_list.setCurrentRow(current_row + 1)
+            self.on_pools_changed()
     
     def on_pools_changed(self):
         """Handle when players are dragged between pools - sync config from list widgets"""
@@ -2382,7 +2454,8 @@ class SetupDialog(QDialog):
     
     def __init__(self, parent=None, previous_players=None, previous_first_byes=None, 
                  previous_pre_seeded=False, previous_ratings=None, previous_game_mode=None,
-                 previous_session_type=None):
+                 previous_session_type=None, previous_pool_assignments=None,
+                 previous_pool_court_assignments=None):
         super().__init__(parent)
         self.session: Optional[Session] = None
         self.previous_players = previous_players or []
@@ -2391,6 +2464,8 @@ class SetupDialog(QDialog):
         self.previous_ratings = previous_ratings or {}
         self.previous_game_mode = previous_game_mode
         self.previous_session_type = previous_session_type
+        self.previous_pool_assignments = previous_pool_assignments
+        self.previous_pool_court_assignments = previous_pool_court_assignments
         self.banned_pairs = []
         self.locked_teams = []
         self.first_bye_players = []
@@ -2881,8 +2956,43 @@ class SetupDialog(QDialog):
         )
         temp_session = create_session(temp_session_config)
         
-        # Open manage pools dialog
-        dialog = ManagePoolsDialog(temp_session, config, self)
+        # Check if we have existing pool config to reuse
+        current_player_ids = {p.id for p in players}
+        existing_config = getattr(self, '_pooled_rr_config', None)
+        
+        # Try to restore from existing config or previous session
+        restored_pools = None
+        restored_court_assignments = None
+        
+        if existing_config and existing_config.pools:
+            # Check if player set matches
+            existing_player_ids = set()
+            for pids in existing_config.pools.values():
+                existing_player_ids.update(pids)
+            if existing_player_ids == current_player_ids:
+                restored_pools = existing_config.pools
+                restored_court_assignments = existing_config.pool_court_assignments
+        
+        if restored_pools is None and self.previous_pool_assignments:
+            # Try to restore from previous session (name-based)
+            name_to_id = {p.name: p.id for p in players}
+            current_names = set(name_to_id.keys())
+            prev_names = set()
+            for names in self.previous_pool_assignments.values():
+                prev_names.update(names)
+            if prev_names == current_names:
+                restored_pools = {}
+                for pool_id, names in self.previous_pool_assignments.items():
+                    restored_pools[pool_id] = [name_to_id[n] for n in names if n in name_to_id]
+                if self.previous_pool_court_assignments:
+                    restored_court_assignments = {
+                        k: [int(c) for c in v] for k, v in self.previous_pool_court_assignments.items()
+                    }
+        
+        # Open manage pools dialog with restored config if available
+        dialog = ManagePoolsDialog(temp_session, config, self, 
+                                   restored_pools=restored_pools,
+                                   restored_court_assignments=restored_court_assignments)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             # Store the finalized config
             self._pooled_rr_config = dialog.get_finalized_config()
@@ -3174,6 +3284,16 @@ class SetupDialog(QDialog):
                         bye_player_names.append(p.name)
                         break
             
+            # Build pool assignments using player names (for persistence across sessions)
+            pool_name_assignments = None
+            pool_court_assign = None
+            if mode == 'pooled-continuous-rr' and pooled_rr_config:
+                id_to_name = {p.id: p.name for p in players}
+                pool_name_assignments = {}
+                for pool_id, pids in pooled_rr_config.pools.items():
+                    pool_name_assignments[pool_id] = [id_to_name.get(pid, pid) for pid in pids]
+                pool_court_assign = pooled_rr_config.pool_court_assignments
+            
             # Save complete player history with pre-seeded ratings and game configuration
             from python.session_persistence import save_player_history
             save_player_history(
@@ -3182,7 +3302,9 @@ class SetupDialog(QDialog):
                 players_with_ratings=players,
                 pre_seeded=self.pre_seed_checkbox.isChecked(),
                 game_mode=mode,
-                session_type=session_type.replace('-', ' ')  # Convert to readable format
+                session_type=session_type.replace('-', ' '),  # Convert to readable format
+                pool_assignments=pool_name_assignments,
+                pool_court_assignments=pool_court_assign
             )
             
             self.accept()
@@ -5810,14 +5932,14 @@ class SessionWindow(QMainWindow):
             # Player Statistics CSV section (same data, CSV format)
             export_lines.append("PLAYER STATISTICS CSV:")
             export_lines.append("-" * 70)
-            export_lines.append("Player,ELO,Wins,Losses,Games,Win%,WaitTime,AvgPtDiff,PtsFor,PtsAgainst")
-            for player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against in player_data:
+            export_lines.append("Rank,Player,ELO,Wins,Losses,Games,Win%,WaitTime,AvgPtDiff,PtsFor,PtsAgainst")
+            for rank_num, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(player_data, 1):
                 wins, losses = record.split('-')
                 win_pct_csv = f"{win_pct:.1f}" if games_played > 0 else "0"
                 avg_pt_diff_csv = f"{avg_pt_diff:.1f}" if games_played > 0 else "0"
                 # Escape commas in player names
                 player_name_csv = f'"{player_name}"' if ',' in player_name else player_name
-                export_lines.append(f"{player_name_csv},{elo:.0f},{wins},{losses},{games_played},{win_pct_csv},{total_wait_seconds},{avg_pt_diff_csv},{pts_for},{pts_against}")
+                export_lines.append(f"{rank_num},{player_name_csv},{elo:.0f},{wins},{losses},{games_played},{win_pct_csv},{total_wait_seconds},{avg_pt_diff_csv},{pts_for},{pts_against}")
             
             export_lines.append("")
             
@@ -5853,14 +5975,30 @@ class SessionWindow(QMainWindow):
                         pool_complete = pooled_config.pool_completed.get(pool_id, False)
                         status = "✅ Complete" if pool_complete else "⏳ In Progress"
                         export_lines.append(f"\n{pool_id} ({status}):")
-                        export_lines.append(f"{'Rank':<6} {'Player':<25} {'W-L':<8} {'Games':<8} {'Win%':<8} {'Pt Diff':<10}")
+                        export_lines.append(f"{'Rank':<6} {'Player':<25} {'W-L':<8} {'Games':<8} {'Win%':<8} {'Pts For':<10} {'Pts Agst':<10} {'Pt Diff':<10}")
                         
                         standings = calculate_pool_standings(self.session, pool_id)
                         for rank, standing in enumerate(standings, 1):
                             games_played = standing.get('games_played', 0)
                             win_pct = (standing['wins'] / games_played * 100) if games_played > 0 else 0
                             record = f"{standing['wins']}-{standing['losses']}"
-                            export_lines.append(f"#{rank:<5} {standing['name']:<25} {record:<8} {games_played:<8} {win_pct:.1f}%{'':<3} {standing['pt_diff']:+d}")
+                            export_lines.append(f"#{rank:<5} {standing['name']:<25} {record:<8} {games_played:<8} {win_pct:.1f}%{'':<3} {standing['pts_for']:<10} {standing['pts_against']:<10} {standing['pt_diff']:+d}")
+                    
+                    export_lines.append("")
+                    
+                    # Pool Statistics CSV
+                    export_lines.append("POOL STATISTICS CSV:")
+                    export_lines.append("-" * 70)
+                    
+                    for pool_id, player_ids in pooled_config.pools.items():
+                        export_lines.append(f"\n{pool_id}:")
+                        export_lines.append("Rank,Player,W,L,Games,Win%,Pts For,Pts Agst,Pt Diff")
+                        
+                        standings = calculate_pool_standings(self.session, pool_id)
+                        for rank, standing in enumerate(standings, 1):
+                            games_played = standing.get('games_played', 0)
+                            win_pct = (standing['wins'] / games_played * 100) if games_played > 0 else 0
+                            export_lines.append(f"{rank},{standing['name']},{standing['wins']},{standing['losses']},{games_played},{win_pct:.1f}%,{standing['pts_for']},{standing['pts_against']},{standing['pt_diff']:+d}")
                     
                     export_lines.append("")
                     
@@ -5889,7 +6027,7 @@ class SessionWindow(QMainWindow):
                                 winner_score = max(t1_score, t2_score)
                                 loser_score = min(t1_score, t2_score)
                                 
-                                export_lines.append(f"Crossover #{cm.crossover_rank}: {', '.join(winner_names)} ({winner_score}) beat {', '.join(loser_names)} ({loser_score})")
+                                export_lines.append(f"Crossover #{cm.crossover_rank}: {', '.join(winner_names)} ({winner_score}) defeated {', '.join(loser_names)} ({loser_score})")
                             else:
                                 p1_names = [get_player_name(self.session, pid) for pid in cm.team1]
                                 p2_names = [get_player_name(self.session, pid) for pid in cm.team2]
@@ -5926,9 +6064,9 @@ class SessionWindow(QMainWindow):
                         
                         # Format: Higher score on top
                         if team1_score >= team2_score:
-                            export_lines.append(f"{', '.join(team1_names)}: {team1_score} beat {', '.join(team2_names)}: {team2_score} [{duration_str}]")
+                            export_lines.append(f"{', '.join(team1_names)}: {team1_score} defeated {', '.join(team2_names)}: {team2_score} [{duration_str}]")
                         else:
-                            export_lines.append(f"{', '.join(team2_names)}: {team2_score} beat {', '.join(team1_names)}: {team1_score} [{duration_str}]")
+                            export_lines.append(f"{', '.join(team2_names)}: {team2_score} defeated {', '.join(team1_names)}: {team1_score} [{duration_str}]")
                 
                 # Add average duration
                 if match_count > 0:
@@ -7648,6 +7786,8 @@ class MainWindow(QMainWindow):
             player_ratings = player_history_data["player_ratings"]
             previous_game_mode = player_history_data["game_mode"]
             previous_session_type = player_history_data["session_type"]
+            previous_pool_assignments = player_history_data.get("pool_assignments")
+            previous_pool_court_assignments = player_history_data.get("pool_court_assignments")
             
             if not player_names:
                 QMessageBox.warning(self, "Error", "No player history available")
@@ -7660,7 +7800,9 @@ class MainWindow(QMainWindow):
                 previous_pre_seeded=was_pre_seeded,
                 previous_ratings=player_ratings,
                 previous_game_mode=previous_game_mode,
-                previous_session_type=previous_session_type
+                previous_session_type=previous_session_type,
+                previous_pool_assignments=previous_pool_assignments,
+                previous_pool_court_assignments=previous_pool_court_assignments
             )
             if setup.exec() == QDialog.DialogCode.Accepted:
                 self.session = setup.session
