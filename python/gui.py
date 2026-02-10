@@ -1095,10 +1095,9 @@ class ManageMatchesDialog(QDialog):
         self.update_stats()
     
     def handle_player_swap(self, round_index: int, player1_id: str, player2_id: str):
-        """Handle drag-drop player swap and regenerate subsequent rounds"""
+        """Handle drag-drop player swap - only affects current round, no regeneration"""
         from python.competitive_round_robin import (
             swap_player_between_matches_or_waitlist,
-            regenerate_subsequent_rounds
         )
         
         success, error = swap_player_between_matches_or_waitlist(
@@ -1115,15 +1114,8 @@ class ManageMatchesDialog(QDialog):
             QMessageBox.warning(self, "Swap Failed", f"Could not swap players: {error}")
             return
         
-        # Regenerate subsequent rounds
-        self.scheduled_matches, self.config.scheduled_waiters = regenerate_subsequent_rounds(
-            self.session,
-            self.scheduled_matches,
-            self.config.scheduled_waiters,
-            round_index,
-            self.config
-        )
-        
+        # Only update the display - DO NOT regenerate subsequent rounds
+        # User explicitly wants swap to only affect the current round
         self.config.scheduled_matches = self.scheduled_matches
         self.refresh_match_display()
         self.update_stats()

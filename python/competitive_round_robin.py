@@ -1994,7 +1994,11 @@ def generate_rounds_based_schedule(
     players = session.config.players
     num_players = len(players)
     num_courts = session.config.courts
-    players_per_round = num_courts * 4
+    
+    # CRITICAL: Calculate the actual number of matches we can fill per round
+    # With 10 players and 4 courts, we can only fill 2 courts (8 players), not 4!
+    max_matches_per_round = min(num_courts, num_players // 4)
+    players_per_round = max_matches_per_round * 4  # Actual players we can have playing
     
     if num_players < 4:
         return [], []
@@ -2229,21 +2233,23 @@ def generate_rounds_based_schedule(
                 player_cooccurrence[p2][p1] = player_cooccurrence[p2].get(p1, 0) + 1
     
     def select_waiters_fairly(available_players: List[str], num_to_wait: int, round_idx: int, round_type: str) -> List[str]:
-        """Select players to wait, ensuring fair rotation with skill-based preferences.
+        """Select players to wait, ensuring STRICT fair rotation.
         
-        Preferences (applied only within the pool of players with minimum wait count):
+        CRITICAL FAIRNESS RULE: Nobody waits a 2nd time until EVERYONE has waited once.
+        Nobody waits a 3rd time until EVERYONE has waited twice. And so on.
+        
+        We prioritize selecting players with LOWEST wait count first, only taking
+        from higher wait counts when absolutely necessary to fill the required slots.
+        
+        Preferences (applied ONLY within each wait level):
         - ULTRA-COMPETITIVE & COMPETITIVE rounds: prefer lower-rated players (bottom 40%) to wait
         - VARIETY rounds: prefer higher-rated players (top 40%) to wait
-        
-        This ensures competitive rounds have the best players playing while variety
-        rounds give lower-rated players more court time with mixed groups.
         """
         if num_to_wait <= 0:
             return []
         
         min_wait = min(wait_count[p] for p in available_players)
         eligible = [p for p in available_players if wait_count[p] == min_wait]
-        next_level = [p for p in available_players if wait_count[p] == min_wait + 1]
         
         # Sort all available players by rating to determine skill tiers
         sorted_by_rating = sorted(available_players, key=lambda p: player_ratings.get(p, 1500))
@@ -2277,13 +2283,16 @@ def generate_rounds_based_schedule(
             
             return base_score
         
+        # Sort eligible players (those at min_wait level)
         eligible.sort(key=waiter_sort_key, reverse=True)
         selected = eligible[:num_to_wait]
         
+        # If we need more waiters, take from next_level (players with wait_count = min_wait + 1)
+        # This preserves fairness while ensuring correct court capacity
         if len(selected) < num_to_wait:
-            needed = num_to_wait - len(selected)
+            next_level = [p for p in available_players if wait_count[p] == min_wait + 1 and p not in selected]
             next_level.sort(key=waiter_sort_key, reverse=True)
-            selected.extend(next_level[:needed])
+            selected.extend(next_level[:num_to_wait - len(selected)])
         
         for p in selected:
             wait_count[p] += 1
@@ -2355,7 +2364,8 @@ def generate_rounds_based_schedule(
             playing_sorted = sorted(playing, key=lambda p: player_ratings.get(p, 1500), reverse=True)
             
             selected_matches = []
-            for court_idx in range(num_courts):
+            # Use max_matches_per_round, not num_courts - we can only fill as many courts as we have players for
+            for court_idx in range(max_matches_per_round):
                 start = court_idx * 4
                 if start + 4 <= len(playing_sorted):
                     court_players = playing_sorted[start:start + 4]
@@ -2477,15 +2487,19 @@ def generate_rounds_based_schedule(
                     selected_matches_competitive.append(best_match)
                     used_in_round |= best_match.player_set
                     
-                    if len(selected_matches_competitive) >= num_courts:
+                    if len(selected_matches_competitive) >= max_matches_per_round:
                         break
             
-            selected_matches = selected_matches_competitive if len(selected_matches_competitive) == num_courts else None
+            # Use competitive selection result (could be partial)
+            selected_matches = selected_matches_competitive if selected_matches_competitive else None
         else:
             selected_matches = None
         
-        # Fallback: use standard backtracking if player-centric selection didn't work
-        if selected_matches is None:
+        # Remember the best partial result from competitive selection
+        competitive_partial = selected_matches if (selected_matches and len(selected_matches) < max_matches_per_round) else None
+        
+        # Fallback: use standard backtracking if player-centric selection didn't work or got insufficient matches
+        if selected_matches is None or len(selected_matches) < max_matches_per_round:
             round_candidates.sort(key=match_score_for_round, reverse=True)
             
             # Select matches for this round (greedy with backtracking)
@@ -2511,7 +2525,8 @@ def generate_rounds_based_schedule(
                 
                 return None
             
-                selected_matches = find_matches_for_round(round_candidates, num_courts, set())
+            # FIXED: Use max_matches_per_round instead of num_courts
+            selected_matches = find_matches_for_round(round_candidates, max_matches_per_round, set())
             
             # If backtracking failed, try with relaxed variety constraints
             if selected_matches is None:
@@ -2520,7 +2535,172 @@ def generate_rounds_based_schedule(
                     key=lambda m: m.competitive_score if is_competitive_round else m.mixed_score,
                     reverse=True
                 )
-                selected_matches = find_matches_for_round(round_candidates, num_courts, set())
+                selected_matches = find_matches_for_round(round_candidates, max_matches_per_round, set())
+            
+            # PROGRESSIVE CONSTRAINT RELAXATION
+            # If still no matches, we need to progressively relax constraints
+            if selected_matches is None:
+                # Level 1: Relax the co-occurrence constraint (allow pairs to play together 3+ times)
+                def can_use_match_relaxed_cooccurrence(match: PotentialMatch) -> bool:
+                    """Check match with relaxed co-occurrence (allow 3 times together)."""
+                    t1, t2 = match.team1, match.team2
+                    all_four = list(match.player_set)
+                    
+                    # Partnership constraint - still enforce
+                    if t1[1] in partnership_used[t1[0]] or t2[1] in partnership_used[t2[0]]:
+                        return False
+                    
+                    # Individual opponent limit - still enforce
+                    for a in t1:
+                        for b in t2:
+                            if individual_opponent_count[a].get(b, 0) >= config.max_individual_opponent_repeats:
+                                return False
+                    
+                    # Group already played - still enforce
+                    if match.player_set in groups_played:
+                        return False
+                    
+                    # RELAXED: Allow pairs to play together up to 3 times instead of 2
+                    for i, p1 in enumerate(all_four):
+                        for p2 in all_four[i+1:]:
+                            if player_cooccurrence[p1].get(p2, 0) >= 3:  # Was 2
+                                return False
+                    
+                    return True
+                
+                relaxed_candidates = [m for m in all_potential_matches 
+                                     if m.player_set.issubset(playing_set) and can_use_match_relaxed_cooccurrence(m)]
+                relaxed_candidates.sort(key=lambda m: m.competitive_score if is_competitive_round else m.mixed_score, reverse=True)
+                
+                def find_matches_relaxed(candidates, num_needed, used):
+                    if num_needed == 0:
+                        return []
+                    for i, match in enumerate(candidates):
+                        if match.player_set & used:
+                            continue
+                        if not can_use_match_relaxed_cooccurrence(match):
+                            continue
+                        new_used = used | match.player_set
+                        result = find_matches_relaxed(candidates[i+1:], num_needed - 1, new_used)
+                        if result is not None:
+                            return [match] + result
+                    return None
+                
+                selected_matches = find_matches_relaxed(relaxed_candidates, max_matches_per_round, set())
+            
+            # Level 2: Relax opponent limit (allow facing same person more times)
+            if selected_matches is None:
+                def can_use_match_very_relaxed(match: PotentialMatch) -> bool:
+                    """Check match with very relaxed constraints."""
+                    t1, t2 = match.team1, match.team2
+                    
+                    # Partnership constraint - still enforce (no repeat partners)
+                    if t1[1] in partnership_used[t1[0]] or t2[1] in partnership_used[t2[0]]:
+                        return False
+                    
+                    # RELAXED: Allow facing same person up to 5 times
+                    for a in t1:
+                        for b in t2:
+                            if individual_opponent_count[a].get(b, 0) >= 5:
+                                return False
+                    
+                    # Group already played - still enforce
+                    if match.player_set in groups_played:
+                        return False
+                    
+                    return True
+                
+                very_relaxed_candidates = [m for m in all_potential_matches 
+                                          if m.player_set.issubset(playing_set) and can_use_match_very_relaxed(m)]
+                very_relaxed_candidates.sort(key=lambda m: m.competitive_score if is_competitive_round else m.mixed_score, reverse=True)
+                
+                def find_matches_very_relaxed(candidates, num_needed, used):
+                    if num_needed == 0:
+                        return []
+                    for i, match in enumerate(candidates):
+                        if match.player_set & used:
+                            continue
+                        if not can_use_match_very_relaxed(match):
+                            continue
+                        new_used = used | match.player_set
+                        result = find_matches_very_relaxed(candidates[i+1:], num_needed - 1, new_used)
+                        if result is not None:
+                            return [match] + result
+                    return None
+                
+                selected_matches = find_matches_very_relaxed(very_relaxed_candidates, max_matches_per_round, set())
+            
+            # Level 3: Only enforce no-repeat-partners and no-same-group constraints
+            if selected_matches is None:
+                def can_use_match_minimal(match: PotentialMatch) -> bool:
+                    """Check match with minimal constraints (only partnership and group)."""
+                    t1, t2 = match.team1, match.team2
+                    
+                    # Partnership constraint - always enforce (no repeat partners)
+                    if t1[1] in partnership_used[t1[0]] or t2[1] in partnership_used[t2[0]]:
+                        return False
+                    
+                    # Group already played - always enforce
+                    if match.player_set in groups_played:
+                        return False
+                    
+                    return True
+                
+                minimal_candidates = [m for m in all_potential_matches 
+                                     if m.player_set.issubset(playing_set) and can_use_match_minimal(m)]
+                minimal_candidates.sort(key=lambda m: m.competitive_score if is_competitive_round else m.mixed_score, reverse=True)
+                
+                def find_matches_minimal(candidates, num_needed, used):
+                    if num_needed == 0:
+                        return []
+                    for i, match in enumerate(candidates):
+                        if match.player_set & used:
+                            continue
+                        if not can_use_match_minimal(match):
+                            continue
+                        new_used = used | match.player_set
+                        result = find_matches_minimal(candidates[i+1:], num_needed - 1, new_used)
+                        if result is not None:
+                            return [match] + result
+                    return None
+                
+                selected_matches = find_matches_minimal(minimal_candidates, max_matches_per_round, set())
+            
+            # Level 4: LAST RESORT - Only enforce no-repeat-partners (allow repeated groups)
+            if selected_matches is None:
+                def can_use_match_partnership_only(match: PotentialMatch) -> bool:
+                    """Check match with ONLY partnership constraint - last resort."""
+                    t1, t2 = match.team1, match.team2
+                    
+                    # Partnership constraint - the ONLY hard constraint
+                    if t1[1] in partnership_used[t1[0]] or t2[1] in partnership_used[t2[0]]:
+                        return False
+                    
+                    return True
+                
+                partnership_only_candidates = [m for m in all_potential_matches 
+                                              if m.player_set.issubset(playing_set) and can_use_match_partnership_only(m)]
+                partnership_only_candidates.sort(key=lambda m: m.competitive_score if is_competitive_round else m.mixed_score, reverse=True)
+                
+                def find_matches_partnership_only(candidates, num_needed, used):
+                    if num_needed == 0:
+                        return []
+                    for i, match in enumerate(candidates):
+                        if match.player_set & used:
+                            continue
+                        if not can_use_match_partnership_only(match):
+                            continue
+                        new_used = used | match.player_set
+                        result = find_matches_partnership_only(candidates[i+1:], num_needed - 1, new_used)
+                        if result is not None:
+                            return [match] + result
+                    return None
+                
+                selected_matches = find_matches_partnership_only(partnership_only_candidates, max_matches_per_round, set())
+            
+            # If all fallbacks failed but competitive selection got at least 1 match, use that
+            if selected_matches is None and competitive_partial:
+                selected_matches = competitive_partial
         
         # round_type_label was already set at the start of this round iteration
         
@@ -2616,18 +2796,16 @@ def swap_waiter_in_round(
     if waiter_id not in waiters:
         return False, f"Player {waiter_id} is not waiting in round {round_index + 1}"
     
-    # Find matches in this round
-    num_courts = session.config.courts
-    start_idx = round_index * num_courts
-    end_idx = min(start_idx + num_courts, len(scheduled_matches))
-    
-    round_matches = scheduled_matches[start_idx:end_idx]
+    # Find matches in this round by their round_number attribute
+    # (don't use index calculation - number of matches per round varies!)
+    round_match_indices = [i for i, m in enumerate(scheduled_matches) if m.round_number == round_index]
     
     # Find which match the player is in
     target_match_idx = None
-    for i, match in enumerate(round_matches):
+    for idx in round_match_indices:
+        match = scheduled_matches[idx]
         if player_id in match.team1 + match.team2:
-            target_match_idx = start_idx + i
+            target_match_idx = idx
             break
     
     if target_match_idx is None:
@@ -2647,7 +2825,9 @@ def swap_waiter_in_round(
         team2=new_team2,
         status=match.status,
         match_number=match.match_number,
-        balance_score=calculate_team_balance_score(session, new_team1, new_team2)
+        balance_score=calculate_team_balance_score(session, new_team1, new_team2),
+        round_number=match.round_number,
+        round_type=match.round_type
     )
     
     # Update waiters list
@@ -2732,17 +2912,20 @@ def regenerate_round_with_type(
         (new_matches_for_round, error_message)
     """
     num_courts = session.config.courts
+    num_players = len(session.config.players)
+    max_matches_per_round = min(num_courts, num_players // 4)
     
-    # Get matches for this round
-    start_idx = round_index * num_courts
-    end_idx = min(start_idx + num_courts, len(scheduled_matches))
+    # Get matches for this round by their round_number attribute
+    # (don't use index calculation - number of matches per round varies!)
+    round_match_indices = [i for i, m in enumerate(scheduled_matches) if m.round_number == round_index]
     
-    if start_idx >= len(scheduled_matches):
+    if not round_match_indices:
         return [], "Invalid round index"
     
     # Get players playing this round (from existing matches)
     playing_players: Set[str] = set()
-    for match in scheduled_matches[start_idx:end_idx]:
+    for idx in round_match_indices:
+        match = scheduled_matches[idx]
         playing_players.update(match.get_all_players())
     
     # Get player ratings
@@ -2754,6 +2937,9 @@ def regenerate_round_with_type(
     playing_list = list(playing_players)
     playing_list.sort(key=lambda p: player_ratings.get(p, 1500), reverse=True)
     
+    # Calculate how many matches we can actually make with the players we have
+    actual_matches_count = len(playing_list) // 4
+    
     # Generate new matches based on round type
     new_round_matches: List[ScheduledMatch] = []
     
@@ -2761,7 +2947,7 @@ def regenerate_round_with_type(
         # Ultra-competitive: group highest rated players together
         # Fill courts from highest to lowest rated
         # Add randomization: shuffle team pairings within each court
-        for court_idx in range(num_courts):
+        for court_idx in range(actual_matches_count):
             start = court_idx * 4
             if start + 4 <= len(playing_list):
                 court_players = playing_list[start:start + 4]
@@ -2774,7 +2960,8 @@ def regenerate_round_with_type(
                 team1, team2 = random.choice(team_configs)
                 
                 balance_score = calculate_team_balance_score(session, team1, team2)
-                match_num = scheduled_matches[start_idx + court_idx].match_number
+                # Get match number from existing matches in this round
+                match_num = scheduled_matches[round_match_indices[court_idx]].match_number if court_idx < len(round_match_indices) else court_idx + 1
                 
                 new_round_matches.append(ScheduledMatch(
                     id=f"scheduled_{uuid.uuid4().hex[:8]}",
@@ -2807,7 +2994,7 @@ def regenerate_round_with_type(
             remaining = remaining[4:]
             groups.append(best_group)
         
-        for court_idx, group in enumerate(groups[:num_courts]):
+        for court_idx, group in enumerate(groups[:actual_matches_count]):
             if len(group) < 4:
                 continue
             # Sort by rating within group for balanced pairing
@@ -2821,7 +3008,7 @@ def regenerate_round_with_type(
             team1, team2 = random.choice(team_configs)
             
             balance_score = calculate_team_balance_score(session, team1, team2)
-            match_num = scheduled_matches[start_idx + court_idx].match_number if start_idx + court_idx < len(scheduled_matches) else court_idx + 1
+            match_num = scheduled_matches[round_match_indices[court_idx]].match_number if court_idx < len(round_match_indices) else court_idx + 1
             
             new_round_matches.append(ScheduledMatch(
                 id=f"scheduled_{uuid.uuid4().hex[:8]}",
@@ -2840,7 +3027,7 @@ def regenerate_round_with_type(
         shuffled_players = playing_list[:]
         random.shuffle(shuffled_players)
         
-        for court_idx in range(num_courts):
+        for court_idx in range(actual_matches_count):
             start = court_idx * 4
             if start + 4 <= len(shuffled_players):
                 court_players = shuffled_players[start:start + 4]
@@ -2851,7 +3038,7 @@ def regenerate_round_with_type(
                 team2 = [court_players[1], court_players[2]]
                 
                 balance_score = calculate_team_balance_score(session, team1, team2)
-                match_num = scheduled_matches[start_idx + court_idx].match_number if start_idx + court_idx < len(scheduled_matches) else court_idx + 1
+                match_num = scheduled_matches[round_match_indices[court_idx]].match_number if court_idx < len(round_match_indices) else court_idx + 1
                 
                 new_round_matches.append(ScheduledMatch(
                     id=f"scheduled_{uuid.uuid4().hex[:8]}",
@@ -2892,9 +3079,9 @@ def swap_player_between_matches_or_waitlist(
     Returns:
         (success, error_message)
     """
-    num_courts = session.config.courts
-    start_idx = round_index * num_courts
-    end_idx = min(start_idx + num_courts, len(scheduled_matches))
+    # Find matches in this round by their round_number attribute
+    # (don't use index calculation - number of matches per round varies!)
+    round_match_indices = [i for i, m in enumerate(scheduled_matches) if m.round_number == round_index]
     
     # Find where each player is
     p1_match_idx = None
@@ -2909,7 +3096,7 @@ def swap_player_between_matches_or_waitlist(
     p2_on_waitlist = round_index < len(scheduled_waiters) and player2_id in scheduled_waiters[round_index]
     
     # Find player1 in matches
-    for idx in range(start_idx, end_idx):
+    for idx in round_match_indices:
         match = scheduled_matches[idx]
         if player1_id in match.team1:
             p1_match_idx = idx
@@ -2923,7 +3110,7 @@ def swap_player_between_matches_or_waitlist(
             break
     
     # Find player2 in matches
-    for idx in range(start_idx, end_idx):
+    for idx in round_match_indices:
         match = scheduled_matches[idx]
         if player2_id in match.team1:
             p2_match_idx = idx
@@ -3197,7 +3384,11 @@ def regenerate_subsequent_rounds(
                 player_cooccurrence[p2][p1] = player_cooccurrence[p2].get(p1, 0) + 1
     
     def select_waiters(available: List[str], num_to_wait: int, round_idx: int, round_type: str) -> List[str]:
-        """Select waiters with skill-based preferences for regenerated rounds."""
+        """Select waiters with STRICT fair rotation for regenerated rounds.
+        
+        CRITICAL FAIRNESS RULE: Nobody waits a 2nd time until EVERYONE has waited once.
+        We prioritize min_wait players first, only taking from higher levels when necessary.
+        """
         if num_to_wait <= 0:
             return []
         
@@ -3232,6 +3423,7 @@ def regenerate_subsequent_rounds(
         eligible.sort(key=waiter_key, reverse=True)
         selected = eligible[:num_to_wait]
         
+        # If we need more, take from next_level (preserves fairness while ensuring capacity)
         if len(selected) < num_to_wait:
             next_level = [p for p in available if wait_count.get(p, 0) == min_wait + 1 and p not in selected]
             next_level.sort(key=waiter_key, reverse=True)
