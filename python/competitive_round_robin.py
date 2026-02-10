@@ -2166,6 +2166,7 @@ def generate_rounds_based_schedule(
     partnership_used: Dict[str, Set[str]] = {pid: set() for pid in all_player_ids}
     individual_opponent_count: Dict[str, Dict[str, int]] = {pid: {} for pid in all_player_ids}
     groups_played: Set[frozenset] = set()
+    team_configs_used: Set[Tuple[frozenset, frozenset]] = set()  # Track specific team configurations
     
     # Track player co-occurrence for variety (how many times each pair has played together)
     player_cooccurrence: Dict[str, Dict[str, int]] = {pid: {} for pid in all_player_ids}
@@ -2174,35 +2175,82 @@ def generate_rounds_based_schedule(
     scheduled_waiters: List[List[str]] = []
     match_number = 0
     
-    def can_use_match(match: PotentialMatch) -> bool:
-        """Check if a match can be used given current constraints."""
+    def can_use_match(match: PotentialMatch, is_ultra_competitive: bool = False) -> bool:
+        """Check if a match can be used given current constraints.
+        
+        For ultra-competitive rounds, we relax group and co-occurrence constraints
+        to prioritize skill homogeneity. Only partnership constraint is enforced.
+        """
         t1, t2 = match.team1, match.team2
         all_four = list(match.player_set)
         
-        # Partnership constraint
+        # Partnership constraint - ALWAYS enforced (no repeat partners)
         if t1[1] in partnership_used[t1[0]]:
             return False
         if t2[1] in partnership_used[t2[0]]:
             return False
         
-        # Individual opponent limit
+        # For ultra-competitive rounds, only enforce partnership constraint
+        # This allows the same 4 players to play together again with different partners
+        if is_ultra_competitive:
+            return True
+        
+        # Individual opponent limit (not for ultra-competitive)
         for a in t1:
             for b in t2:
                 if individual_opponent_count[a].get(b, 0) >= config.max_individual_opponent_repeats:
                     return False
         
-        # Group already played
+        # Group already played - same 4 players with different team configs allowed
+        # (This constraint is relaxed - same 4 can play if partners are different)
+        # Only block if exact same team configuration was used
         if match.player_set in groups_played:
-            return False
+            # Check if this SPECIFIC team configuration was used before
+            team_config = (frozenset(t1), frozenset(t2))
+            team_config_alt = (frozenset(t2), frozenset(t1))
+            if team_config in team_configs_used or team_config_alt in team_configs_used:
+                return False
         
-        # HARD CONSTRAINT: No pair should play together more than 2 times
-        # This ensures variety in a recreational session
+        # Co-occurrence limit: No pair should play together more than 2 times
         for i, p1 in enumerate(all_four):
             for p2 in all_four[i+1:]:
                 if player_cooccurrence[p1].get(p2, 0) >= 2:
                     return False
         
         return True
+    
+    def get_best_achievable_balance(players_4: List[str]) -> Tuple[float, Optional[Tuple[List[str], List[str]]]]:
+        """Find the best achievable team balance for 4 players given partnership constraints.
+        
+        Returns (best_balance_diff, (team1, team2)) or (inf, None) if no valid config exists.
+        """
+        if len(players_4) != 4:
+            return float('inf'), None
+        
+        p = players_4
+        configs = [
+            ([p[0], p[1]], [p[2], p[3]]),
+            ([p[0], p[2]], [p[1], p[3]]),
+            ([p[0], p[3]], [p[1], p[2]]),
+        ]
+        
+        best_diff = float('inf')
+        best_config = None
+        
+        for t1, t2 in configs:
+            # Check partnership constraint
+            if t1[1] in partnership_used[t1[0]] or t2[1] in partnership_used[t2[0]]:
+                continue
+            
+            t1_rating = sum(player_ratings[pid] for pid in t1)
+            t2_rating = sum(player_ratings[pid] for pid in t2)
+            diff = abs(t1_rating - t2_rating)
+            
+            if diff < best_diff:
+                best_diff = diff
+                best_config = (t1, t2)
+        
+        return best_diff, best_config
     
     def record_match_constraints(team1: List[str], team2: List[str]) -> None:
         """Record constraints after using a match."""
@@ -2225,6 +2273,10 @@ def generate_rounds_based_schedule(
         
         # Group
         groups_played.add(frozenset(all_four))
+        
+        # Team configuration (for tracking specific team pairings)
+        team_config = (frozenset(team1), frozenset(team2))
+        team_configs_used.add(team_config)
         
         # Co-occurrence (all pairs in the match)
         for i, p1 in enumerate(all_four):
@@ -2322,17 +2374,23 @@ def generate_rounds_based_schedule(
     # Generate rounds
     for round_idx in range(num_rounds):
         # Determine round type:
-        # Round 0: ULTRA-COMPETITIVE (highest players together)
-        # Then alternate: COMPETITIVE (round 1, 3, 5...) and VARIETY (round 2, 4, 6...)
-        if round_idx == 0:
+        # Cycle through: ULTRA-COMPETITIVE → COMPETITIVE → VARIETY → repeat
+        # Round 0, 3, 6, 9... = ultra-competitive
+        # Round 1, 4, 7, 10... = competitive  
+        # Round 2, 5, 8, 11... = variety
+        cycle_position = round_idx % 3
+        if cycle_position == 0:
             round_type_label = 'ultra-competitive'
             is_competitive_round = True  # Use competitive scoring for ultra-competitive
             is_ultra_competitive = True
-        else:
-            # After round 0, alternate starting with competitive
-            is_competitive_round = ((round_idx - 1) % 2 == 0)  # rounds 1,3,5... are competitive
+        elif cycle_position == 1:
+            round_type_label = 'competitive'
+            is_competitive_round = True
             is_ultra_competitive = False
-            round_type_label = 'competitive' if is_competitive_round else 'variety'
+        else:  # cycle_position == 2
+            round_type_label = 'variety'
+            is_competitive_round = False
+            is_ultra_competitive = False
         
         # Determine who plays this round
         available = all_player_ids[:]
@@ -2349,53 +2407,100 @@ def generate_rounds_based_schedule(
         # Filter potential matches to only those using players who are playing this round
         round_candidates = [
             m for m in all_potential_matches 
-            if m.player_set.issubset(playing_set) and can_use_match(m)
+            if m.player_set.issubset(playing_set) and can_use_match(m, is_ultra_competitive)
         ]
         
         # Score and sort candidates for this round type
         def match_score_for_round(m: PotentialMatch) -> float:
             base_score = m.competitive_score if is_competitive_round else m.mixed_score
             variety_penalty = get_cooccurrence_penalty(m)
-            return base_score - variety_penalty
+            score = base_score - variety_penalty
+            
+            # For competitive rounds, apply HEAVY penalty for poor achievable balance
+            # This is crucial: even if 4 players are homogeneous, if partnership constraints
+            # force an imbalanced team configuration, we should avoid this match
+            if is_competitive_round:
+                players_4 = list(m.player_set)
+                best_balance_diff, _ = get_best_achievable_balance(players_4)
+                
+                if best_balance_diff == float('inf'):
+                    # No valid configuration exists - heavily penalize
+                    score -= 2000
+                elif best_balance_diff > 100:  # More than 100 rating points difference (0.25 skill level)
+                    # Poor achievable balance - apply penalty proportional to imbalance
+                    # 100 diff → -200 penalty, 200 diff → -400 penalty, etc.
+                    score -= best_balance_diff * 2
+                elif best_balance_diff > 50:
+                    # Moderate imbalance - small penalty
+                    score -= best_balance_diff
+            
+            return score
         
-        # For ULTRA-COMPETITIVE round (round 0): group highest-rated players together
+        # For ULTRA-COMPETITIVE round: group similarly-rated players together
         if is_ultra_competitive:
             # Sort playing players by rating (highest first)
             playing_sorted = sorted(playing, key=lambda p: player_ratings.get(p, 1500), reverse=True)
             
             selected_matches = []
-            # Use max_matches_per_round, not num_courts - we can only fill as many courts as we have players for
-            for court_idx in range(max_matches_per_round):
-                start = court_idx * 4
-                if start + 4 <= len(playing_sorted):
-                    court_players = playing_sorted[start:start + 4]
-                    # Find best match configuration for these 4 players
+            used_players = set()
+            
+            if max_matches_per_round >= 2 and len(playing) >= 8:
+                # For multiple courts, evaluate all valid 2-match combinations
+                # to find the one with best total homogeneity
+                available = set(playing)
+                best_combination = None
+                best_total_score = float('-inf')
+                
+                valid_matches_for_round = [m for m in round_candidates if m.player_set.issubset(available)]
+                
+                # Try all pairs of non-overlapping matches
+                for i, m1 in enumerate(valid_matches_for_round):
+                    for m2 in valid_matches_for_round[i+1:]:
+                        if m1.player_set.isdisjoint(m2.player_set):
+                            # Calculate homogeneity score for this combination
+                            m1_ratings = [player_ratings.get(p, 1500) for p in m1.player_set]
+                            m2_ratings = [player_ratings.get(p, 1500) for p in m2.player_set]
+                            
+                            # Skill spread within each match (lower is better for ultra-competitive)
+                            m1_spread = max(m1_ratings) - min(m1_ratings)
+                            m2_spread = max(m2_ratings) - min(m2_ratings)
+                            
+                            # Combined score: negative spread (lower spread = higher score)
+                            total_score = -(m1_spread + m2_spread)
+                            
+                            if total_score > best_total_score:
+                                best_total_score = total_score
+                                best_combination = [m1, m2]
+                
+                if best_combination:
+                    selected_matches = best_combination
+                    for m in best_combination:
+                        used_players.update(m.player_set)
+            
+            # Fallback for single match or if combination search failed
+            if not selected_matches:
+                for court_idx in range(max_matches_per_round):
+                    available = [p for p in playing_sorted if p not in used_players]
+                    if len(available) < 4:
+                        break
+                    
+                    # Find the best match with smallest skill spread
                     best_match = None
-                    best_score = float('-inf')
+                    best_homogeneity_score = float('-inf')
                     
                     for m in round_candidates:
-                        if m.player_set == frozenset(court_players):
-                            score = match_score_for_round(m)
-                            if score > best_score:
-                                best_score = score
+                        if m.player_set.issubset(set(available)):
+                            match_ratings = [player_ratings.get(p, 1500) for p in m.player_set]
+                            skill_spread = max(match_ratings) - min(match_ratings)
+                            homogeneity_score = -skill_spread + match_score_for_round(m) * 0.001
+                            
+                            if homogeneity_score > best_homogeneity_score:
+                                best_homogeneity_score = homogeneity_score
                                 best_match = m
                     
                     if best_match:
                         selected_matches.append(best_match)
-                    else:
-                        # Create a match manually if no candidate found
-                        # Use 1+4 vs 2+3 pattern for best balance
-                        team1 = [court_players[0], court_players[3]]
-                        team2 = [court_players[1], court_players[2]]
-                        
-                        # Create a temporary PotentialMatch-like object
-                        class TempMatch:
-                            def __init__(self, t1, t2):
-                                self.team1 = t1
-                                self.team2 = t2
-                                self.player_set = frozenset(t1 + t2)
-                        
-                        selected_matches.append(TempMatch(team1, team2))
+                        used_players.update(best_match.player_set)
         
         # For COMPETITIVE rounds, use player-centric selection strategy
         # Ensure each player gets their best available skill-appropriate match
@@ -2458,7 +2563,7 @@ def generate_rounds_based_schedule(
                 for m in player_matches[player]:
                     if m.player_set & used_in_round:
                         continue  # Someone already assigned
-                    if not can_use_match(m):
+                    if not can_use_match(m, is_ultra_competitive):
                         continue  # Constraint violation
                     
                     score = match_score_for_round(m)
@@ -2512,7 +2617,7 @@ def generate_rounds_based_schedule(
                     if match.player_set & used:
                         continue  # Players already used
                     
-                    if not can_use_match(match):
+                    if not can_use_match(match, is_ultra_competitive):
                         continue  # Constraints violated
                     
                     # Try this match
@@ -2556,8 +2661,10 @@ def generate_rounds_based_schedule(
                             if individual_opponent_count[a].get(b, 0) >= config.max_individual_opponent_repeats:
                                 return False
                     
-                    # Group already played - still enforce
-                    if match.player_set in groups_played:
+                    # Team configuration check - same 4 can play if team config is different
+                    team_config = (frozenset(t1), frozenset(t2))
+                    team_config_alt = (frozenset(t2), frozenset(t1))
+                    if team_config in team_configs_used or team_config_alt in team_configs_used:
                         return False
                     
                     # RELAXED: Allow pairs to play together up to 3 times instead of 2
@@ -2604,8 +2711,10 @@ def generate_rounds_based_schedule(
                             if individual_opponent_count[a].get(b, 0) >= 5:
                                 return False
                     
-                    # Group already played - still enforce
-                    if match.player_set in groups_played:
+                    # Team configuration check - same 4 can play if team config is different
+                    team_config = (frozenset(t1), frozenset(t2))
+                    team_config_alt = (frozenset(t2), frozenset(t1))
+                    if team_config in team_configs_used or team_config_alt in team_configs_used:
                         return False
                     
                     return True
@@ -2633,15 +2742,17 @@ def generate_rounds_based_schedule(
             # Level 3: Only enforce no-repeat-partners and no-same-group constraints
             if selected_matches is None:
                 def can_use_match_minimal(match: PotentialMatch) -> bool:
-                    """Check match with minimal constraints (only partnership and group)."""
+                    """Check match with minimal constraints (only partnership and team config)."""
                     t1, t2 = match.team1, match.team2
                     
                     # Partnership constraint - always enforce (no repeat partners)
                     if t1[1] in partnership_used[t1[0]] or t2[1] in partnership_used[t2[0]]:
                         return False
                     
-                    # Group already played - always enforce
-                    if match.player_set in groups_played:
+                    # Team configuration check - same 4 can play if team config is different
+                    team_config = (frozenset(t1), frozenset(t2))
+                    team_config_alt = (frozenset(t2), frozenset(t1))
+                    if team_config in team_configs_used or team_config_alt in team_configs_used:
                         return False
                     
                     return True

@@ -193,7 +193,11 @@ def test_no_repeat_partners():
 
 
 def test_match_variety():
-    """Test that the same 4 players don't play together twice."""
+    """Test that same 4 players don't play with exact same team configuration twice.
+    
+    Note: Same 4 players CAN play together if they switch partners - this is allowed.
+    We only check that the exact (team1 vs team2) configuration isn't repeated.
+    """
     session = create_10_player_session()
     
     config = CompetitiveRoundRobinConfig(
@@ -205,24 +209,41 @@ def test_match_variety():
     
     print(f"\n=== Match Variety Test ===")
     
-    # Track groups of 4
-    groups = {}
+    # Track team configurations (not just groups of 4)
+    team_configs = {}
     violations = []
     
     for match in scheduled_matches:
-        group = frozenset(match.team1 + match.team2)
-        groups[group] = groups.get(group, 0) + 1
-        if groups[group] > 1:
-            violations.append(f"Group {sorted(group)} played together {groups[group]} times")
+        # Normalize team configuration: sort teams and players within teams
+        team1_sorted = tuple(sorted(match.team1))
+        team2_sorted = tuple(sorted(match.team2))
+        # Order the two teams consistently
+        config_key = tuple(sorted([team1_sorted, team2_sorted]))
+        
+        team_configs[config_key] = team_configs.get(config_key, 0) + 1
+        if team_configs[config_key] > 1:
+            violations.append(f"Team config {config_key[0]} vs {config_key[1]} used {team_configs[config_key]} times")
     
     if violations:
-        print("Group violations:")
+        print("Team configuration violations:")
         for v in violations:
             print(f"  ✗ {v}")
         return False
     
-    print(f"Total unique groups of 4: {len(groups)}")
-    print("✓ Test passed: No repeated groups")
+    # Also report on groups playing together (informational, not a failure)
+    groups = {}
+    for match in scheduled_matches:
+        group = frozenset(match.team1 + match.team2)
+        groups[group] = groups.get(group, 0) + 1
+    
+    same_groups = [(g, c) for g, c in groups.items() if c > 1]
+    if same_groups:
+        print(f"Info: Same 4 players played together multiple times (with different partners):")
+        for group, count in same_groups:
+            print(f"  - {sorted(group)}: {count} times")
+    
+    print(f"Total unique team configurations: {len(team_configs)}")
+    print("✓ Test passed: No repeated team configurations")
     return True
 
 
