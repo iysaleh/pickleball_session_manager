@@ -342,12 +342,24 @@ class PlayerListWidget(QWidget):
         input_layout.addWidget(remove_btn)
         layout.addLayout(input_layout)
         
-        # Player count
+        # Player count and move buttons
         count_layout = QHBoxLayout()
         self.player_count_label = QLabel("Total Players: 0")
         self.player_count_label.setStyleSheet("font-weight: bold; font-size: 12px; color: white; background-color: #2a2a2a;")
         count_layout.addWidget(self.player_count_label)
         count_layout.addStretch()
+        
+        # Move up/down buttons
+        move_up_btn = QPushButton("↑ Move Up")
+        move_up_btn.setMaximumWidth(100)
+        move_up_btn.clicked.connect(self.move_player_up)
+        
+        move_down_btn = QPushButton("↓ Move Down")
+        move_down_btn.setMaximumWidth(100)
+        move_down_btn.clicked.connect(self.move_player_down)
+        
+        count_layout.addWidget(move_up_btn)
+        count_layout.addWidget(move_down_btn)
         layout.addLayout(count_layout)
         
         # Player list
@@ -355,6 +367,36 @@ class PlayerListWidget(QWidget):
         layout.addWidget(self.player_list)
         
         self.setLayout(layout)
+    
+    def move_player_up(self):
+        """Move selected player up in the list"""
+        current_row = self.player_list.currentRow()
+        if current_row <= 0:
+            return  # Already at top or nothing selected
+        
+        # Swap in players list
+        self.players[current_row], self.players[current_row - 1] = \
+            self.players[current_row - 1], self.players[current_row]
+        
+        # Swap in UI list
+        item = self.player_list.takeItem(current_row)
+        self.player_list.insertItem(current_row - 1, item)
+        self.player_list.setCurrentRow(current_row - 1)
+    
+    def move_player_down(self):
+        """Move selected player down in the list"""
+        current_row = self.player_list.currentRow()
+        if current_row < 0 or current_row >= self.player_list.count() - 1:
+            return  # At bottom or nothing selected
+        
+        # Swap in players list
+        self.players[current_row], self.players[current_row + 1] = \
+            self.players[current_row + 1], self.players[current_row]
+        
+        # Swap in UI list
+        item = self.player_list.takeItem(current_row)
+        self.player_list.insertItem(current_row + 1, item)
+        self.player_list.setCurrentRow(current_row + 1)
     
     def set_pre_seed_mode(self, enabled: bool):
         """Enable or disable pre-seed mode"""
