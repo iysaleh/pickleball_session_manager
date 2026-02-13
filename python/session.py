@@ -71,6 +71,20 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
             None,  # active_matches (no active matches during session creation)
             final_config.first_bye_players  # first_bye_players
         )
+    elif final_config.mode == 'strict-continuous-rr':
+        from .strict_continuous_rr import generate_strict_rr_queue
+        # Create a temporary session to pass to generate_strict_rr_queue
+        temp_session = Session(
+            id=generate_id(),
+            config=final_config,
+            matches=[],
+            waiting_players=[],
+            player_stats=player_stats,
+            active_players=active_players,
+            match_queue=[],
+            max_queue_size=max_queue_size
+        )
+        match_queue = generate_strict_rr_queue(temp_session)
     
     # Use provided advanced config or defaults
     advanced_config = config.advanced_config or get_default_advanced_config()
@@ -584,6 +598,7 @@ def evaluate_and_create_matches(session: Session) -> Session:
     For king-of-court mode, manages rounds-based progression.
     For competitive-round-robin mode, populates from pre-approved schedule (rounds-based).
     For pooled-continuous-rr mode, manages pool matches and crossover.
+    For strict-continuous-rr mode, populates matches in strict queue order.
     """
     
     if session.config.mode == 'competitive-variety':
@@ -604,6 +619,9 @@ def evaluate_and_create_matches(session: Session) -> Session:
     elif session.config.mode == 'pooled-continuous-rr':
         from python.pooled_continuous_rr import populate_courts_pooled_rr
         populate_courts_pooled_rr(session)
+    elif session.config.mode == 'strict-continuous-rr':
+        from python.strict_continuous_rr import populate_courts_strict_continuous
+        populate_courts_strict_continuous(session)
     
     return session
 

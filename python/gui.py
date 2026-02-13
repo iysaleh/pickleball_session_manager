@@ -2476,9 +2476,9 @@ class SetupDialog(QDialog):
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel("Game Mode:"))
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Continuous Round Robin", "King of the Court", "Competitive Variety", "Competitive Round Robin", "Competitive Continuous Round Robin", "Pooled Continuous RR with Crossover"])
-        # Set default to 'Competitive Variety'
-        self.mode_combo.setCurrentIndex(self.mode_combo.findText("Competitive Variety"))
+        self.mode_combo.addItems(["Strict Continuous Round Robin", "Continuous Round Robin", "King of the Court", "Competitive Variety", "Competitive Round Robin", "Competitive Continuous Round Robin", "Pooled Continuous RR with Crossover"])
+        # Set default to 'Strict Continuous Round Robin'
+        self.mode_combo.setCurrentIndex(self.mode_combo.findText("Strict Continuous Round Robin"))
         mode_layout.addWidget(self.mode_combo)
         
         # Pre-seeded Skill Ratings checkbox (only show for Competitive Variety)
@@ -2700,7 +2700,8 @@ class SetupDialog(QDialog):
                 'king-of-court': 'King of the Court',
                 'competitive-round-robin': 'Competitive Round Robin',
                 'competitive-continuous-round-robin': 'Competitive Continuous Round Robin',
-                'pooled-continuous-rr': 'Pooled Continuous RR with Crossover'
+                'pooled-continuous-rr': 'Pooled Continuous RR with Crossover',
+                'strict-continuous-rr': 'Strict Continuous Round Robin'
             }
             display_mode = mode_mapping.get(self.previous_game_mode, 'Competitive Variety')
             
@@ -2734,6 +2735,7 @@ class SetupDialog(QDialog):
         is_competitive_round_robin = mode_text == "Competitive Round Robin"
         is_competitive_continuous = mode_text == "Competitive Continuous Round Robin"
         is_pooled_rr = mode_text == "Pooled Continuous RR with Crossover"
+        is_strict_continuous_rr = mode_text == "Strict Continuous Round Robin"
         
         # Show pre-seed checkbox for modes that can use skill ratings
         self.pre_seed_checkbox.setVisible(
@@ -2767,13 +2769,15 @@ class SetupDialog(QDialog):
                 is_competitive_round_robin or is_competitive_continuous):
             self.pre_seed_checkbox.setChecked(False)
         
-        # Pooled Continuous RR only supports Singles - update session type dropdown
-        if is_pooled_rr:
-            # Force Singles and disable Doubles option
+        # Pooled Continuous RR and Strict Continuous RR default to Singles
+        if is_pooled_rr or is_strict_continuous_rr:
+            # Force Singles and disable Doubles option for pooled RR
+            # For strict RR, default to Singles but allow Doubles
             self.type_combo.setCurrentText("Singles")
-            # Remove Doubles if present, keep only Singles
-            self.type_combo.clear()
-            self.type_combo.addItem("Singles")
+            if is_pooled_rr:
+                # Remove Doubles if present, keep only Singles
+                self.type_combo.clear()
+                self.type_combo.addItem("Singles")
         else:
             # Restore both options if not already present
             if self.type_combo.count() < 2:
@@ -3165,6 +3169,8 @@ class SetupDialog(QDialog):
                 mode: GameMode = 'competitive-continuous-round-robin'
             elif mode_text == "Pooled Continuous RR with Crossover":
                 mode: GameMode = 'pooled-continuous-rr'
+            elif mode_text == "Strict Continuous Round Robin":
+                mode: GameMode = 'strict-continuous-rr'
             else:
                 mode: GameMode = 'competitive-variety'
             
@@ -5076,7 +5082,8 @@ class SessionWindow(QMainWindow):
             'round-robin': 'Continuous Round Robin',
             'king-of-court': 'King of the Court',
             'competitive-round-robin': 'Competitive Round Robin',
-            'competitive-continuous-round-robin': 'Competitive Continuous Round Robin'
+            'competitive-continuous-round-robin': 'Competitive Continuous Round Robin',
+            'strict-continuous-rr': 'Strict Continuous Round Robin'
         }
         return mode_display_names.get(mode, mode.replace('-', ' ').title())
     
@@ -6588,6 +6595,18 @@ class SessionWindow(QMainWindow):
             if is_competitive_variety:
                 # Sort by ELO (descending) for competitive variety
                 player_data.sort(key=lambda x: -x[1])
+            elif self.session.config.mode in ('round-robin', 'strict-continuous-rr'):
+                # Use the enhanced round robin standings calculation with H2H tiebreaker
+                from python.strict_continuous_rr import calculate_round_robin_standings
+                standings = calculate_round_robin_standings(self.session)
+                
+                # Create a map of player name to rank
+                name_to_rank = {}
+                for s in standings:
+                    name_to_rank[s['name']] = s['rank']
+                
+                # Sort player_data by rank
+                player_data.sort(key=lambda x: name_to_rank.get(x[0], 999))
             else:
                 # Sort by wins (descending), then by losses (ascending), then by avg_diff (descending)
                 player_data.sort(key=lambda x: (-x[2], x[3], -x[10]))
