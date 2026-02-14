@@ -5984,6 +5984,28 @@ class SessionWindow(QMainWindow):
             
             export_lines.append("")
             
+            # Session Winners (top 3 players by ELO from session statistics) for non-pooled modes
+            if self.session.config.mode != 'pooled-continuous-rr' and player_data:
+                export_lines.append("SESSION WINNERS:")
+                export_lines.append("-" * 70)
+                
+                medals = ["🥇 GOLD", "🥈 SILVER", "🥉 BRONZE"]
+                winner_count = 0
+                for i, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(player_data):
+                    if games_played == 0:
+                        continue
+                    if winner_count >= 3:
+                        break
+                    medal = medals[winner_count]
+                    pt_diff = pts_for - pts_against
+                    export_lines.append(f"{medal}: {player_name} - {record}, {pt_diff:+d} pts")
+                    winner_count += 1
+                
+                if winner_count == 0:
+                    export_lines.append("  (No completed games yet)")
+                
+                export_lines.append("")
+            
             # Pooled Continuous RR specific exports
             if self.session.config.mode == 'pooled-continuous-rr':
                 pooled_config = self.session.config.pooled_continuous_rr_config
