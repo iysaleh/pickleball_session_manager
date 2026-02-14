@@ -590,6 +590,55 @@ def forfeit_match(session: Session, match_id: str) -> bool:
     return True
 
 
+def recalculate_stats_after_edit(session: Session, match: Match, old_score: Dict, new_score: Dict) -> None:
+    """Recalculate player statistics after editing a completed match's score.
+    
+    Reverses the old score's effect on stats and applies the new score.
+    Does NOT change games_played, opponents_played, or partners_played.
+    """
+    old_t1 = old_score['team1_score']
+    old_t2 = old_score['team2_score']
+    old_team1_won = old_t1 > old_t2
+
+    new_t1 = new_score['team1_score']
+    new_t2 = new_score['team2_score']
+    new_team1_won = new_t1 > new_t2
+
+    for player_id in match.team1:
+        stats = session.player_stats[player_id]
+        # Reverse old
+        stats.total_points_for -= old_t1
+        stats.total_points_against -= old_t2
+        if old_team1_won:
+            stats.wins -= 1
+        else:
+            stats.losses -= 1
+        # Apply new
+        stats.total_points_for += new_t1
+        stats.total_points_against += new_t2
+        if new_team1_won:
+            stats.wins += 1
+        else:
+            stats.losses += 1
+
+    for player_id in match.team2:
+        stats = session.player_stats[player_id]
+        # Reverse old
+        stats.total_points_for -= old_t2
+        stats.total_points_against -= old_t1
+        if not old_team1_won:
+            stats.wins -= 1
+        else:
+            stats.losses -= 1
+        # Apply new
+        stats.total_points_for += new_t2
+        stats.total_points_against += new_t1
+        if not new_team1_won:
+            stats.wins += 1
+        else:
+            stats.losses += 1
+
+
 def evaluate_and_create_matches(session: Session) -> Session:
     """
     Evaluate current session state and create new matches.

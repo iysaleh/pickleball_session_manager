@@ -5991,20 +5991,75 @@ class SessionWindow(QMainWindow):
                 
                 medals = ["🥇 GOLD", "🥈 SILVER", "🥉 BRONZE"]
                 winner_count = 0
-                for i, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(player_data):
-                    if games_played == 0:
-                        continue
-                    if winner_count >= 3:
-                        break
-                    medal = medals[winner_count]
-                    pt_diff = pts_for - pts_against
-                    export_lines.append(f"{medal}: {player_name} - {record}, {pt_diff:+d} pts")
-                    winner_count += 1
+                
+                # For RR modes, use RR standings order instead of ELO
+                if self.session.config.mode in ('round-robin', 'strict-continuous-rr'):
+                    from python.strict_continuous_rr import calculate_round_robin_standings
+                    rr_standings = calculate_round_robin_standings(self.session)
+                    for s in rr_standings:
+                        if s['games_played'] == 0:
+                            continue
+                        if winner_count >= 3:
+                            break
+                        medal = medals[winner_count]
+                        record = f"{s['wins']}-{s['losses']}"
+                        export_lines.append(f"{medal}: {s['name']} - {record}, {s['pt_diff']:+d} pts")
+                        winner_count += 1
+                else:
+                    for i, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(player_data):
+                        if games_played == 0:
+                            continue
+                        if winner_count >= 3:
+                            break
+                        medal = medals[winner_count]
+                        pt_diff = pts_for - pts_against
+                        export_lines.append(f"{medal}: {player_name} - {record}, {pt_diff:+d} pts")
+                        winner_count += 1
                 
                 if winner_count == 0:
                     export_lines.append("  (No completed games yet)")
                 
                 export_lines.append("")
+            
+            # Round Robin Standings for RR modes
+            if self.session.config.mode in ('round-robin', 'strict-continuous-rr'):
+                from python.strict_continuous_rr import calculate_round_robin_standings
+                standings = calculate_round_robin_standings(self.session)
+                
+                if standings and any(s['games_played'] > 0 for s in standings):
+                    export_lines.append("ROUND ROBIN STANDINGS:")
+                    export_lines.append("-" * 70)
+                    export_lines.append(f"{'Rank':<6} {'Player':<25} {'W-L':<10} {'Pt Diff':<12} {'H2H'}")
+                    export_lines.append("-" * 70)
+                    
+                    for s in standings:
+                        record = f"{s['wins']}-{s['losses']}"
+                        pt_diff = f"{s['pt_diff']:+d}"
+                        h2h_parts = []
+                        for opp_id, result in s['head_to_head'].items():
+                            opp_name = get_player_name(self.session, opp_id)
+                            h2h_parts.append(f"{result} vs {opp_name}")
+                        h2h_str = ", ".join(h2h_parts) if h2h_parts else ""
+                        export_lines.append(f"{s['rank']:<6} {s['name']:<25} {record:<10} {pt_diff:<12} {h2h_str}")
+                    
+                    export_lines.append("")
+                    
+                    # CSV version
+                    export_lines.append("ROUND ROBIN STANDINGS CSV:")
+                    export_lines.append("-" * 70)
+                    export_lines.append("Rank,Player,Wins,Losses,PtsFor,PtsAgainst,PtDiff,WinPct,H2H")
+                    for s in standings:
+                        player_name_csv = f'"{s["name"]}"' if ',' in s['name'] else s['name']
+                        win_pct_csv = f"{s['win_pct']:.1f}"
+                        h2h_parts = []
+                        for opp_id, result in s['head_to_head'].items():
+                            opp_name = get_player_name(self.session, opp_id)
+                            h2h_parts.append(f"{result} vs {opp_name}")
+                        h2h_str = "; ".join(h2h_parts) if h2h_parts else ""
+                        h2h_csv = f'"{h2h_str}"' if h2h_str else ""
+                        export_lines.append(f"{s['rank']},{player_name_csv},{s['wins']},{s['losses']},{s['pts_for']},{s['pts_against']},{s['pt_diff']},{win_pct_csv},{h2h_csv}")
+                    
+                    export_lines.append("")
             
             # Pooled Continuous RR specific exports
             if self.session.config.mode == 'pooled-continuous-rr':
@@ -6468,7 +6523,12 @@ class SessionWindow(QMainWindow):
                     msgbox.exec()
                     return
                 
-                match.score = {'team1_score': t1_score, 'team2_score': t2_score}
+                old_score = match.score.copy() if match.score else {'team1_score': 0, 'team2_score': 0}
+                new_score = {'team1_score': t1_score, 'team2_score': t2_score}
+                
+                from python.session import recalculate_stats_after_edit
+                recalculate_stats_after_edit(self.session, match, old_score, new_score)
+                match.score = new_score
                 dialog.accept()
                 self.refresh_display()
             
