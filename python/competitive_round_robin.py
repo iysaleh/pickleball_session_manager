@@ -967,6 +967,12 @@ def generate_initial_schedule(
     for i, match in enumerate(scheduled_matches):
         match.match_number = i + 1
     
+    # Log schedule generation
+    from python.session_logger import get_session_logger
+    logger = get_session_logger()
+    if logger:
+        logger.log_schedule_generated(len(scheduled_matches))
+    
     return scheduled_matches
 
 
@@ -2879,6 +2885,12 @@ def generate_rounds_based_schedule(
                 ))
         
         scheduled_matches.extend(round_matches)
+    
+    # Log schedule generation
+    from python.session_logger import get_session_logger
+    logger = get_session_logger()
+    if logger:
+        logger.log_schedule_generated(len(scheduled_matches))
     
     return scheduled_matches, scheduled_waiters
 

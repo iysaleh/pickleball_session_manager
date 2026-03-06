@@ -359,6 +359,12 @@ def advance_round(session: Session) -> Session:
     # Create new round
     session.king_of_court_round_number += 1
     
+    # Log round advancement
+    from python.session_logger import get_session_logger
+    logger = get_session_logger()
+    if logger:
+        logger.log_round_advanced(session.king_of_court_round_number, 'King of Court')
+    
     # STEP 1: Apply King of Court movement rules (winners up & split, losers down & split)
     court_player_assignments = apply_king_of_court_movement(session, court_ordering, court_winners, court_losers)
     

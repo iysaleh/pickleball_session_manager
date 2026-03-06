@@ -3761,6 +3761,12 @@ class CourtDisplayWidget(QWidget):
         dialog.setMinimumWidth(400)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
+                # Log the user's score input
+                from python.session_logger import get_session_logger
+                logger = get_session_logger()
+                if logger:
+                    logger.log_score_input(self.current_match.id, team1_score, team2_score)
+                
                 # Use session manager for match completion (handles all downstream effects)
                 parent = self.window()
                 if hasattr(parent, 'session_manager'):
@@ -3987,6 +3993,13 @@ class SessionWindow(QMainWindow):
     def closeEvent(self, event):
         """Handle window close"""
         self.update_timer.stop()
+        
+        # Log session end
+        from python.session_logger import get_session_logger
+        slogger = get_session_logger()
+        if slogger:
+            slogger.log_session_ended()
+            slogger.close()
         
         # Save session state before closing
         from python.session_persistence import save_session, save_player_history
@@ -4405,6 +4418,12 @@ class SessionWindow(QMainWindow):
                 self.session.competitive_variety_roaming_range_percent = roaming
                 self.competitive_variety_value_label.setText(label)
                 
+                # Log slider change
+                from python.session_logger import get_session_logger
+                slogger = get_session_logger()
+                if slogger:
+                    slogger.log_slider_changed('Competitiveness', '', label)
+                
                 # Make sure slider is visible for preset settings
                 self.competitive_variety_slider.show()
                 
@@ -4517,6 +4536,12 @@ class SessionWindow(QMainWindow):
                 self.session.competitive_variety_partner_repetition_limit = settings["partner_repetition_limit"]
                 self.session.competitive_variety_opponent_repetition_limit = settings["opponent_repetition_limit"]
                 self.variety_value_label.setText(label)
+                
+                # Log slider change
+                from python.session_logger import get_session_logger
+                slogger = get_session_logger()
+                if slogger:
+                    slogger.log_slider_changed('Variety', '', label)
                 
                 # Make sure slider is visible for preset settings
                 self.variety_slider.show()
@@ -4823,6 +4848,12 @@ class SessionWindow(QMainWindow):
             if value in weight_mapping:
                 self.session.adaptive_balance_weight = weight_mapping[value]
                 
+                # Log slider change
+                from python.session_logger import get_session_logger
+                slogger = get_session_logger()
+                if slogger:
+                    slogger.log_slider_changed('Adaptive Balance', '', f'Manual {weight_mapping[value]}x')
+                
                 # Update display
                 self.update_adaptive_constraints_slider()
                 
@@ -4862,6 +4893,12 @@ class SessionWindow(QMainWindow):
             
             # Update button text
             self.adaptive_state_button.setText(new_state)
+            
+            # Log state change
+            from python.session_logger import get_session_logger
+            slogger = get_session_logger()
+            if slogger:
+                slogger.log_slider_changed('Adaptive State', '', new_state)
             
             # Update slider and status display
             self.update_adaptive_constraints_slider()
@@ -6230,6 +6267,12 @@ class SessionWindow(QMainWindow):
             
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(export_text)
+            
+            # Log the export
+            from python.session_logger import get_session_logger
+            slogger = get_session_logger()
+            if slogger:
+                slogger.log_export(filename)
             
             QMessageBox.information(
                 self, "Export Successful",
@@ -7682,6 +7725,13 @@ class SessionWindow(QMainWindow):
         )
         
         if reply == QMessageBox.StandardButton.Yes:
+            # Log session end
+            from python.session_logger import get_session_logger
+            slogger = get_session_logger()
+            if slogger:
+                slogger.log_session_ended()
+                slogger.close()
+            
             self.update_timer.stop()
             self.close()
     
@@ -7691,7 +7741,14 @@ class SessionWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             # Update session with new court ordering
             from python.kingofcourt import set_court_ordering
-            self.session = set_court_ordering(self.session, dialog.get_court_ordering())
+            new_ordering = dialog.get_court_ordering()
+            self.session = set_court_ordering(self.session, new_ordering)
+            
+            # Log court ordering change
+            from python.session_logger import get_session_logger
+            slogger = get_session_logger()
+            if slogger:
+                slogger.log_court_ordering_changed(new_ordering)
 
 
 class CourtOrderingDialog(QDialog):
