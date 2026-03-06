@@ -124,6 +124,12 @@ def create_session(config: SessionConfig, max_queue_size: int = 100) -> Session:
         from .kingofcourt import initialize_king_of_court_session
         session = initialize_king_of_court_session(session)
     
+    # Initialize session logger
+    from .session_logger import initialize_session_logger
+    logger = initialize_session_logger()
+    player_names = [p.name for p in players_to_use]
+    logger.log_session_started(final_config.mode, len(players_to_use), final_config.courts, player_names)
+    
     return session
 
 
@@ -198,11 +204,24 @@ def add_player_to_session(session: Session, player: Player) -> Session:
         from .competitive_variety import update_session_competitive_variety_settings
         update_session_competitive_variety_settings(session)
         
+    # Log player addition
+    from .session_logger import get_session_logger
+    logger = get_session_logger()
+    if logger:
+        logger.log_player_added(player.name)
+    
     return session
 
 
 def remove_player_from_session(session: Session, player_id: str) -> Session:
     """Remove a player from an active session"""
+    from .session_logger import get_session_logger
+    
+    # Log before removal so we can get the name
+    logger = get_session_logger()
+    if logger:
+        name = get_player_name(session, player_id) or player_id
+        logger.log_player_removed(name)
     
     # Don't remove from config.players, just mark as inactive
     active_players = session.active_players.copy()
@@ -406,6 +425,7 @@ def load_session_from_snapshot(session: Session, snapshot: MatchSnapshot) -> boo
 
 def complete_match(session: Session, match_id: str, team1_score: int, team2_score: int) -> Tuple[bool, List[Dict]]:
     """Complete a match with scores. Returns (success, list_of_slides)."""
+    from .session_logger import get_session_logger
     
     # Validate scores - winner must have higher score
     if team1_score == team2_score:
@@ -433,6 +453,13 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
     match.status = 'completed'
     match.score = {'team1_score': team1_score, 'team2_score': team2_score}
     match.end_time = now()
+    
+    # Log match completion
+    logger = get_session_logger()
+    if logger:
+        t1_names = [get_player_name(session, pid) or pid for pid in match.team1]
+        t2_names = [get_player_name(session, pid) or pid for pid in match.team2]
+        logger.log_match_completed(match_id, t1_names, t2_names, team1_score, team2_score)
     
     # Determine winner and update stats
     team1_won = team1_score > team2_score
@@ -550,12 +577,15 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
                     'to': target_court,
                     'match_id': source_match.id
                 })
+                if logger:
+                    logger.log_court_slide(source_match.id, source_court, target_court)
     
     return True, slides
 
 
 def forfeit_match(session: Session, match_id: str) -> bool:
     """Forfeit a match without recording scores"""
+    from .session_logger import get_session_logger
     
     match = None
     for m in session.matches:
@@ -568,6 +598,13 @@ def forfeit_match(session: Session, match_id: str) -> bool:
     
     match.status = 'forfeited'
     match.end_time = now()
+    
+    # Log forfeit
+    logger = get_session_logger()
+    if logger:
+        t1_names = [get_player_name(session, pid) or pid for pid in match.team1]
+        t2_names = [get_player_name(session, pid) or pid for pid in match.team2]
+        logger.log_match_forfeited(match_id, t1_names, t2_names)
     
     # Don't record any statistics for forfeits
     # Just mark partnership/opponent interactions
@@ -654,6 +691,10 @@ def evaluate_and_create_matches(session: Session) -> Session:
     For pooled-continuous-rr mode, manages pool matches and crossover.
     For strict-continuous-rr mode, populates matches in strict queue order.
     """
+    from .session_logger import get_session_logger
+    
+    # Track matches before evaluation to log new ones
+    matches_before = {m.id for m in session.matches}
     
     if session.config.mode == 'competitive-variety':
         from python.queue_manager import populate_empty_courts
@@ -676,6 +717,15 @@ def evaluate_and_create_matches(session: Session) -> Session:
     elif session.config.mode == 'strict-continuous-rr':
         from python.strict_continuous_rr import populate_courts_strict_continuous
         populate_courts_strict_continuous(session)
+    
+    # Log any newly created matches
+    logger = get_session_logger()
+    if logger:
+        for m in session.matches:
+            if m.id not in matches_before and m.status in ('waiting', 'in-progress'):
+                t1_names = [get_player_name(session, pid) or pid for pid in m.team1]
+                t2_names = [get_player_name(session, pid) or pid for pid in m.team2]
+                logger.log_match_scheduled(m.id, m.court_number, t1_names, t2_names)
     
     return session
 
@@ -755,6 +805,14 @@ def create_manual_match(session: Session, court_number: int, team1_ids: List[str
     )
     
     session.matches.append(match)
+    
+    # Log manual match creation
+    from .session_logger import get_session_logger
+    logger = get_session_logger()
+    if logger:
+        t1_names = [get_player_name(session, pid) or pid for pid in team1_ids]
+        t2_names = [get_player_name(session, pid) or pid for pid in team2_ids]
+        logger.log_manual_match_created(court_number, t1_names, t2_names)
     
     return {
         'success': True,
