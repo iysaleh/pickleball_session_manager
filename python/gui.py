@@ -3983,10 +3983,6 @@ class SessionWindow(QMainWindow):
         """
         if hasattr(self, 'session_manager'):
             self.session_manager.force_session_evaluation()
-        else:
-            # Fallback for transition period
-            # Session logic moved to session manager
-            self._trigger_session_evaluation()
     
     def closeEvent(self, event):
         """Handle window close"""
@@ -5583,7 +5579,11 @@ class SessionWindow(QMainWindow):
                 if match.score:
                     t1_score = match.score.get('team1_score', 0)
                     t2_score = match.score.get('team2_score', 0)
-                    item_text = f"{team1_str} {t1_score}\nvs\n{team2_str} {t2_score}"
+                    # Show winner on top (consistent with confirmation dialog)
+                    if t1_score >= t2_score:
+                        item_text = f"{team1_str} {t1_score}\nvs\n{team2_str} {t2_score}"
+                    else:
+                        item_text = f"{team2_str} {t2_score}\nvs\n{team1_str} {t1_score}"
                 else:
                     item_text = f"{team1_str}\nvs\n{team2_str}"
                 
@@ -6045,19 +6045,42 @@ class SessionWindow(QMainWindow):
                     export_lines.append("")
                     
                     # CSV version
+                    # Build map of tied opponents per player (only 2-way W-L ties where H2H decides rank)
+                    h2h_tied_opponents = {}  # player_id -> set of opponent_ids they're tied with
+                    idx = 0
+                    while idx < len(standings):
+                        wins_val = standings[idx]['wins']
+                        losses_val = standings[idx]['losses']
+                        tie_group = [standings[idx]]
+                        jdx = idx + 1
+                        while jdx < len(standings) and standings[jdx]['wins'] == wins_val and standings[jdx]['losses'] == losses_val:
+                            tie_group.append(standings[jdx])
+                            jdx += 1
+                        if len(tie_group) == 2:
+                            p_a = tie_group[0]['player_id']
+                            p_b = tie_group[1]['player_id']
+                            h2h_tied_opponents.setdefault(p_a, set()).add(p_b)
+                            h2h_tied_opponents.setdefault(p_b, set()).add(p_a)
+                        idx = jdx
+                    
                     export_lines.append("ROUND ROBIN STANDINGS CSV:")
                     export_lines.append("-" * 70)
-                    export_lines.append("Rank,Player,Wins,Losses,PtsFor,PtsAgainst,PtDiff,WinPct,H2H")
+                    export_lines.append("Rank,Player,Wins,Losses,PtsFor,PtsAgainst,PtDiff,AvgPtDiff,WinPct,H2H")
                     for s in standings:
                         player_name_csv = f'"{s["name"]}"' if ',' in s['name'] else s['name']
                         win_pct_csv = f"{s['win_pct']:.1f}"
+                        avg_pt_diff = s['pt_diff'] / s['games_played'] if s['games_played'] > 0 else 0.0
+                        avg_pt_diff_csv = f"{avg_pt_diff:+.1f}"
+                        # Only show H2H against the specific opponent(s) this player is tied with
                         h2h_parts = []
+                        tied_opps = h2h_tied_opponents.get(s['player_id'], set())
                         for opp_id, result in s['head_to_head'].items():
-                            opp_name = get_player_name(self.session, opp_id)
-                            h2h_parts.append(f"{result} vs {opp_name}")
+                            if opp_id in tied_opps:
+                                opp_name = get_player_name(self.session, opp_id)
+                                h2h_parts.append(f"{result} vs {opp_name}")
                         h2h_str = "; ".join(h2h_parts) if h2h_parts else ""
                         h2h_csv = f'"{h2h_str}"' if h2h_str else ""
-                        export_lines.append(f"{s['rank']},{player_name_csv},{s['wins']},{s['losses']},{s['pts_for']},{s['pts_against']},{s['pt_diff']},{win_pct_csv},{h2h_csv}")
+                        export_lines.append(f"{s['rank']},{player_name_csv},{s['wins']},{s['losses']},{s['pts_for']},{s['pts_against']},{s['pt_diff']},{avg_pt_diff_csv},{win_pct_csv},{h2h_csv}")
                     
                     export_lines.append("")
             
@@ -6465,7 +6488,7 @@ class SessionWindow(QMainWindow):
             
             # Score inputs
             score_layout = QHBoxLayout()
-            score_layout.addWidget(QLabel("Team 1 Score:"))
+            score_layout.addWidget(QLabel(f"{team1_str}:"))
             team1_spin = QSpinBox()
             team1_spin.setMinimum(0)
             team1_spin.setMaximum(20)
@@ -6473,7 +6496,7 @@ class SessionWindow(QMainWindow):
                 team1_spin.setValue(match.score.get('team1_score', 0))
             score_layout.addWidget(team1_spin)
             
-            score_layout.addWidget(QLabel("Team 2 Score:"))
+            score_layout.addWidget(QLabel(f"{team2_str}:"))
             team2_spin = QSpinBox()
             team2_spin.setMinimum(0)
             team2_spin.setMaximum(20)
