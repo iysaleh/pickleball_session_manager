@@ -1360,8 +1360,8 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                     match = Match(
                         id=generate_id(),
                         court_number=court_num,
-                        team1=queued_match.team1,
-                        team2=queued_match.team2,
+                        team1=list(queued_match.team1),
+                        team2=list(queued_match.team2),
                         status='waiting',
                         start_time=now()
                     )
@@ -1407,8 +1407,8 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                         session.matches.append(Match(
                             id=f"match_{now().timestamp()}_{court_num}",
                             court_number=court_num,
-                            team1=skill_match.team1,
-                            team2=skill_match.team2,
+                            team1=list(skill_match.team1),
+                            team2=list(skill_match.team2),
                             status='waiting',
                             start_time=now()
                         ))
@@ -1543,8 +1543,8 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                                     session.matches.append(Match(
                                         id=f"match_{now().timestamp()}_{c_num}",
                                         court_number=c_num,
-                                        team1=uc_match.team1,
-                                        team2=uc_match.team2,
+                                        team1=list(uc_match.team1),
+                                        team2=list(uc_match.team2),
                                         status='waiting',
                                         start_time=now()
                                     ))
@@ -1819,7 +1819,14 @@ def update_variety_tracking_after_match(
             if p1 != p2:
                 if p1 in session.player_stats and p2 in session.player_stats:
                     stats = session.player_stats[p1]
-                    stats.partners_played[p2] = stats.partners_played.get(p2, 0) + 1
+                    stats.partner_last_game[p2] = current_game_number
+    
+    # Also track team2 partnerships (was previously missing)
+    for p1 in team2:
+        for p2 in team2:
+            if p1 != p2:
+                if p1 in session.player_stats and p2 in session.player_stats:
+                    stats = session.player_stats[p1]
                     stats.partner_last_game[p2] = current_game_number
     
     # Update opponent history for next games - track game numbers
@@ -1827,13 +1834,10 @@ def update_variety_tracking_after_match(
         for p2 in team2:
             if p1 in session.player_stats and p2 in session.player_stats:
                 stats = session.player_stats[p1]
-                stats.opponents_played[p2] = stats.opponents_played.get(p2, 0) + 1
                 stats.opponent_last_game[p2] = current_game_number
             if p2 in session.player_stats and p1 in session.player_stats:
                 stats = session.player_stats[p2]
-                stats.opponents_played[p1] = stats.opponents_played.get(p1, 0) + 1
                 stats.opponent_last_game[p1] = current_game_number
-                session.player_stats[p2].opponent_last_game[p1] = current_game_number
 
 
 def get_available_players_for_mixing(

@@ -284,9 +284,9 @@ def populate_empty_courts(session: Session) -> Session:
         # Randomize team sides for round-robin mode to prevent same-side bias
         import random
         if random.random() < 0.5:
-            team1, team2 = best_match.team1, best_match.team2
+            team1, team2 = list(best_match.team1), list(best_match.team2)
         else:
-            team1, team2 = best_match.team2, best_match.team1
+            team1, team2 = list(best_match.team2), list(best_match.team1)
         
         # Create match on this court
         match = Match(

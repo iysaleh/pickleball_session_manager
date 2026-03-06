@@ -148,10 +148,10 @@ def serialize_session(session) -> Dict:
         match_data = {
             "id": match.id,
             "court_number": match.court_number,
-            "team1": match.team1,
-            "team2": match.team2,
+            "team1": list(match.team1),
+            "team2": list(match.team2),
             "status": match.status,
-            "score": match.score,
+            "score": dict(match.score) if match.score else None,
             "start_time": match.start_time.isoformat() if match.start_time else None,
             "end_time": match.end_time.isoformat() if match.end_time else None
         }
@@ -181,8 +181,8 @@ def serialize_session(session) -> Dict:
     queue_data = []
     for queued_match in session.match_queue:
         queue_data.append({
-            "team1": queued_match.team1,
-            "team2": queued_match.team2
+            "team1": list(queued_match.team1),
+            "team2": list(queued_match.team2)
         })
     
     # Serialize match history snapshots
@@ -474,8 +474,8 @@ def deserialize_session(data: Dict):
         match = Match(
             id=match_data["id"],
             court_number=match_data["court_number"],
-            team1=match_data["team1"],
-            team2=match_data["team2"],
+            team1=list(match_data["team1"]),
+            team2=list(match_data["team2"]),
             status=match_data["status"],
             score=match_data.get("score"),
             start_time=start_time,
@@ -486,7 +486,7 @@ def deserialize_session(data: Dict):
     # Reconstruct match queue
     match_queue = []
     for queue_data in data["match_queue"]:
-        match_queue.append(QueuedMatch(team1=queue_data["team1"], team2=queue_data["team2"]))
+        match_queue.append(QueuedMatch(team1=list(queue_data["team1"]), team2=list(queue_data["team2"])))
     
     # Reconstruct match history snapshots
     match_history_snapshots = []

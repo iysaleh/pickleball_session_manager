@@ -338,3 +338,5 @@ test_ultra_competitive_first_round:
 	python test_ultra_competitive_first_round.py
 test_strict_rr_score_bugs:
 	python test_strict_rr_score_bugs.py 2>&1
+test_match_data_integrity:
+	python test_match_data_integrity.py 2>&1

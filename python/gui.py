@@ -3983,10 +3983,6 @@ class SessionWindow(QMainWindow):
         """
         if hasattr(self, 'session_manager'):
             self.session_manager.force_session_evaluation()
-        else:
-            # Fallback for transition period
-            # Session logic moved to session manager
-            self._trigger_session_evaluation()
     
     def closeEvent(self, event):
         """Handle window close"""
@@ -5583,7 +5579,11 @@ class SessionWindow(QMainWindow):
                 if match.score:
                     t1_score = match.score.get('team1_score', 0)
                     t2_score = match.score.get('team2_score', 0)
-                    item_text = f"{team1_str} {t1_score}\nvs\n{team2_str} {t2_score}"
+                    # Show winner on top (consistent with confirmation dialog)
+                    if t1_score >= t2_score:
+                        item_text = f"{team1_str} {t1_score}\nvs\n{team2_str} {t2_score}"
+                    else:
+                        item_text = f"{team2_str} {t2_score}\nvs\n{team1_str} {t1_score}"
                 else:
                     item_text = f"{team1_str}\nvs\n{team2_str}"
                 
@@ -6465,7 +6465,7 @@ class SessionWindow(QMainWindow):
             
             # Score inputs
             score_layout = QHBoxLayout()
-            score_layout.addWidget(QLabel("Team 1 Score:"))
+            score_layout.addWidget(QLabel(f"{team1_str}:"))
             team1_spin = QSpinBox()
             team1_spin.setMinimum(0)
             team1_spin.setMaximum(20)
@@ -6473,7 +6473,7 @@ class SessionWindow(QMainWindow):
                 team1_spin.setValue(match.score.get('team1_score', 0))
             score_layout.addWidget(team1_spin)
             
-            score_layout.addWidget(QLabel("Team 2 Score:"))
+            score_layout.addWidget(QLabel(f"{team2_str}:"))
             team2_spin = QSpinBox()
             team2_spin.setMinimum(0)
             team2_spin.setMaximum(20)

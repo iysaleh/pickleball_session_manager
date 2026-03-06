@@ -263,10 +263,10 @@ def _create_session_snapshot(session: Session, match_id: str) -> MatchSnapshot:
         match_data = {
             "id": match.id,
             "court_number": match.court_number,
-            "team1": match.team1,
-            "team2": match.team2,
+            "team1": list(match.team1),
+            "team2": list(match.team2),
             "status": match.status,
-            "score": match.score,
+            "score": dict(match.score) if match.score else None,
             "start_time": match.start_time.isoformat() if match.start_time else None,
             "end_time": match.end_time.isoformat() if match.end_time else None
         }
@@ -297,8 +297,8 @@ def _create_session_snapshot(session: Session, match_id: str) -> MatchSnapshot:
     queue_data = []
     for queued_match in session.match_queue:
         queue_data.append({
-            "team1": queued_match.team1,
-            "team2": queued_match.team2
+            "team1": list(queued_match.team1),
+            "team2": list(queued_match.team2)
         })
     
     return MatchSnapshot(
@@ -330,13 +330,14 @@ def load_session_from_snapshot(session: Session, snapshot: MatchSnapshot) -> boo
             if match_data.get("end_time"):
                 end_time = datetime.fromisoformat(match_data["end_time"])
             
+            score_data = match_data.get("score")
             match = Match(
                 id=match_data["id"],
                 court_number=match_data["court_number"],
-                team1=match_data["team1"],
-                team2=match_data["team2"],
+                team1=list(match_data["team1"]),
+                team2=list(match_data["team2"]),
                 status=match_data["status"],
-                score=match_data.get("score"),
+                score=dict(score_data) if score_data else None,
                 start_time=start_time,
                 end_time=end_time
             )
@@ -377,8 +378,8 @@ def load_session_from_snapshot(session: Session, snapshot: MatchSnapshot) -> boo
         session.match_queue = []
         for queue_data in snapshot.match_queue:
             session.match_queue.append(QueuedMatch(
-                team1=queue_data["team1"],
-                team2=queue_data["team2"]
+                team1=list(queue_data["team1"]),
+                team2=list(queue_data["team2"])
             ))
         
         # Restore competitive variety state
@@ -418,6 +419,10 @@ def complete_match(session: Session, match_id: str, team1_score: int, team2_scor
             break
     
     if not match:
+        return False, []
+    
+    # Guard against double-completion — prevent score overwrite and stat double-counting
+    if match.status in ('completed', 'forfeited'):
         return False, []
     
     # Create snapshot BEFORE updating match status (so we capture pre-completion state)
