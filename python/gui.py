@@ -3765,7 +3765,7 @@ class CourtDisplayWidget(QWidget):
                 from python.session_logger import get_session_logger
                 logger = get_session_logger()
                 if logger:
-                    logger.log_score_input(self.current_match.id, team1_score, team2_score)
+                    logger.log_score_input(self.current_match.id, team1_score, team2_score, team1_names, team2_names)
                 
                 # Use session manager for match completion (handles all downstream effects)
                 parent = self.window()
@@ -6595,6 +6595,17 @@ class SessionWindow(QMainWindow):
                 from python.session import recalculate_stats_after_edit
                 recalculate_stats_after_edit(self.session, match, old_score, new_score)
                 match.score = new_score
+                
+                # Log the score edit
+                from python.session_logger import get_session_logger
+                slogger = get_session_logger()
+                if slogger:
+                    slogger.log_match_score_edited(
+                        match.id, team1_names, team2_names,
+                        old_score.get('team1_score', 0), old_score.get('team2_score', 0),
+                        t1_score, t2_score
+                    )
+                
                 dialog.accept()
                 self.refresh_display()
             

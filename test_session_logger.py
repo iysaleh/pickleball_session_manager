@@ -162,10 +162,10 @@ class TestSemanticLogMethods(unittest.TestCase):
         self.assertIn('Eve vs Frank', content)
     
     def test_log_score_input(self):
-        self.logger.log_score_input('m1', 11, 7)
+        self.logger.log_score_input('m1', 11, 7, ['Alice', 'Bob'], ['Charlie', 'Diana'])
         content = self._read_log()
         self.assertIn('SCORE INPUT', content)
-        self.assertIn('11-7', content)
+        self.assertIn('Alice, Bob (11) vs Charlie, Diana (7)', content)
     
     def test_log_match_completed_team1_wins(self):
         self.logger.log_match_completed('m1', ['Alice', 'Bob'], ['Charlie', 'Diana'], 11, 7)
@@ -194,6 +194,14 @@ class TestSemanticLogMethods(unittest.TestCase):
         content = self._read_log()
         self.assertIn('COURT SLIDE', content)
         self.assertIn('Court 3 to Court 1', content)
+    
+    def test_log_match_score_edited(self):
+        self.logger.log_match_score_edited('m1', ['Alice', 'Bob'], ['Charlie', 'Diana'], 11, 7, 11, 9)
+        content = self._read_log()
+        self.assertIn('MATCH SCORE EDITED', content)
+        self.assertIn('Alice, Bob vs Charlie, Diana', content)
+        self.assertIn('11-7', content)
+        self.assertIn('11-9', content)
     
     def test_log_player_added(self):
         self.logger.log_player_added('NewPlayer')

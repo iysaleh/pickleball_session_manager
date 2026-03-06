@@ -73,8 +73,11 @@ class SessionLogger:
         t2 = ', '.join(team2_names)
         self._write(f'MATCH QUEUED | Match {match_id} | {t1} vs {t2}')
     
-    def log_score_input(self, match_id: str, team1_score: int, team2_score: int):
-        self._write(f'SCORE INPUT | Match {match_id} | User entered: {team1_score}-{team2_score}')
+    def log_score_input(self, match_id: str, team1_score: int, team2_score: int,
+                        team1_names: List[str] = None, team2_names: List[str] = None):
+        t1 = ', '.join(team1_names) if team1_names else '?'
+        t2 = ', '.join(team2_names) if team2_names else '?'
+        self._write(f'SCORE INPUT | Match {match_id} | {t1} ({team1_score}) vs {t2} ({team2_score})')
     
     def log_match_completed(self, match_id: str, team1_names: List[str], team2_names: List[str],
                             team1_score: int, team2_score: int):
@@ -97,6 +100,12 @@ class SessionLogger:
     
     def log_court_slide(self, match_id: str, from_court: int, to_court: int):
         self._write(f'COURT SLIDE | Match {match_id} slid from Court {from_court} to Court {to_court}')
+    
+    def log_match_score_edited(self, match_id: str, team1_names: List[str], team2_names: List[str],
+                               old_t1: int, old_t2: int, new_t1: int, new_t2: int):
+        t1 = ', '.join(team1_names)
+        t2 = ', '.join(team2_names)
+        self._write(f'MATCH SCORE EDITED | Match {match_id} | {t1} vs {t2} | {old_t1}-{old_t2} → {new_t1}-{new_t2}')
     
     # --- Player management ---
     
