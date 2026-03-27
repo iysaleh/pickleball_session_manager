@@ -103,12 +103,12 @@ def analyze_session(filename):
         # Doubles ampersand: "Player1 & Player2: 11 beat Player3 & Player4: 7 [time]"
         # Singles: "Player1: 11 beat Player2: 7 [time]"
         
-        # Try doubles comma-separated first
-        match = re.match(r'(.+?),\s*(.+?):\s*(\d+)\s+beat\s+(.+?),\s*(.+?):\s*(\d+)', line)
+        # Try doubles comma-separated first (supports both "beat" and "defeated")
+        match = re.match(r'(.+?),\s*(.+?):\s*(\d+)\s+(?:beat|defeated)\s+(.+?),\s*(.+?):\s*(\d+)', line)
         
         # If comma format didn't match, try ampersand format (teams)
         if not match:
-            match = re.match(r'(.+?)\s*&\s*(.+?):\s*(\d+)\s+beat\s+(.+?)\s*&\s*(.+?):\s*(\d+)', line)
+            match = re.match(r'(.+?)\s*&\s*(.+?):\s*(\d+)\s+(?:beat|defeated)\s+(.+?)\s*&\s*(.+?):\s*(\d+)', line)
         
         if match:
             p1, p2, p3, p4 = match.group(1).strip(), match.group(2).strip(), match.group(4).strip(), match.group(5).strip()
@@ -133,8 +133,8 @@ def analyze_session(filename):
             key_opp_2_vs_4 = tuple(sorted([p2, p4]))
             opponents[key_opp_2_vs_4] += 1
         else:
-            # Try singles format: "Player1: 11 beat Player2: 7 [time]"
-            singles_match = re.match(r'(.+?):\s*(\d+)\s+beat\s+(.+?):\s*(\d+)', line)
+            # Try singles format: "Player1: 11 beat/defeated Player2: 7 [time]"
+            singles_match = re.match(r'(.+?):\s*(\d+)\s+(?:beat|defeated)\s+(.+?):\s*(\d+)', line)
             if singles_match:
                 p1 = singles_match.group(1).strip()
                 p2 = singles_match.group(3).strip()
