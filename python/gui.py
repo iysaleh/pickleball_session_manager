@@ -32,6 +32,70 @@ from python.session_manager import create_session_manager
 from python.time_manager import now, start_session as tm_start_session
 
 
+def get_exports_directory() -> str:
+    """Get the exports directory path, creating it if possible. Falls back to cwd."""
+    exports_dir = os.path.join(os.getcwd(), "exports")
+    try:
+        os.makedirs(exports_dir, exist_ok=True)
+        return exports_dir
+    except OSError:
+        return os.getcwd()
+
+
+def get_latest_export_file() -> Optional[str]:
+    """Get the path to the most recent export file, or None if none exist."""
+    exports_dir = get_exports_directory()
+    try:
+        export_files = [
+            f for f in os.listdir(exports_dir)
+            if f.startswith("pickleball_session_") and f.endswith(".txt")
+        ]
+        if not export_files:
+            # Also check cwd for legacy exports
+            cwd_files = [
+                f for f in os.listdir(os.getcwd())
+                if f.startswith("pickleball_session_") and f.endswith(".txt")
+            ]
+            if cwd_files:
+                cwd_files.sort(reverse=True)
+                return os.path.join(os.getcwd(), cwd_files[0])
+            return None
+        export_files.sort(reverse=True)
+        return os.path.join(exports_dir, export_files[0])
+    except OSError:
+        return None
+
+
+def open_file_with_default_app(filepath: str) -> bool:
+    """Open a file with the system default application. Cross-platform."""
+    try:
+        if sys.platform == 'win32':
+            os.startfile(filepath)
+        elif sys.platform == 'darwin':
+            subprocess.Popen(['open', filepath])
+        else:
+            subprocess.Popen(['xdg-open', filepath])
+        return True
+    except Exception as e:
+        print(f"Error opening file: {e}")
+        return False
+
+
+def open_directory_in_explorer(dirpath: str) -> bool:
+    """Open a directory in the system file explorer. Cross-platform."""
+    try:
+        if sys.platform == 'win32':
+            os.startfile(dirpath)
+        elif sys.platform == 'darwin':
+            subprocess.Popen(['open', dirpath])
+        else:
+            subprocess.Popen(['xdg-open', dirpath])
+        return True
+    except Exception as e:
+        print(f"Error opening directory: {e}")
+        return False
+
+
 class DraggablePlayerLabel(QLabel):
     """A label that can be dragged and dropped for player swapping"""
     
@@ -3994,6 +4058,13 @@ class SessionWindow(QMainWindow):
         """Handle window close"""
         self.update_timer.stop()
         
+        # Auto-export if not already exported
+        self._auto_export_if_needed()
+        
+        # Disable sleep inhibitor
+        from python.sleep_inhibitor import get_sleep_inhibitor
+        get_sleep_inhibitor().disable()
+        
         # Log session end
         from python.session_logger import get_session_logger
         slogger = get_session_logger()
@@ -4108,6 +4179,40 @@ class SessionWindow(QMainWindow):
         """)
         self.sound_toggle_btn.clicked.connect(self.toggle_sound)
         courts_header.addWidget(self.sound_toggle_btn)
+        
+        # Sleep prevention toggle button
+        from python.sleep_inhibitor import get_sleep_inhibitor
+        self.sleep_inhibitor = get_sleep_inhibitor()
+        self.sleep_toggle_btn = QPushButton("☕")
+        self.sleep_toggle_btn.setCheckable(True)
+        self.sleep_toggle_btn.setChecked(True)
+        self.sleep_toggle_btn.setFixedSize(40, 35)
+        self.sleep_toggle_btn.setToolTip(
+            "Keep Screen Awake\n\n"
+            "When active, prevents the computer from sleeping\n"
+            "and the screen from dimming or turning off.\n"
+            "Click to toggle."
+        )
+        self.sleep_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2a2a2a;
+                border: 1px solid #555;
+                border-radius: 4px;
+                font-size: 16px;
+                color: white;
+            }
+            QPushButton:checked {
+                background-color: #1b5e20;
+                border-color: #4caf50;
+            }
+            QPushButton:hover {
+                background-color: #333;
+            }
+        """)
+        self.sleep_toggle_btn.clicked.connect(self.toggle_sleep_prevention)
+        courts_header.addWidget(self.sleep_toggle_btn)
+        # Enable sleep prevention by default
+        self.sleep_inhibitor.enable()
         
         courts_section.addLayout(courts_header)
         
@@ -4313,6 +4418,15 @@ class SessionWindow(QMainWindow):
             self.sound_toggle_btn.setText("🔊")
         else:
             self.sound_toggle_btn.setText("🔇")
+
+    def toggle_sleep_prevention(self):
+        """Toggle sleep/screen dimming prevention."""
+        if self.sleep_toggle_btn.isChecked():
+            self.sleep_inhibitor.enable()
+            self.sleep_toggle_btn.setText("☕")
+        else:
+            self.sleep_inhibitor.disable()
+            self.sleep_toggle_btn.setText("💤")
 
     def init_competitive_variety_slider(self, parent_layout: QHBoxLayout):
         """Initialize the competitive variety slider widget"""
@@ -5820,453 +5934,22 @@ class SessionWindow(QMainWindow):
     def export_session(self):
         """Export session results to a file"""
         try:
-            from python.queue_manager import get_waiting_players, get_match_for_court
-            from datetime import datetime
-            
-            # Get current state
-            waiting_ids = get_waiting_players(self.session)
-            
-            # Build export data
-            export_lines = []
-            export_lines.append(f"Pickleball Session Export")
-            export_lines.append(f"{'='*70}")
-            export_lines.append(f"Date/Time: {now().strftime('%Y-%m-%d %H:%M:%S')}")
-            export_lines.append(f"Mode: {self._format_mode_display(self.session.config.mode)}")
-            export_lines.append(f"Type: {self.session.config.session_type.title()}")
-            export_lines.append(f"Courts: {self.session.config.courts}")
-            export_lines.append("")
-            
-            # Active matches on courts
-            export_lines.append("CURRENTLY ON COURTS:")
-            export_lines.append("-" * 70)
-            for court_num in range(1, self.session.config.courts + 1):
-                match = get_match_for_court(self.session, court_num)
-                if match:
-                    team1_names = [get_player_name(self.session, pid) for pid in match.team1]
-                    team2_names = [get_player_name(self.session, pid) for pid in match.team2]
-                    export_lines.append(f"Court {court_num}: {', '.join(team1_names)} vs {', '.join(team2_names)}")
-                else:
-                    export_lines.append(f"Court {court_num}: Empty")
-            export_lines.append("")
-            
-            # Waitlist
-            export_lines.append("WAITLIST:")
-            export_lines.append("-" * 70)
-            if waiting_ids:
-                for player_id in waiting_ids:
-                    player_name = get_player_name(self.session, player_id)
-                    
-                    # Add deterministic court dependencies if enabled and in competitive-variety mode
-                    if self.show_deterministic_waitlist and self.session.config.mode == 'competitive-variety':
-                        try:
-                            from python.deterministic_waitlist_v2 import get_court_outcome_dependencies_v2
-                            dependencies = get_court_outcome_dependencies_v2(self.session, player_id)
-                            
-                            if dependencies:
-                                # Build dependency string same as GUI
-                                court_strings = []
-                                for court_num in sorted(dependencies.keys()):
-                                    outcomes = dependencies[court_num]
-                                    outcome_chars = []
-                                    if "red_wins" in outcomes:
-                                        outcome_chars.append("R")
-                                    if "blue_wins" in outcomes:
-                                        outcome_chars.append("B")
-                                    
-                                    if len(outcome_chars) == 2:
-                                        outcome_str = "RB"
-                                    else:
-                                        outcome_str = "".join(outcome_chars)
-                                    
-                                    court_strings.append(f"C{court_num}{outcome_str}")
-                                
-                                if court_strings:
-                                    deps_str = ", ".join(court_strings)
-                                    export_lines.append(f"  - {player_name} [{deps_str}]")
-                                else:
-                                    export_lines.append(f"  - {player_name}")
-                            else:
-                                export_lines.append(f"  - {player_name}")
-                        except Exception:
-                            # Fallback if dependencies fail
-                            export_lines.append(f"  - {player_name}")
-                    else:
-                        export_lines.append(f"  - {player_name}")
-            else:
-                export_lines.append("  (No players waiting)")
-            export_lines.append("")
-            
-            # King of Court specific information
-            if self.session.config.mode == 'king-of-court':
-                export_lines.append("KING OF COURT STATE:")
-                export_lines.append("-" * 70)
-                export_lines.append(f"Round Number: {self.session.king_of_court_round_number}")
-                
-                # Court ordering
-                court_ordering = getattr(self.session.config, 'court_ordering', list(range(1, self.session.config.courts + 1)))
-                from python.session_persistence import get_saved_court_name
-                court_ordering_names = []
-                for court_num in court_ordering:
-                    court_name = get_saved_court_name(court_num, self.session.config.courts)
-                    if not court_name:
-                        court_name = f"Court {court_num}"
-                    court_ordering_names.append(court_name)
-                export_lines.append(f"Court Order (Kings to Bottom): {' > '.join(court_ordering_names)}")
-                
-                # Wait counts (ordered by waitlist history)
-                if self.session.king_of_court_wait_counts:
-                    export_lines.append("")
-                    export_lines.append("Wait Counts:")
-                    
-                    # Order by waitlist history first, then remaining players
-                    ordered_players = []
-                    
-                    # Add players in waitlist history order
-                    for player_id in self.session.king_of_court_waitlist_history:
-                        if player_id in self.session.active_players:
-                            ordered_players.append(player_id)
-                    
-                    # Add any remaining active players not in history
-                    for player in self.session.config.players:
-                        if player.id in self.session.active_players and player.id not in ordered_players:
-                            ordered_players.append(player.id)
-                    
-                    # Export in order
-                    for player_id in ordered_players:
-                        player_name = get_player_name(self.session, player_id)
-                        count = self.session.king_of_court_wait_counts.get(player_id, 0)
-                        export_lines.append(f"  {player_name}: {count} times")
-                
-                # Waitlist history
-                if self.session.king_of_court_waitlist_history:
-                    export_lines.append("")
-                    export_lines.append("Waitlist History (oldest to newest):")
-                    history_names = [get_player_name(self.session, pid) for pid in self.session.king_of_court_waitlist_history]
-                    export_lines.append(f"  {' -> '.join(history_names)}")
-                    
-                    # Show rotation index for debugging
-                    if hasattr(self.session, 'king_of_court_waitlist_rotation_index'):
-                        export_lines.append(f"  Current rotation index: {self.session.king_of_court_waitlist_rotation_index}")
-                
-                export_lines.append("")
-            
-            # Player statistics sorted by ELO
-            export_lines.append("PLAYER STATISTICS (sorted by ELO):")
-            export_lines.append("-" * 70)
-            
-            # Collect player data with ELO ratings
-            player_data = []
-            for player in self.session.config.players:
-                if player.id not in self.session.active_players:
-                    continue
-                
-                stats = self.session.player_stats[player.id]
-                
-                # Calculate ELO rating for all modes
-                elo = 0
-                try:
-                    if self.session.config.mode == 'competitive-variety':
-                        from python.competitive_variety import calculate_player_elo_rating
-                        elo = calculate_player_elo_rating(self.session, player.id)
-                    else:
-                        # For other modes, use a simple ELO-like calculation
-                        from python.kingofcourt import calculate_player_rating
-                        elo = calculate_player_rating(stats)
-                except:
-                    # Fallback if ELO calculation fails
-                    elo = 1500 if stats.games_played == 0 else (1500 + (stats.wins - stats.losses) * 50)
-                
-                record = f"{stats.wins}-{stats.losses}"
-                win_pct = (stats.wins / stats.games_played * 100) if stats.games_played > 0 else 0
-                
-                # Include wait time (accumulated + current if waiting)
-                from python.utils import get_current_wait_time, format_duration
-                current_wait = get_current_wait_time(stats)
-                total_wait_seconds = stats.total_wait_time + current_wait
-                
-                # Calculate average point differential
-                avg_pt_diff = (stats.total_points_for - stats.total_points_against) / stats.games_played if stats.games_played > 0 else 0
-                
-                player_data.append((player.name, elo, record, stats.games_played, win_pct, total_wait_seconds, avg_pt_diff, stats.total_points_for, stats.total_points_against))
-            
-            # Sort by ELO descending
-            player_data.sort(key=lambda x: x[1], reverse=True)
-            
-            # Write header
-            export_lines.append(f"{'Player':<25} {'ELO':<10} {'W-L':<10} {'Games':<10} {'Win %':<10} {'Wait Time':<12} {'Avg Pt Diff':<15} {'Pts For':<10} {'Pts Against':<12}")
-            export_lines.append("-" * 132)
-            
-            # Write player data
-            for player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against in player_data:
-                win_pct_str = f"{win_pct:.1f}%" if games_played > 0 else "N/A"
-                wait_time_str = format_duration(total_wait_seconds)
-                avg_pt_diff_str = f"{avg_pt_diff:.1f}" if games_played > 0 else "N/A"
-                export_lines.append(
-                    f"{player_name:<25} {elo:<10.0f} {record:<10} {games_played:<10} {win_pct_str:<10} {wait_time_str:<12} {avg_pt_diff_str:<15} {pts_for:<10} {pts_against:<12}"
-                )
-            
-            export_lines.append("")
-            
-            # Player Statistics CSV section (same data, CSV format)
-            export_lines.append("PLAYER STATISTICS CSV:")
-            export_lines.append("-" * 70)
-            export_lines.append("Rank,Player,ELO,Wins,Losses,Games,Win%,WaitTime,AvgPtDiff,PtsFor,PtsAgainst")
-            for rank_num, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(player_data, 1):
-                wins, losses = record.split('-')
-                win_pct_csv = f"{win_pct:.1f}" if games_played > 0 else "0"
-                avg_pt_diff_csv = f"{avg_pt_diff:.1f}" if games_played > 0 else "0"
-                # Escape commas in player names
-                player_name_csv = f'"{player_name}"' if ',' in player_name else player_name
-                export_lines.append(f"{rank_num},{player_name_csv},{elo:.0f},{wins},{losses},{games_played},{win_pct_csv},{total_wait_seconds},{avg_pt_diff_csv},{pts_for},{pts_against}")
-            
-            export_lines.append("")
-            
-            # Session Winners (top 3 players by ELO from session statistics) for non-pooled modes
-            if self.session.config.mode != 'pooled-continuous-rr' and player_data:
-                export_lines.append("SESSION WINNERS:")
-                export_lines.append("-" * 70)
-                
-                medals = ["🥇 GOLD", "🥈 SILVER", "🥉 BRONZE"]
-                winner_count = 0
-                
-                # For RR modes, use RR standings order instead of ELO
-                if self.session.config.mode in ('round-robin', 'strict-continuous-rr'):
-                    from python.strict_continuous_rr import calculate_round_robin_standings
-                    rr_standings = calculate_round_robin_standings(self.session)
-                    for s in rr_standings:
-                        if s['games_played'] == 0:
-                            continue
-                        if winner_count >= 3:
-                            break
-                        medal = medals[winner_count]
-                        record = f"{s['wins']}-{s['losses']}"
-                        export_lines.append(f"{medal}: {s['name']} - {record}, {s['pt_diff']:+d} pts")
-                        winner_count += 1
-                else:
-                    for i, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(player_data):
-                        if games_played == 0:
-                            continue
-                        if winner_count >= 3:
-                            break
-                        medal = medals[winner_count]
-                        pt_diff = pts_for - pts_against
-                        export_lines.append(f"{medal}: {player_name} - {record}, {pt_diff:+d} pts")
-                        winner_count += 1
-                
-                if winner_count == 0:
-                    export_lines.append("  (No completed games yet)")
-                
-                export_lines.append("")
-            
-            # Round Robin Standings for RR modes
-            if self.session.config.mode in ('round-robin', 'strict-continuous-rr'):
-                from python.strict_continuous_rr import calculate_round_robin_standings
-                standings = calculate_round_robin_standings(self.session)
-                
-                if standings and any(s['games_played'] > 0 for s in standings):
-                    export_lines.append("ROUND ROBIN STANDINGS:")
-                    export_lines.append("-" * 70)
-                    export_lines.append(f"{'Rank':<6} {'Player':<25} {'W-L':<10} {'Pt Diff':<12} {'H2H'}")
-                    export_lines.append("-" * 70)
-                    
-                    for s in standings:
-                        record = f"{s['wins']}-{s['losses']}"
-                        pt_diff = f"{s['pt_diff']:+d}"
-                        h2h_parts = []
-                        for opp_id, result in s['head_to_head'].items():
-                            opp_name = get_player_name(self.session, opp_id)
-                            h2h_parts.append(f"{result} vs {opp_name}")
-                        h2h_str = ", ".join(h2h_parts) if h2h_parts else ""
-                        export_lines.append(f"{s['rank']:<6} {s['name']:<25} {record:<10} {pt_diff:<12} {h2h_str}")
-                    
-                    export_lines.append("")
-                    
-                    # CSV version
-                    # Build map of tied opponents per player (only 2-way W-L ties where H2H decides rank)
-                    h2h_tied_opponents = {}  # player_id -> set of opponent_ids they're tied with
-                    idx = 0
-                    while idx < len(standings):
-                        wins_val = standings[idx]['wins']
-                        losses_val = standings[idx]['losses']
-                        tie_group = [standings[idx]]
-                        jdx = idx + 1
-                        while jdx < len(standings) and standings[jdx]['wins'] == wins_val and standings[jdx]['losses'] == losses_val:
-                            tie_group.append(standings[jdx])
-                            jdx += 1
-                        if len(tie_group) == 2:
-                            p_a = tie_group[0]['player_id']
-                            p_b = tie_group[1]['player_id']
-                            h2h_tied_opponents.setdefault(p_a, set()).add(p_b)
-                            h2h_tied_opponents.setdefault(p_b, set()).add(p_a)
-                        idx = jdx
-                    
-                    export_lines.append("ROUND ROBIN STANDINGS CSV:")
-                    export_lines.append("-" * 70)
-                    export_lines.append("Rank,Player,Wins,Losses,PtsFor,PtsAgainst,PtDiff,AvgPtDiff,WinPct,H2H")
-                    for s in standings:
-                        player_name_csv = f'"{s["name"]}"' if ',' in s['name'] else s['name']
-                        win_pct_csv = f"{s['win_pct']:.1f}"
-                        avg_pt_diff = s['pt_diff'] / s['games_played'] if s['games_played'] > 0 else 0.0
-                        avg_pt_diff_csv = f"{avg_pt_diff:+.1f}"
-                        # Only show H2H against the specific opponent(s) this player is tied with
-                        h2h_parts = []
-                        tied_opps = h2h_tied_opponents.get(s['player_id'], set())
-                        for opp_id, result in s['head_to_head'].items():
-                            if opp_id in tied_opps:
-                                opp_name = get_player_name(self.session, opp_id)
-                                h2h_parts.append(f"{result} vs {opp_name}")
-                        h2h_str = "; ".join(h2h_parts) if h2h_parts else ""
-                        h2h_csv = f'"{h2h_str}"' if h2h_str else ""
-                        export_lines.append(f"{s['rank']},{player_name_csv},{s['wins']},{s['losses']},{s['pts_for']},{s['pts_against']},{s['pt_diff']},{avg_pt_diff_csv},{win_pct_csv},{h2h_csv}")
-                    
-                    export_lines.append("")
-            
-            # Pooled Continuous RR specific exports
-            if self.session.config.mode == 'pooled-continuous-rr':
-                pooled_config = self.session.config.pooled_continuous_rr_config
-                if pooled_config:
-                    # Session Winners (from crossover matches)
-                    export_lines.append("SESSION WINNERS:")
-                    export_lines.append("-" * 70)
-                    
-                    from python.pooled_continuous_rr import get_final_rankings
-                    winners = get_final_rankings(self.session, pooled_config)
-                    
-                    medals = ["🥇 GOLD", "🥈 SILVER", "🥉 BRONZE"]
-                    for i, winner in enumerate(winners[:3]):
-                        medal = medals[i] if i < 3 else f"#{i+1}"
-                        crossover_result = winner.get('crossover_result', '')
-                        if crossover_result:
-                            export_lines.append(f"{medal}: {winner['name']} - {crossover_result}")
-                        else:
-                            export_lines.append(f"{medal}: {winner['name']} - {winner.get('wins', 0)}-{winner.get('losses', 0)}, {winner.get('pt_diff', 0):+d} pts")
-                    
-                    export_lines.append("")
-                    
-                    # Pool Statistics
-                    export_lines.append("POOL STATISTICS:")
-                    export_lines.append("-" * 70)
-                    
-                    from python.pooled_continuous_rr import calculate_pool_standings
-                    
-                    for pool_id, player_ids in pooled_config.pools.items():
-                        pool_complete = pooled_config.pool_completed.get(pool_id, False)
-                        status = "✅ Complete" if pool_complete else "⏳ In Progress"
-                        export_lines.append(f"\n{pool_id} ({status}):")
-                        export_lines.append(f"{'Rank':<6} {'Player':<25} {'W-L':<8} {'Games':<8} {'Win%':<8} {'Pts For':<10} {'Pts Agst':<10} {'Pt Diff':<10}")
-                        
-                        standings = calculate_pool_standings(self.session, pool_id)
-                        for rank, standing in enumerate(standings, 1):
-                            games_played = standing.get('games_played', 0)
-                            win_pct = (standing['wins'] / games_played * 100) if games_played > 0 else 0
-                            record = f"{standing['wins']}-{standing['losses']}"
-                            export_lines.append(f"#{rank:<5} {standing['name']:<25} {record:<8} {games_played:<8} {win_pct:.1f}%{'':<3} {standing['pts_for']:<10} {standing['pts_against']:<10} {standing['pt_diff']:+d}")
-                    
-                    export_lines.append("")
-                    
-                    # Pool Statistics CSV
-                    export_lines.append("POOL STATISTICS CSV:")
-                    export_lines.append("-" * 70)
-                    
-                    for pool_id, player_ids in pooled_config.pools.items():
-                        export_lines.append(f"\n{pool_id}:")
-                        export_lines.append("Rank,Player,W,L,Games,Win%,Pts For,Pts Agst,Pt Diff")
-                        
-                        standings = calculate_pool_standings(self.session, pool_id)
-                        for rank, standing in enumerate(standings, 1):
-                            games_played = standing.get('games_played', 0)
-                            win_pct = (standing['wins'] / games_played * 100) if games_played > 0 else 0
-                            export_lines.append(f"{rank},{standing['name']},{standing['wins']},{standing['losses']},{games_played},{win_pct:.1f}%,{standing['pts_for']},{standing['pts_against']},{standing['pt_diff']:+d}")
-                    
-                    export_lines.append("")
-                    
-                    # Crossover Match Results
-                    if pooled_config.crossover_matches:
-                        export_lines.append("CROSSOVER MATCH RESULTS:")
-                        export_lines.append("-" * 70)
-                        
-                        for cm in pooled_config.crossover_matches:
-                            # Find the completed match
-                            completed_match = next(
-                                (m for m in self.session.matches if m.id == cm.id and m.status == 'completed'),
-                                None
-                            )
-                            
-                            if completed_match and completed_match.score:
-                                t1_score = completed_match.score.get('team1_score', 0)
-                                t2_score = completed_match.score.get('team2_score', 0)
-                                
-                                # Use Match's teams (may have been swapped)
-                                p1_names = [get_player_name(self.session, pid) for pid in completed_match.team1]
-                                p2_names = [get_player_name(self.session, pid) for pid in completed_match.team2]
-                                
-                                winner_names = p1_names if t1_score > t2_score else p2_names
-                                loser_names = p2_names if t1_score > t2_score else p1_names
-                                winner_score = max(t1_score, t2_score)
-                                loser_score = min(t1_score, t2_score)
-                                
-                                export_lines.append(f"Crossover #{cm.crossover_rank}: {', '.join(winner_names)} ({winner_score}) defeated {', '.join(loser_names)} ({loser_score})")
-                            else:
-                                p1_names = [get_player_name(self.session, pid) for pid in cm.team1]
-                                p2_names = [get_player_name(self.session, pid) for pid in cm.team2]
-                                export_lines.append(f"Crossover #{cm.crossover_rank}: {', '.join(p1_names)} vs {', '.join(p2_names)} - Pending")
-                        
-                        export_lines.append("")
-            
-            # Match History (most recent first)
-            completed_matches = [m for m in self.session.matches if m.status == 'completed']
-            if completed_matches:
-                export_lines.append("MATCH HISTORY:")
-                export_lines.append("-" * 70)
-                
-                from python.utils import calculate_match_duration, format_duration
-                
-                total_duration = 0
-                match_count = 0
-                
-                for match in reversed(completed_matches):
-                    team1_names = [get_player_name(self.session, pid) for pid in match.team1]
-                    team2_names = [get_player_name(self.session, pid) for pid in match.team2]
-                    
-                    if match.score:
-                        team1_score = match.score.get('team1_score', 0)
-                        team2_score = match.score.get('team2_score', 0)
-                        
-                        # Calculate match duration
-                        duration = calculate_match_duration(match)
-                        duration_str = format_duration(duration) if duration else "N/A"
-                        
-                        if duration:
-                            total_duration += duration
-                            match_count += 1
-                        
-                        # Format: Higher score on top
-                        if team1_score >= team2_score:
-                            export_lines.append(f"{', '.join(team1_names)}: {team1_score} defeated {', '.join(team2_names)}: {team2_score} [{duration_str}]")
-                        else:
-                            export_lines.append(f"{', '.join(team2_names)}: {team2_score} defeated {', '.join(team1_names)}: {team1_score} [{duration_str}]")
-                
-                # Add average duration
-                if match_count > 0:
-                    avg_duration = total_duration // match_count
-                    avg_duration_str = format_duration(avg_duration)
-                    export_lines.append("")
-                    export_lines.append(f"Average Match Duration: {avg_duration_str}")
-                
-                export_lines.append("")
-            
-            export_lines.append("=" * 70)
+            export_lines = self._build_export_lines()
             
             # Write to file
             export_text = "\n".join(export_lines)
             
-            # Save to file in current directory
+            # Save to "exports" subdirectory, fallback to cwd
+            export_dir = get_exports_directory()
             timestamp = now().strftime("%Y%m%d_%H%M%S")
             filename = f"pickleball_session_{timestamp}.txt"
-            filepath = os.path.join(os.getcwd(), filename)
+            filepath = os.path.join(export_dir, filename)
             
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(export_text)
+            
+            # Mark session as exported
+            self.session.session_exported = True
             
             # Log the export
             from python.session_logger import get_session_logger
@@ -6276,7 +5959,7 @@ class SessionWindow(QMainWindow):
             
             QMessageBox.information(
                 self, "Export Successful",
-                f"Session exported to:\n{filename}"
+                f"Session exported to:\n{filepath}"
             )
             
         except Exception as e:
@@ -6285,7 +5968,444 @@ class SessionWindow(QMainWindow):
             import traceback
             traceback.print_exc()
             QMessageBox.critical(self, "Export Error", error_msg)
-    
+
+    def _build_export_lines(self) -> list:
+        """Build export content lines. Shared by export_session and auto-export."""
+        from python.queue_manager import get_waiting_players, get_match_for_court
+        
+        waiting_ids = get_waiting_players(self.session)
+        # Build export data
+        export_lines = []
+        export_lines.append(f"Pickleball Session Export")
+        export_lines.append(f"{'='*70}")
+        export_lines.append(f"Date/Time: {now().strftime('%Y-%m-%d %H:%M:%S')}")
+        export_lines.append(f"Mode: {self._format_mode_display(self.session.config.mode)}")
+        export_lines.append(f"Type: {self.session.config.session_type.title()}")
+        export_lines.append(f"Courts: {self.session.config.courts}")
+        export_lines.append("")
+        
+        # Active matches on courts
+        export_lines.append("CURRENTLY ON COURTS:")
+        export_lines.append("-" * 70)
+        for court_num in range(1, self.session.config.courts + 1):
+            match = get_match_for_court(self.session, court_num)
+            if match:
+                team1_names = [get_player_name(self.session, pid) for pid in match.team1]
+                team2_names = [get_player_name(self.session, pid) for pid in match.team2]
+                export_lines.append(f"Court {court_num}: {', '.join(team1_names)} vs {', '.join(team2_names)}")
+            else:
+                export_lines.append(f"Court {court_num}: Empty")
+        export_lines.append("")
+        
+        # Waitlist
+        export_lines.append("WAITLIST:")
+        export_lines.append("-" * 70)
+        if waiting_ids:
+            for player_id in waiting_ids:
+                player_name = get_player_name(self.session, player_id)
+                
+                # Add deterministic court dependencies if enabled and in competitive-variety mode
+                if self.show_deterministic_waitlist and self.session.config.mode == 'competitive-variety':
+                    try:
+                        from python.deterministic_waitlist_v2 import get_court_outcome_dependencies_v2
+                        dependencies = get_court_outcome_dependencies_v2(self.session, player_id)
+                        
+                        if dependencies:
+                            # Build dependency string same as GUI
+                            court_strings = []
+                            for court_num in sorted(dependencies.keys()):
+                                outcomes = dependencies[court_num]
+                                outcome_chars = []
+                                if "red_wins" in outcomes:
+                                    outcome_chars.append("R")
+                                if "blue_wins" in outcomes:
+                                    outcome_chars.append("B")
+                                
+                                if len(outcome_chars) == 2:
+                                    outcome_str = "RB"
+                                else:
+                                    outcome_str = "".join(outcome_chars)
+                                
+                                court_strings.append(f"C{court_num}{outcome_str}")
+                            
+                            if court_strings:
+                                deps_str = ", ".join(court_strings)
+                                export_lines.append(f"  - {player_name} [{deps_str}]")
+                            else:
+                                export_lines.append(f"  - {player_name}")
+                        else:
+                            export_lines.append(f"  - {player_name}")
+                    except Exception:
+                        # Fallback if dependencies fail
+                        export_lines.append(f"  - {player_name}")
+                else:
+                    export_lines.append(f"  - {player_name}")
+        else:
+            export_lines.append("  (No players waiting)")
+        export_lines.append("")
+        
+        # King of Court specific information
+        if self.session.config.mode == 'king-of-court':
+            export_lines.append("KING OF COURT STATE:")
+            export_lines.append("-" * 70)
+            export_lines.append(f"Round Number: {self.session.king_of_court_round_number}")
+            
+            # Court ordering
+            court_ordering = getattr(self.session.config, 'court_ordering', list(range(1, self.session.config.courts + 1)))
+            from python.session_persistence import get_saved_court_name
+            court_ordering_names = []
+            for court_num in court_ordering:
+                court_name = get_saved_court_name(court_num, self.session.config.courts)
+                if not court_name:
+                    court_name = f"Court {court_num}"
+                court_ordering_names.append(court_name)
+            export_lines.append(f"Court Order (Kings to Bottom): {' > '.join(court_ordering_names)}")
+            
+            # Wait counts (ordered by waitlist history)
+            if self.session.king_of_court_wait_counts:
+                export_lines.append("")
+                export_lines.append("Wait Counts:")
+                
+                # Order by waitlist history first, then remaining players
+                ordered_players = []
+                
+                # Add players in waitlist history order
+                for player_id in self.session.king_of_court_waitlist_history:
+                    if player_id in self.session.active_players:
+                        ordered_players.append(player_id)
+                
+                # Add any remaining active players not in history
+                for player in self.session.config.players:
+                    if player.id in self.session.active_players and player.id not in ordered_players:
+                        ordered_players.append(player.id)
+                
+                # Export in order
+                for player_id in ordered_players:
+                    player_name = get_player_name(self.session, player_id)
+                    count = self.session.king_of_court_wait_counts.get(player_id, 0)
+                    export_lines.append(f"  {player_name}: {count} times")
+            
+            # Waitlist history
+            if self.session.king_of_court_waitlist_history:
+                export_lines.append("")
+                export_lines.append("Waitlist History (oldest to newest):")
+                history_names = [get_player_name(self.session, pid) for pid in self.session.king_of_court_waitlist_history]
+                export_lines.append(f"  {' -> '.join(history_names)}")
+                
+                # Show rotation index for debugging
+                if hasattr(self.session, 'king_of_court_waitlist_rotation_index'):
+                    export_lines.append(f"  Current rotation index: {self.session.king_of_court_waitlist_rotation_index}")
+            
+            export_lines.append("")
+        
+        # Player statistics sorted by ELO
+        export_lines.append("PLAYER STATISTICS (sorted by ELO):")
+        export_lines.append("-" * 70)
+        
+        # Collect player data with ELO ratings
+        player_data = []
+        for player in self.session.config.players:
+            if player.id not in self.session.active_players:
+                continue
+            
+            stats = self.session.player_stats[player.id]
+            
+            # Calculate ELO rating for all modes
+            elo = 0
+            try:
+                if self.session.config.mode == 'competitive-variety':
+                    from python.competitive_variety import calculate_player_elo_rating
+                    elo = calculate_player_elo_rating(self.session, player.id)
+                else:
+                    # For other modes, use a simple ELO-like calculation
+                    from python.kingofcourt import calculate_player_rating
+                    elo = calculate_player_rating(stats)
+            except:
+                # Fallback if ELO calculation fails
+                elo = 1500 if stats.games_played == 0 else (1500 + (stats.wins - stats.losses) * 50)
+            
+            record = f"{stats.wins}-{stats.losses}"
+            win_pct = (stats.wins / stats.games_played * 100) if stats.games_played > 0 else 0
+            
+            # Include wait time (accumulated + current if waiting)
+            from python.utils import get_current_wait_time, format_duration
+            current_wait = get_current_wait_time(stats)
+            total_wait_seconds = stats.total_wait_time + current_wait
+            
+            # Calculate average point differential
+            avg_pt_diff = (stats.total_points_for - stats.total_points_against) / stats.games_played if stats.games_played > 0 else 0
+            
+            player_data.append((player.name, elo, record, stats.games_played, win_pct, total_wait_seconds, avg_pt_diff, stats.total_points_for, stats.total_points_against))
+        
+        # Sort by ELO descending
+        player_data.sort(key=lambda x: x[1], reverse=True)
+        
+        # Write header
+        export_lines.append(f"{'Player':<25} {'ELO':<10} {'W-L':<10} {'Games':<10} {'Win %':<10} {'Wait Time':<12} {'Avg Pt Diff':<15} {'Pts For':<10} {'Pts Against':<12}")
+        export_lines.append("-" * 132)
+        
+        # Write player data
+        for player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against in player_data:
+            win_pct_str = f"{win_pct:.1f}%" if games_played > 0 else "N/A"
+            wait_time_str = format_duration(total_wait_seconds)
+            avg_pt_diff_str = f"{avg_pt_diff:.1f}" if games_played > 0 else "N/A"
+            export_lines.append(
+                f"{player_name:<25} {elo:<10.0f} {record:<10} {games_played:<10} {win_pct_str:<10} {wait_time_str:<12} {avg_pt_diff_str:<15} {pts_for:<10} {pts_against:<12}"
+            )
+        
+        export_lines.append("")
+        
+        # Player Statistics CSV section (same data, CSV format)
+        export_lines.append("PLAYER STATISTICS CSV:")
+        export_lines.append("-" * 70)
+        export_lines.append("Rank,Player,ELO,Wins,Losses,Games,Win%,WaitTime,AvgPtDiff,PtsFor,PtsAgainst")
+        for rank_num, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(player_data, 1):
+            wins, losses = record.split('-')
+            win_pct_csv = f"{win_pct:.1f}" if games_played > 0 else "0"
+            avg_pt_diff_csv = f"{avg_pt_diff:.1f}" if games_played > 0 else "0"
+            # Escape commas in player names
+            player_name_csv = f'"{player_name}"' if ',' in player_name else player_name
+            export_lines.append(f"{rank_num},{player_name_csv},{elo:.0f},{wins},{losses},{games_played},{win_pct_csv},{total_wait_seconds},{avg_pt_diff_csv},{pts_for},{pts_against}")
+        
+        export_lines.append("")
+        
+        # Session Winners (top 3 players by ELO from session statistics) for non-pooled modes
+        if self.session.config.mode != 'pooled-continuous-rr' and player_data:
+            export_lines.append("SESSION WINNERS:")
+            export_lines.append("-" * 70)
+            
+            medals = ["🥇 GOLD", "🥈 SILVER", "🥉 BRONZE"]
+            winner_count = 0
+            
+            # For RR modes, use RR standings order instead of ELO
+            if self.session.config.mode in ('round-robin', 'strict-continuous-rr'):
+                from python.strict_continuous_rr import calculate_round_robin_standings
+                rr_standings = calculate_round_robin_standings(self.session)
+                for s in rr_standings:
+                    if s['games_played'] == 0:
+                        continue
+                    if winner_count >= 3:
+                        break
+                    medal = medals[winner_count]
+                    record = f"{s['wins']}-{s['losses']}"
+                    export_lines.append(f"{medal}: {s['name']} - {record}, {s['pt_diff']:+d} pts")
+                    winner_count += 1
+            else:
+                for i, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(player_data):
+                    if games_played == 0:
+                        continue
+                    if winner_count >= 3:
+                        break
+                    medal = medals[winner_count]
+                    pt_diff = pts_for - pts_against
+                    export_lines.append(f"{medal}: {player_name} - {record}, {pt_diff:+d} pts")
+                    winner_count += 1
+            
+            if winner_count == 0:
+                export_lines.append("  (No completed games yet)")
+            
+            export_lines.append("")
+        
+        # Round Robin Standings for RR modes
+        if self.session.config.mode in ('round-robin', 'strict-continuous-rr'):
+            from python.strict_continuous_rr import calculate_round_robin_standings
+            standings = calculate_round_robin_standings(self.session)
+            
+            if standings and any(s['games_played'] > 0 for s in standings):
+                export_lines.append("ROUND ROBIN STANDINGS:")
+                export_lines.append("-" * 70)
+                export_lines.append(f"{'Rank':<6} {'Player':<25} {'W-L':<10} {'Pt Diff':<12} {'H2H'}")
+                export_lines.append("-" * 70)
+                
+                for s in standings:
+                    record = f"{s['wins']}-{s['losses']}"
+                    pt_diff = f"{s['pt_diff']:+d}"
+                    h2h_parts = []
+                    for opp_id, result in s['head_to_head'].items():
+                        opp_name = get_player_name(self.session, opp_id)
+                        h2h_parts.append(f"{result} vs {opp_name}")
+                    h2h_str = ", ".join(h2h_parts) if h2h_parts else ""
+                    export_lines.append(f"{s['rank']:<6} {s['name']:<25} {record:<10} {pt_diff:<12} {h2h_str}")
+                
+                export_lines.append("")
+                
+                # CSV version
+                # Build map of tied opponents per player (only 2-way W-L ties where H2H decides rank)
+                h2h_tied_opponents = {}  # player_id -> set of opponent_ids they're tied with
+                idx = 0
+                while idx < len(standings):
+                    wins_val = standings[idx]['wins']
+                    losses_val = standings[idx]['losses']
+                    tie_group = [standings[idx]]
+                    jdx = idx + 1
+                    while jdx < len(standings) and standings[jdx]['wins'] == wins_val and standings[jdx]['losses'] == losses_val:
+                        tie_group.append(standings[jdx])
+                        jdx += 1
+                    if len(tie_group) == 2:
+                        p_a = tie_group[0]['player_id']
+                        p_b = tie_group[1]['player_id']
+                        h2h_tied_opponents.setdefault(p_a, set()).add(p_b)
+                        h2h_tied_opponents.setdefault(p_b, set()).add(p_a)
+                    idx = jdx
+                
+                export_lines.append("ROUND ROBIN STANDINGS CSV:")
+                export_lines.append("-" * 70)
+                export_lines.append("Rank,Player,Wins,Losses,PtsFor,PtsAgainst,PtDiff,AvgPtDiff,WinPct,H2H")
+                for s in standings:
+                    player_name_csv = f'"{s["name"]}"' if ',' in s['name'] else s['name']
+                    win_pct_csv = f"{s['win_pct']:.1f}"
+                    avg_pt_diff = s['pt_diff'] / s['games_played'] if s['games_played'] > 0 else 0.0
+                    avg_pt_diff_csv = f"{avg_pt_diff:+.1f}"
+                    # Only show H2H against the specific opponent(s) this player is tied with
+                    h2h_parts = []
+                    tied_opps = h2h_tied_opponents.get(s['player_id'], set())
+                    for opp_id, result in s['head_to_head'].items():
+                        if opp_id in tied_opps:
+                            opp_name = get_player_name(self.session, opp_id)
+                            h2h_parts.append(f"{result} vs {opp_name}")
+                    h2h_str = "; ".join(h2h_parts) if h2h_parts else ""
+                    h2h_csv = f'"{h2h_str}"' if h2h_str else ""
+                    export_lines.append(f"{s['rank']},{player_name_csv},{s['wins']},{s['losses']},{s['pts_for']},{s['pts_against']},{s['pt_diff']},{avg_pt_diff_csv},{win_pct_csv},{h2h_csv}")
+                
+                export_lines.append("")
+        
+        # Pooled Continuous RR specific exports
+        if self.session.config.mode == 'pooled-continuous-rr':
+            pooled_config = self.session.config.pooled_continuous_rr_config
+            if pooled_config:
+                # Session Winners (from crossover matches)
+                export_lines.append("SESSION WINNERS:")
+                export_lines.append("-" * 70)
+                
+                from python.pooled_continuous_rr import get_final_rankings
+                winners = get_final_rankings(self.session, pooled_config)
+                
+                medals = ["🥇 GOLD", "🥈 SILVER", "🥉 BRONZE"]
+                for i, winner in enumerate(winners[:3]):
+                    medal = medals[i] if i < 3 else f"#{i+1}"
+                    crossover_result = winner.get('crossover_result', '')
+                    if crossover_result:
+                        export_lines.append(f"{medal}: {winner['name']} - {crossover_result}")
+                    else:
+                        export_lines.append(f"{medal}: {winner['name']} - {winner.get('wins', 0)}-{winner.get('losses', 0)}, {winner.get('pt_diff', 0):+d} pts")
+                
+                export_lines.append("")
+                
+                # Pool Statistics
+                export_lines.append("POOL STATISTICS:")
+                export_lines.append("-" * 70)
+                
+                from python.pooled_continuous_rr import calculate_pool_standings
+                
+                for pool_id, player_ids in pooled_config.pools.items():
+                    pool_complete = pooled_config.pool_completed.get(pool_id, False)
+                    status = "✅ Complete" if pool_complete else "⏳ In Progress"
+                    export_lines.append(f"\n{pool_id} ({status}):")
+                    export_lines.append(f"{'Rank':<6} {'Player':<25} {'W-L':<8} {'Games':<8} {'Win%':<8} {'Pts For':<10} {'Pts Agst':<10} {'Pt Diff':<10}")
+                    
+                    standings = calculate_pool_standings(self.session, pool_id)
+                    for rank, standing in enumerate(standings, 1):
+                        games_played = standing.get('games_played', 0)
+                        win_pct = (standing['wins'] / games_played * 100) if games_played > 0 else 0
+                        record = f"{standing['wins']}-{standing['losses']}"
+                        export_lines.append(f"#{rank:<5} {standing['name']:<25} {record:<8} {games_played:<8} {win_pct:.1f}%{'':<3} {standing['pts_for']:<10} {standing['pts_against']:<10} {standing['pt_diff']:+d}")
+                
+                export_lines.append("")
+                
+                # Pool Statistics CSV
+                export_lines.append("POOL STATISTICS CSV:")
+                export_lines.append("-" * 70)
+                
+                for pool_id, player_ids in pooled_config.pools.items():
+                    export_lines.append(f"\n{pool_id}:")
+                    export_lines.append("Rank,Player,W,L,Games,Win%,Pts For,Pts Agst,Pt Diff")
+                    
+                    standings = calculate_pool_standings(self.session, pool_id)
+                    for rank, standing in enumerate(standings, 1):
+                        games_played = standing.get('games_played', 0)
+                        win_pct = (standing['wins'] / games_played * 100) if games_played > 0 else 0
+                        export_lines.append(f"{rank},{standing['name']},{standing['wins']},{standing['losses']},{games_played},{win_pct:.1f}%,{standing['pts_for']},{standing['pts_against']},{standing['pt_diff']:+d}")
+                
+                export_lines.append("")
+                
+                # Crossover Match Results
+                if pooled_config.crossover_matches:
+                    export_lines.append("CROSSOVER MATCH RESULTS:")
+                    export_lines.append("-" * 70)
+                    
+                    for cm in pooled_config.crossover_matches:
+                        # Find the completed match
+                        completed_match = next(
+                            (m for m in self.session.matches if m.id == cm.id and m.status == 'completed'),
+                            None
+                        )
+                        
+                        if completed_match and completed_match.score:
+                            t1_score = completed_match.score.get('team1_score', 0)
+                            t2_score = completed_match.score.get('team2_score', 0)
+                            
+                            # Use Match's teams (may have been swapped)
+                            p1_names = [get_player_name(self.session, pid) for pid in completed_match.team1]
+                            p2_names = [get_player_name(self.session, pid) for pid in completed_match.team2]
+                            
+                            winner_names = p1_names if t1_score > t2_score else p2_names
+                            loser_names = p2_names if t1_score > t2_score else p1_names
+                            winner_score = max(t1_score, t2_score)
+                            loser_score = min(t1_score, t2_score)
+                            
+                            export_lines.append(f"Crossover #{cm.crossover_rank}: {', '.join(winner_names)} ({winner_score}) defeated {', '.join(loser_names)} ({loser_score})")
+                        else:
+                            p1_names = [get_player_name(self.session, pid) for pid in cm.team1]
+                            p2_names = [get_player_name(self.session, pid) for pid in cm.team2]
+                            export_lines.append(f"Crossover #{cm.crossover_rank}: {', '.join(p1_names)} vs {', '.join(p2_names)} - Pending")
+                    
+                    export_lines.append("")
+        
+        # Match History (most recent first)
+        completed_matches = [m for m in self.session.matches if m.status == 'completed']
+        if completed_matches:
+            export_lines.append("MATCH HISTORY:")
+            export_lines.append("-" * 70)
+            
+            from python.utils import calculate_match_duration, format_duration
+            
+            total_duration = 0
+            match_count = 0
+            
+            for match in reversed(completed_matches):
+                team1_names = [get_player_name(self.session, pid) for pid in match.team1]
+                team2_names = [get_player_name(self.session, pid) for pid in match.team2]
+                
+                if match.score:
+                    team1_score = match.score.get('team1_score', 0)
+                    team2_score = match.score.get('team2_score', 0)
+                    
+                    # Calculate match duration
+                    duration = calculate_match_duration(match)
+                    duration_str = format_duration(duration) if duration else "N/A"
+                    
+                    if duration:
+                        total_duration += duration
+                        match_count += 1
+                    
+                    # Format: Higher score on top
+                    if team1_score >= team2_score:
+                        export_lines.append(f"{', '.join(team1_names)}: {team1_score} defeated {', '.join(team2_names)}: {team2_score} [{duration_str}]")
+                    else:
+                        export_lines.append(f"{', '.join(team2_names)}: {team2_score} defeated {', '.join(team1_names)}: {team1_score} [{duration_str}]")
+            
+            # Add average duration
+            if match_count > 0:
+                avg_duration = total_duration // match_count
+                avg_duration_str = format_duration(avg_duration)
+                export_lines.append("")
+                export_lines.append(f"Average Match Duration: {avg_duration_str}")
+            
+            export_lines.append("")
+        
+        export_lines.append("=" * 70)
+        return export_lines
+
     def manage_players(self):
         """Open dialog to add or remove players"""
         try:
@@ -7736,6 +7856,9 @@ class SessionWindow(QMainWindow):
         )
         
         if reply == QMessageBox.StandardButton.Yes:
+            # Auto-export if not already exported
+            self._auto_export_if_needed()
+            
             # Log session end
             from python.session_logger import get_session_logger
             slogger = get_session_logger()
@@ -7745,6 +7868,30 @@ class SessionWindow(QMainWindow):
             
             self.update_timer.stop()
             self.close()
+    
+    def _auto_export_if_needed(self):
+        """Auto-export session if it hasn't been manually exported already."""
+        if not self.session.session_exported:
+            try:
+                export_lines = self._build_export_lines()
+                export_text = "\n".join(export_lines)
+                
+                export_dir = get_exports_directory()
+                timestamp = now().strftime("%Y%m%d_%H%M%S")
+                filename = f"pickleball_session_{timestamp}.txt"
+                filepath = os.path.join(export_dir, filename)
+                
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(export_text)
+                
+                self.session.session_exported = True
+                
+                from python.session_logger import get_session_logger
+                slogger = get_session_logger()
+                if slogger:
+                    slogger.log_export(filename)
+            except Exception as e:
+                print(f"Auto-export failed: {e}")
     
     def show_court_ordering_dialog(self):
         """Show dialog to manage court ordering for King of Court mode"""
@@ -7904,6 +8051,24 @@ class MainWindow(QMainWindow):
             previous_players_btn.clicked.connect(self.new_session_with_previous_players)
             button_layout.addWidget(previous_players_btn)
         
+        # Open Last Export button
+        latest_export = get_latest_export_file()
+        if latest_export:
+            open_export_btn = QPushButton("Open Last Export")
+            open_export_btn.setMinimumHeight(50)
+            open_export_btn.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+            open_export_btn.clicked.connect(self.open_last_export)
+            button_layout.addWidget(open_export_btn)
+        
+        # Open Exports Directory button
+        exports_dir = get_exports_directory()
+        if os.path.isdir(exports_dir):
+            open_exports_dir_btn = QPushButton("Open Exports Directory")
+            open_exports_dir_btn.setMinimumHeight(50)
+            open_exports_dir_btn.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+            open_exports_dir_btn.clicked.connect(self.open_exports_directory)
+            button_layout.addWidget(open_exports_dir_btn)
+        
         layout.addLayout(button_layout)
         
         # Info
@@ -7934,6 +8099,22 @@ class MainWindow(QMainWindow):
         
         self.setWindowTitle("Pickleball Session Manager")
         self.resize(600, 400)
+    
+    def open_last_export(self):
+        """Open the most recent export file with the system default editor."""
+        latest = get_latest_export_file()
+        if latest:
+            open_file_with_default_app(latest)
+        else:
+            QMessageBox.information(self, "No Exports", "No export files found.")
+    
+    def open_exports_directory(self):
+        """Open the exports directory in the system file explorer."""
+        exports_dir = get_exports_directory()
+        if os.path.isdir(exports_dir):
+            open_directory_in_explorer(exports_dir)
+        else:
+            QMessageBox.information(self, "No Exports Directory", "The exports directory does not exist yet.")
     
     def new_session(self):
         """Create a new session"""

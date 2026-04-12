@@ -832,6 +832,13 @@ UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f947' in posit
 * People will need accounts since this is a global system instead of just a simple session based system, keep that in mind. We want to make running this application as affordable as possible, optional things like google based authentication are not something we'll consider because that costs money. Whenever we have the choice of offloading work to the client or doing it server side, push it to the client since there are many clients and only minimal servers.
 
 
+# Beta release tweaks...
+* Add a button to the initial "Pickleball Session Manager" menu underneath "New Session with Previous Players" labeled "Open Last Export" which uses the default system editor to open the latest exported session --- this needs to be supported on all platforms Mac, Windows, Linux.
+* Update the "Export Session" function to export to a dedicated "exports" subdirectory in the program working directory... If the program is unable to create the "exports" directory, it should fall back to exporting/writing in the directory is does currently.
+* Add a button to the initial "Pickleball Session Manager" menu underneath the new "Open Last Export" button labeled "Open Exports Directory" which uses the default filesystem explorer to bring up the exports directory for the user -- this needs to be supported on all platforms Mac, Windows and Linux.
+
+
+
 # Useful Commands:
 npx vitest run roundrobin.test.ts
 # Run local webserver
