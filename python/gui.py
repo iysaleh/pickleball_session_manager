@@ -30,6 +30,8 @@ from python.session import (
 )
 from python.session_manager import create_session_manager
 from python.time_manager import now, start_session as tm_start_session
+from python.version import __version__ as APP_VERSION
+from python.updater import check_for_updates, launch_update, get_current_version
 
 
 def get_exports_directory() -> str:
@@ -4113,12 +4115,19 @@ class SessionWindow(QMainWindow):
         
         main_layout = QVBoxLayout()
         
-        # Title with info
+        # Title row with version
+        title_row = QHBoxLayout()
         mode_display = self._format_mode_display(self.session.config.mode)
         self.title = QLabel(f"{mode_display} - {self.session.config.session_type.title()}")
         self.title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         self.title.setStyleSheet("QLabel { color: white; background-color: #1a1a1a; padding: 10px; border-radius: 3px; }")
-        main_layout.addWidget(self.title)
+        title_row.addWidget(self.title)
+        version_label = QLabel(f"v{APP_VERSION}")
+        version_label.setFont(QFont("Arial", 9))
+        version_label.setStyleSheet("QLabel { color: #888888; background-color: #1a1a1a; padding: 10px; }")
+        version_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        title_row.addWidget(version_label)
+        main_layout.addLayout(title_row)
         
         # Main content area (courts + waiting list)
         content_layout = QHBoxLayout()
@@ -4412,7 +4421,7 @@ class SessionWindow(QMainWindow):
         """
         self.setStyleSheet(dark_stylesheet)
         
-        self.setWindowTitle("Pickleball Session Manager")
+        self.setWindowTitle(f"Pickleball Session Manager v{APP_VERSION}")
         self.resize(1400, 800)
     
     def toggle_sound(self):
@@ -8073,6 +8082,13 @@ class MainWindow(QMainWindow):
             open_exports_dir_btn.clicked.connect(self.open_exports_directory)
             button_layout.addWidget(open_exports_dir_btn)
         
+        # Check for Updates button
+        update_btn = QPushButton("Check for Updates")
+        update_btn.setMinimumHeight(50)
+        update_btn.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        update_btn.clicked.connect(self.check_for_updates)
+        button_layout.addWidget(update_btn)
+        
         layout.addLayout(button_layout)
         
         # Info
@@ -8081,6 +8097,12 @@ class MainWindow(QMainWindow):
         layout.addWidget(info_label)
         
         layout.addStretch()
+        
+        # Version label at bottom
+        version_label = QLabel(f"v{APP_VERSION}")
+        version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        version_label.setStyleSheet("QLabel { color: #666666; font-size: 11px; }")
+        layout.addWidget(version_label)
         
         central_widget.setLayout(layout)
         
@@ -8101,7 +8123,7 @@ class MainWindow(QMainWindow):
         """
         self.setStyleSheet(dark_stylesheet)
         
-        self.setWindowTitle("Pickleball Session Manager")
+        self.setWindowTitle(f"Pickleball Session Manager v{APP_VERSION}")
         self.resize(600, 400)
     
     def open_last_export(self):
@@ -8119,6 +8141,79 @@ class MainWindow(QMainWindow):
             open_directory_in_explorer(exports_dir)
         else:
             QMessageBox.information(self, "No Exports Directory", "The exports directory does not exist yet.")
+    
+    def check_for_updates(self):
+        """Check GitHub for new releases and offer to update."""
+        self.setCursor(Qt.CursorShape.WaitCursor)
+        try:
+            release_info = check_for_updates()
+        finally:
+            self.unsetCursor()
+        
+        if release_info is None:
+            QMessageBox.information(
+                self, "Up to Date",
+                f"You are running the latest version (v{APP_VERSION})."
+            )
+            return
+        
+        new_version = release_info['version']
+        release_notes = release_info.get('release_notes', 'No release notes available.')
+        
+        # Show release notes and ask to update
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Update Available: v{new_version}")
+        dialog.setMinimumSize(500, 400)
+        dlg_layout = QVBoxLayout()
+        
+        header = QLabel(f"A new version is available: v{new_version} (current: v{APP_VERSION})")
+        header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        header.setWordWrap(True)
+        dlg_layout.addWidget(header)
+        
+        notes_label = QLabel("Release Notes:")
+        notes_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        dlg_layout.addWidget(notes_label)
+        
+        notes_text = QTextEdit()
+        notes_text.setReadOnly(True)
+        notes_text.setPlainText(release_notes)
+        notes_text.setMinimumHeight(200)
+        dlg_layout.addWidget(notes_text)
+        
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
+        )
+        button_box.button(QDialogButtonBox.StandardButton.Yes).setText("Update Now")
+        button_box.button(QDialogButtonBox.StandardButton.No).setText("Later")
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        dlg_layout.addWidget(button_box)
+        
+        dialog.setLayout(dlg_layout)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._perform_update(release_info)
+    
+    def _perform_update(self, release_info: dict):
+        """Download and apply the update."""
+        self.setCursor(Qt.CursorShape.WaitCursor)
+        try:
+            success = launch_update(release_info)
+        finally:
+            self.unsetCursor()
+        
+        if success:
+            QMessageBox.information(
+                self, "Updating",
+                "The update is being applied. The application will restart automatically."
+            )
+            QApplication.instance().quit()
+        else:
+            QMessageBox.critical(
+                self, "Update Failed",
+                "Failed to download or apply the update. Please try again later."
+            )
     
     def new_session(self):
         """Create a new session"""
