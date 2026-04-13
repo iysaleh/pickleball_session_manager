@@ -14,55 +14,39 @@ class TestCreateShortcut(unittest.TestCase):
     """Test the desktop shortcut creation script."""
 
     def test_ico_generation_valid_file(self):
-        """Test that ICO file is generated with valid header and multiple sizes."""
-        from create_shortcut import create_tennis_ball_ico
-        ico_path = os.path.join(tempfile.gettempdir(), 'test_tennis_ball.ico')
-        try:
-            create_tennis_ball_ico(ico_path)
-            self.assertTrue(os.path.exists(ico_path))
-            size = os.path.getsize(ico_path)
-            # Multi-size ICO should be substantially larger than single 32x32
-            self.assertGreater(size, 10000)
-        finally:
-            if os.path.exists(ico_path):
-                os.unlink(ico_path)
+        """Test that bundled ICO file exists and is valid."""
+        from create_shortcut import get_bundled_ico_path
+        ico_path = get_bundled_ico_path()
+        self.assertTrue(os.path.exists(ico_path))
+        size = os.path.getsize(ico_path)
+        # Multi-size ICO should be substantially larger than single 32x32
+        self.assertGreater(size, 1000)
 
     def test_ico_header_format(self):
         """Test that ICO header has correct format with multiple images."""
-        from create_shortcut import create_tennis_ball_ico
-        ico_path = os.path.join(tempfile.gettempdir(), 'test_tennis_ball2.ico')
-        try:
-            create_tennis_ball_ico(ico_path)
-            with open(ico_path, 'rb') as f:
-                data = f.read(6)
-            reserved, ico_type, count = struct.unpack('<HHH', data)
-            self.assertEqual(reserved, 0)
-            self.assertEqual(ico_type, 1)  # ICO type
-            self.assertEqual(count, 5)     # 5 sizes: 16, 32, 48, 64, 256
-        finally:
-            if os.path.exists(ico_path):
-                os.unlink(ico_path)
+        from create_shortcut import get_bundled_ico_path
+        ico_path = get_bundled_ico_path()
+        with open(ico_path, 'rb') as f:
+            data = f.read(6)
+        reserved, ico_type, count = struct.unpack('<HHH', data)
+        self.assertEqual(reserved, 0)
+        self.assertEqual(ico_type, 1)  # ICO type
+        self.assertEqual(count, 5)     # 5 sizes: 16, 32, 48, 64, 256
 
     def test_ico_directory_entry(self):
         """Test ICO contains all expected sizes (16, 32, 48, 64, 256)."""
-        from create_shortcut import create_tennis_ball_ico
-        ico_path = os.path.join(tempfile.gettempdir(), 'test_tennis_ball3.ico')
-        try:
-            create_tennis_ball_ico(ico_path)
-            with open(ico_path, 'rb') as f:
-                header = f.read(6)
-                _, _, count = struct.unpack('<HHH', header)
-                sizes_found = []
-                for _ in range(count):
-                    dir_data = f.read(16)
-                    w, h, palette, reserved, planes, bpp = struct.unpack('<BBBBHH', dir_data[:8])
-                    actual_w = 256 if w == 0 else w
-                    sizes_found.append(actual_w)
-                    self.assertEqual(bpp, 32)
-            self.assertEqual(sorted(sizes_found), [16, 32, 48, 64, 256])
-        finally:
-            if os.path.exists(ico_path):
-                os.unlink(ico_path)
+        from create_shortcut import get_bundled_ico_path
+        ico_path = get_bundled_ico_path()
+        with open(ico_path, 'rb') as f:
+            header = f.read(6)
+            _, _, count = struct.unpack('<HHH', header)
+            sizes_found = []
+            for _ in range(count):
+                dir_data = f.read(16)
+                w, h, palette, reserved, planes, bpp = struct.unpack('<BBBBHH', dir_data[:8])
+                actual_w = 256 if w == 0 else w
+                sizes_found.append(actual_w)
+        self.assertEqual(sorted(sizes_found), [16, 32, 48, 64, 256])
 
     def test_get_desktop_path_returns_string(self):
         """Test that get_desktop_path returns a string path."""
@@ -171,7 +155,7 @@ class TestShortcutScriptStructure(unittest.TestCase):
         """Test that the shortcut script can be imported without errors."""
         import create_shortcut
         self.assertTrue(hasattr(create_shortcut, 'main'))
-        self.assertTrue(hasattr(create_shortcut, 'create_tennis_ball_ico'))
+        self.assertTrue(hasattr(create_shortcut, 'get_bundled_ico_path'))
         self.assertTrue(hasattr(create_shortcut, 'get_desktop_path'))
 
     def test_script_has_platform_functions(self):

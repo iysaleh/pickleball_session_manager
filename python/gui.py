@@ -2649,7 +2649,9 @@ class SetupDialog(QDialog):
         layout.addLayout(sliding_layout)
         
         # Players
-        layout.addWidget(QLabel("Players:"))
+        self.players_label = QLabel("Players:")
+        layout.addWidget(self.players_label)
+        self.type_combo.currentTextChanged.connect(self._update_players_label)
         self.player_widget = PlayerListWidget()
         layout.addWidget(self.player_widget, 1)  # stretch factor so player list grows with dialog
         
@@ -2861,6 +2863,15 @@ class SetupDialog(QDialog):
             self.pre_seed_checkbox.setChecked(True)
             self.player_widget.set_pre_seed_mode(True)
     
+    def _update_players_label(self, type_text=None):
+        """Update the Players label based on selected session type."""
+        if type_text is None:
+            type_text = self.type_combo.currentText()
+        if type_text != "Doubles":
+            self.players_label.setText("Players (for teams, separate players with '&' character):")
+        else:
+            self.players_label.setText("Players:")
+
     def on_game_mode_changed(self, mode_text):
         """Handle game mode change to show/hide pre-seed checkbox and KoC seeding"""
         is_competitive_variety = mode_text == "Competitive Variety"
