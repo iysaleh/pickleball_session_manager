@@ -8204,12 +8204,18 @@ class MainWindow(QMainWindow):
             self.unsetCursor()
         
         if success:
-            QMessageBox.information(
-                self, "Updating",
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setWindowTitle("Updating")
+            msg.setText(
                 "The update has been downloaded.\n\n"
                 "A progress window will appear showing the update status.\n"
-                "The application will restart automatically when complete."
+                "Closing in 3 seconds..."
             )
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            # Auto-close after 3 seconds
+            QTimer.singleShot(3000, msg.accept)
+            msg.exec()
             QApplication.instance().quit()
         else:
             QMessageBox.critical(
