@@ -142,7 +142,7 @@ class TestSessionSetupDefaults(unittest.TestCase):
         self.assertGreater(pooled_block_start, 0)
         pooled_block = content[pooled_block_start:pooled_block_start + 200]
         self.assertIn('self.type_combo.clear()', pooled_block)
-        self.assertIn('self.type_combo.addItem("Singles")', pooled_block)
+        self.assertIn('self.type_combo.addItem("Singles / Teams")', pooled_block)
 
     def test_other_modes_restore_both_options(self):
         """Verify that non-restricted modes restore both Doubles and Singles."""
@@ -154,8 +154,8 @@ class TestSessionSetupDefaults(unittest.TestCase):
         # The else block should restore both options
         restore_start = content.find('# Restore both options if not already present')
         self.assertGreater(restore_start, 0)
-        restore_block = content[restore_start:restore_start + 200]
-        self.assertIn('self.type_combo.addItems(["Doubles", "Singles"])', restore_block)
+        restore_block = content[restore_start:restore_start + 250]
+        self.assertIn('self.type_combo.addItems(["Doubles", "Singles / Teams"])', restore_block)
 
 
 class TestShortcutScriptStructure(unittest.TestCase):

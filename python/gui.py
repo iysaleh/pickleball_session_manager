@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QInputDialog, QSpinBox, QGroupBox, QCheckBox, QFrame, QScrollArea,
     QGridLayout, QSpacerItem, QSizePolicy, QSlider, QDialogButtonBox, QTextEdit
 )
-from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup, QMimeData, pyqtSignal, qInstallMessageHandler
+from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QPropertyAnimation, QPoint, QEasingCurve, QParallelAnimationGroup, QMimeData, pyqtSignal, qInstallMessageHandler, QEvent
 from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen, QPixmap, QDrag
 
 from python.pickleball_types import (
@@ -430,9 +430,17 @@ class PlayerListWidget(QWidget):
         
         # Player list
         self.player_list = QListWidget()
-        layout.addWidget(self.player_list)
+        layout.addWidget(self.player_list, 1)  # stretch factor so list grows with parent
         
+        # Font size is set dynamically via update_font_size() based on available height
         self.setLayout(layout)
+    
+    def update_font_size(self, dialog_height: int):
+        """Auto-adjust player list font size based on available dialog height."""
+        # Scale font: 12pt at 500px, up to 18pt at 1200px+
+        font_size = max(12, min(18, int(12 + (dialog_height - 500) * 6 / 700)))
+        font = QFont("Arial", font_size)
+        self.player_list.setFont(font)
     
     def move_player_up(self):
         """Move selected player up in the list"""
@@ -2615,7 +2623,7 @@ class SetupDialog(QDialog):
         type_layout = QHBoxLayout()
         type_layout.addWidget(QLabel("Session Type:"))
         self.type_combo = QComboBox()
-        self.type_combo.addItems(["Doubles", "Singles"])
+        self.type_combo.addItems(["Doubles", "Singles / Teams"])
         type_layout.addWidget(self.type_combo)
         type_layout.addStretch()
         layout.addLayout(type_layout)
@@ -2643,7 +2651,7 @@ class SetupDialog(QDialog):
         # Players
         layout.addWidget(QLabel("Players:"))
         self.player_widget = PlayerListWidget()
-        layout.addWidget(self.player_widget)
+        layout.addWidget(self.player_widget, 1)  # stretch factor so player list grows with dialog
         
         # Manage Locks Button (hidden for pooled RR mode - no partnerships/bans)
         self.manage_locks_btn = QPushButton("🤝 Manage Partnerships & Bans")
@@ -2793,7 +2801,24 @@ class SetupDialog(QDialog):
         self.setStyleSheet(dark_stylesheet)
         
         self.setWindowTitle("Session Setup")
-        self.resize(600, 500)
+        
+        # Auto-size dialog to use available screen height so the player list is larger
+        screen = QApplication.primaryScreen()
+        if screen:
+            available = screen.availableGeometry()
+            target_height = int(available.height() * 0.85)
+            target_height = max(target_height, 500)  # never smaller than original
+            self.resize(600, target_height)
+            # Center on screen
+            x = available.x() + (available.width() - 600) // 2
+            y = available.y() + (available.height() - target_height) // 2
+            self.move(x, y)
+        else:
+            target_height = 500
+            self.resize(600, target_height)
+        
+        # Scale player list font to match dialog size
+        self.player_widget.update_font_size(target_height)
         
         # Initialize pre-seed checkbox visibility and default state
         current_mode = self.mode_combo.currentText()
@@ -2823,7 +2848,7 @@ class SetupDialog(QDialog):
         if self.previous_session_type:
             # Set session type from previous session
             if self.previous_session_type.lower() == 'singles':
-                self.type_combo.setCurrentText('Singles')
+                self.type_combo.setCurrentText('Singles / Teams')
             else:
                 self.type_combo.setCurrentText('Doubles')
         
@@ -2881,11 +2906,11 @@ class SetupDialog(QDialog):
         if is_pooled_rr or is_strict_continuous_rr:
             # Force Singles and disable Doubles option for pooled RR
             # For strict RR, default to Singles but allow Doubles
-            self.type_combo.setCurrentText("Singles")
+            self.type_combo.setCurrentText("Singles / Teams")
             if is_pooled_rr:
-                # Remove Doubles if present, keep only Singles
+                # Remove Doubles if present, keep only Singles / Teams
                 self.type_combo.clear()
-                self.type_combo.addItem("Singles")
+                self.type_combo.addItem("Singles / Teams")
         elif is_competitive_variety:
             # Competitive Variety only supports Doubles
             self.type_combo.clear()
@@ -2894,7 +2919,7 @@ class SetupDialog(QDialog):
             # Restore both options if not already present
             if self.type_combo.count() < 2:
                 self.type_combo.clear()
-                self.type_combo.addItems(["Doubles", "Singles"])
+                self.type_combo.addItems(["Doubles", "Singles / Teams"])
         
         # Hide Manage Partnerships & Bans for pooled RR (no partnerships/bans in this mode)
         if hasattr(self, 'manage_locks_btn'):
@@ -3053,7 +3078,7 @@ class SetupDialog(QDialog):
         config = PooledContinuousRRConfig()
         temp_session_config = SessionConfig(
             mode='pooled-continuous-rr',
-            session_type='singles' if self.type_combo.currentText() == "Singles" else 'doubles',
+            session_type='singles' if self.type_combo.currentText() != "Doubles" else 'doubles',
             players=players,
             courts=self.courts_spin.value(),
             banned_pairs=self.banned_pairs,
@@ -3523,6 +3548,10 @@ class CourtDisplayWidget(QWidget):
         score_layout.addWidget(self.team2_score)
         score_layout.addStretch()
         
+        # Enter key in score inputs triggers match completion
+        self.team1_score.installEventFilter(self)
+        self.team2_score.installEventFilter(self)
+        
         # Timer display
         timer_label = QLabel("Game Duration:")
         timer_label.setStyleSheet("QLabel { color: black; font-weight: bold; font-size: 12px; }")
@@ -3553,6 +3582,14 @@ class CourtDisplayWidget(QWidget):
         
         self.setLayout(layout)
         self.setStyleSheet("QWidget { border: 1px solid #ddd; border-radius: 5px; padding: 5px; background-color: #f9f9f9; }")
+    
+    def eventFilter(self, obj, event):
+        """Handle Enter key in score spin boxes to trigger match completion"""
+        if obj in (self.team1_score, self.team2_score) and event.type() == QEvent.Type.KeyPress:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self.complete_match_clicked()
+                return True
+        return super().eventFilter(obj, event)
     
     def set_match(self, match: Optional[Match]):
         """Update display with a match"""
