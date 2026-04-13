@@ -3568,10 +3568,11 @@ class CourtDisplayWidget(QWidget):
         # Buttons
         button_layout = QHBoxLayout()
         
-        complete_btn = QPushButton("✓ Complete")
-        complete_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 5px; border-radius: 3px; }")
-        complete_btn.clicked.connect(self.complete_match_clicked)
-        button_layout.addWidget(complete_btn)
+        self.complete_btn = QPushButton("✓ Complete")
+        self.complete_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 5px; border-radius: 3px; }")
+        self.complete_btn.clicked.connect(self.complete_match_clicked)
+        self.complete_btn.installEventFilter(self)
+        button_layout.addWidget(self.complete_btn)
         
         forfeit_btn = QPushButton("✗ Forfeit")
         forfeit_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 5px; border-radius: 3px; }")
@@ -3584,8 +3585,8 @@ class CourtDisplayWidget(QWidget):
         self.setStyleSheet("QWidget { border: 1px solid #ddd; border-radius: 5px; padding: 5px; background-color: #f9f9f9; }")
     
     def eventFilter(self, obj, event):
-        """Handle Enter key in score spin boxes to trigger match completion"""
-        if obj in (self.team1_score, self.team2_score) and event.type() == QEvent.Type.KeyPress:
+        """Handle Enter key in score spin boxes and Complete button to trigger match completion"""
+        if obj in (self.team1_score, self.team2_score, self.complete_btn) and event.type() == QEvent.Type.KeyPress:
             if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 self.complete_match_clicked()
                 return True

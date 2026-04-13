@@ -162,5 +162,30 @@ class TestScoreEnterKey(unittest.TestCase):
             self.assertEqual(widget.current_match.id, 'match-b')
 
 
+    def test_enter_on_complete_button_triggers_complete(self):
+        """Pressing Enter while the Complete button is focused triggers completion."""
+        widget = CourtDisplayWidget(1, self.session)
+        widget.current_match = make_test_match()
+
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier)
+
+        with patch.object(widget, 'complete_match_clicked') as mock_complete:
+            result = widget.eventFilter(widget.complete_btn, event)
+            self.assertTrue(result, "eventFilter should return True (event consumed)")
+            mock_complete.assert_called_once()
+
+    def test_numpad_enter_on_complete_button_triggers_complete(self):
+        """Pressing numpad Enter on the Complete button also triggers completion."""
+        widget = CourtDisplayWidget(1, self.session)
+        widget.current_match = make_test_match()
+
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Enter, Qt.KeyboardModifier.NoModifier)
+
+        with patch.object(widget, 'complete_match_clicked') as mock_complete:
+            result = widget.eventFilter(widget.complete_btn, event)
+            self.assertTrue(result)
+            mock_complete.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()
