@@ -20,6 +20,7 @@ from python.updater import (
     get_app_directory,
     _extract_and_replace,
     create_update_script,
+    _get_pythonw,
     RELEASES_URL,
 )
 
@@ -263,44 +264,64 @@ class TestExtractAndReplace(unittest.TestCase):
 class TestUpdateScript(unittest.TestCase):
     """Test update script generation."""
 
+    def _create_dummy_update_ui(self, app_dir):
+        """Create a dummy update_ui.py in the python subdir."""
+        python_dir = os.path.join(app_dir, 'python')
+        os.makedirs(python_dir, exist_ok=True)
+        ui_path = os.path.join(python_dir, 'update_ui.py')
+        with open(ui_path, 'w') as f:
+            f.write('# dummy updater ui\nprint("hello")\n')
+        return ui_path
+
     def test_creates_script_file(self):
-        """Should create a script file."""
+        """Should create a .py script file in temp dir."""
         with tempfile.TemporaryDirectory() as app_dir:
+            self._create_dummy_update_ui(app_dir)
             zip_path = os.path.join(app_dir, 'update.zip')
-            script = create_update_script(app_dir, zip_path, 99999)
+            with patch('python.updater.os.path.dirname', return_value=os.path.join(app_dir, 'python')):
+                script = create_update_script(app_dir, zip_path, 99999)
             self.assertTrue(os.path.exists(script))
+            self.assertTrue(script.endswith('.py'))
             os.unlink(script)
 
-    def test_script_references_main_py(self):
-        """Script should reference main.py for relaunch."""
+    def test_config_contains_app_dir(self):
+        """JSON config should reference the app directory."""
         with tempfile.TemporaryDirectory() as app_dir:
+            self._create_dummy_update_ui(app_dir)
             zip_path = os.path.join(app_dir, 'update.zip')
-            script = create_update_script(app_dir, zip_path, 99999)
-            with open(script, 'r') as f:
-                content = f.read()
-            self.assertIn('main.py', content)
+            with patch('python.updater.os.path.dirname', return_value=os.path.join(app_dir, 'python')):
+                script = create_update_script(app_dir, zip_path, 99999)
+            config_path = os.path.join(tempfile.gettempdir(), 'pickleball_update_config.json')
+            self.assertTrue(os.path.exists(config_path))
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            self.assertEqual(config['app_dir'], app_dir)
             os.unlink(script)
+            os.unlink(config_path)
 
-    def test_script_waits_for_pid(self):
-        """Script should contain logic to wait for the PID to exit."""
+    def test_config_contains_pid(self):
+        """JSON config should contain the parent PID."""
         with tempfile.TemporaryDirectory() as app_dir:
+            self._create_dummy_update_ui(app_dir)
             zip_path = os.path.join(app_dir, 'update.zip')
-            script = create_update_script(app_dir, zip_path, 12345)
-            with open(script, 'r') as f:
-                content = f.read()
-            self.assertIn('12345', content)
+            with patch('python.updater.os.path.dirname', return_value=os.path.join(app_dir, 'python')):
+                script = create_update_script(app_dir, zip_path, 12345, new_version='2.0.0')
+            config_path = os.path.join(tempfile.gettempdir(), 'pickleball_update_config.json')
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            self.assertEqual(config['parent_pid'], 12345)
+            self.assertEqual(config['new_version'], '2.0.0')
             os.unlink(script)
+            os.unlink(config_path)
 
-    def test_script_platform_appropriate(self):
-        """Script extension should match platform."""
+    def test_script_is_python_on_all_platforms(self):
+        """Script should always be .py regardless of platform."""
         with tempfile.TemporaryDirectory() as app_dir:
+            self._create_dummy_update_ui(app_dir)
             zip_path = os.path.join(app_dir, 'update.zip')
-            script = create_update_script(app_dir, zip_path, 99999)
-            if sys.platform == 'win32':
-                self.assertTrue(script.endswith('.bat'))
-            else:
-                self.assertTrue(script.endswith('.sh'))
-                self.assertTrue(os.access(script, os.X_OK))
+            with patch('python.updater.os.path.dirname', return_value=os.path.join(app_dir, 'python')):
+                script = create_update_script(app_dir, zip_path, 99999)
+            self.assertTrue(script.endswith('.py'))
             os.unlink(script)
 
 

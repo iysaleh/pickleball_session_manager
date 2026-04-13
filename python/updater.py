@@ -169,80 +169,58 @@ def _extract_and_replace(zip_path: str, app_dir: str) -> bool:
         return False
 
 
-def create_update_script(app_dir: str, zip_path: str, pid_to_kill: int) -> str:
-    """
-    Create a platform-appropriate script that:
-    1. Waits for the current process to exit
-    2. Extracts the update
-    3. Relaunches the application
-
-    Returns the path to the created script.
-    """
-    python_exe = sys.executable
-    main_py = os.path.join(app_dir, 'main.py')
-
+def _get_pythonw() -> str:
+    """Get pythonw.exe (GUI Python, no console) on Windows.
+    Falls back to python.exe if pythonw.exe is not found."""
     if sys.platform == 'win32':
-        script_path = os.path.join(tempfile.gettempdir(), 'pickleball_update.bat')
-        with open(script_path, 'w') as f:
-            f.write('@echo off\n')
-            f.write('echo Updating Pickleball Session Manager...\n')
-            f.write('echo Waiting for application to close...\n')
-            # Wait for the process to exit
-            f.write(f':waitloop\n')
-            f.write(f'tasklist /FI "PID eq {pid_to_kill}" 2>NUL | find /I "{pid_to_kill}" >NUL\n')
-            f.write(f'if %ERRORLEVEL% == 0 (\n')
-            f.write(f'    timeout /t 1 /nobreak >NUL\n')
-            f.write(f'    goto waitloop\n')
-            f.write(f')\n')
-            f.write('echo Application closed. Applying update...\n')
-            # Run the extraction via Python
-            updater_module = os.path.abspath(__file__)
-            f.write(f'"{python_exe}" -c "import sys; sys.path.insert(0, r\'{app_dir}\'); ')
-            f.write(f'from python.updater import _extract_and_replace; ')
-            f.write(f'result = _extract_and_replace(r\'{zip_path}\', r\'{app_dir}\'); ')
-            f.write(f'print(\'Update applied successfully!\' if result else \'Update failed!\')"\n')
-            f.write('echo Relaunching application...\n')
-            f.write(f'start "" "{python_exe}" "{main_py}"\n')
-            # Clean up
-            f.write(f'del "{zip_path}" 2>NUL\n')
-            f.write('exit\n')
-    else:
-        script_path = os.path.join(tempfile.gettempdir(), 'pickleball_update.sh')
-        with open(script_path, 'w') as f:
-            f.write('#!/bin/bash\n')
-            f.write('echo "Updating Pickleball Session Manager..."\n')
-            f.write('echo "Waiting for application to close..."\n')
-            # Wait for the process to exit
-            f.write(f'while kill -0 {pid_to_kill} 2>/dev/null; do\n')
-            f.write('    sleep 1\n')
-            f.write('done\n')
-            f.write('echo "Application closed. Applying update..."\n')
-            # Run the extraction via Python
-            f.write(f'PYTHONPATH="{app_dir}" "{python_exe}" -c "\n')
-            f.write(f'import sys; sys.path.insert(0, \'{app_dir}\')\n')
-            f.write(f'from python.updater import _extract_and_replace\n')
-            f.write(f'result = _extract_and_replace(\'{zip_path}\', \'{app_dir}\')\n')
-            f.write(f'print(\'Update applied successfully!\' if result else \'Update failed!\')\n')
-            f.write('"\n')
-            f.write('echo "Relaunching application..."\n')
-            f.write(f'"{python_exe}" "{main_py}" &\n')
-            # Clean up
-            f.write(f'rm -f "{zip_path}"\n')
-            f.write(f'rm -f "{script_path}"\n')
-        os.chmod(script_path, 0o755)
+        python_dir = os.path.dirname(sys.executable)
+        pythonw = os.path.join(python_dir, 'pythonw.exe')
+        if os.path.exists(pythonw):
+            return pythonw
+    return sys.executable
 
-    return script_path
+
+def create_update_script(app_dir: str, zip_path: str, pid_to_kill: int,
+                         new_version: str = 'unknown') -> str:
+    """
+    Prepare the standalone updater script and its configuration.
+
+    Copies python/update_ui.py to a temp location and writes a JSON config
+    file so the updater can run independently after the main app exits.
+
+    Returns the path to the updater script in the temp directory.
+    """
+    config = {
+        'app_dir': app_dir,
+        'zip_path': zip_path,
+        'parent_pid': pid_to_kill,
+        'python_exe': sys.executable,
+        'new_version': new_version,
+    }
+    config_path = os.path.join(tempfile.gettempdir(), 'pickleball_update_config.json')
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=2)
+
+    # Copy update_ui.py to temp so it can run after the source dir is replaced
+    source_ui = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'update_ui.py')
+    dest_script = os.path.join(tempfile.gettempdir(), 'pickleball_updater.py')
+    shutil.copy2(source_ui, dest_script)
+
+    return dest_script
 
 
 def launch_update(release_info: dict) -> bool:
     """
-    Download the release and launch the update script.
-    This will terminate the current application.
+    Download the release and launch the standalone updater UI.
+    The updater runs as a separate process with its own tkinter window
+    that shows progress while replacing files and relaunching the app.
 
-    Returns True if the update script was launched successfully.
+    Returns True if the updater was launched successfully.
     """
     app_dir = get_app_directory()
     zipball_url = release_info.get('zipball_url', '')
+    new_version = release_info.get('version', 'unknown')
+
     if not zipball_url:
         logger.error("No zipball URL in release info")
         return False
@@ -256,27 +234,29 @@ def launch_update(release_info: dict) -> bool:
 
     logger.info(f"Update downloaded to {zip_path}")
 
-    # Create and launch the update script
+    # Create updater script and config
     pid = os.getpid()
-    script_path = create_update_script(app_dir, zip_path, pid)
-    logger.info(f"Update script created at {script_path}")
+    script_path = create_update_script(app_dir, zip_path, pid, new_version)
+    logger.info(f"Updater script created at {script_path}")
 
     try:
+        # Use pythonw.exe on Windows for a clean GUI-only experience (no console)
+        python_cmd = _get_pythonw()
+
         if sys.platform == 'win32':
-            # Launch the batch script detached
             subprocess.Popen(
-                ['cmd', '/c', script_path],
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                [python_cmd, script_path],
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
                 close_fds=True
             )
         else:
             subprocess.Popen(
-                ['bash', script_path],
+                [python_cmd, script_path],
                 start_new_session=True,
                 close_fds=True
             )
-        logger.info("Update script launched. Application will exit now.")
+        logger.info("Updater launched. Application will exit now.")
         return True
     except Exception as e:
-        logger.error(f"Failed to launch update script: {e}")
+        logger.error(f"Failed to launch updater: {e}")
         return False

@@ -8206,7 +8206,9 @@ class MainWindow(QMainWindow):
         if success:
             QMessageBox.information(
                 self, "Updating",
-                "The update is being applied. The application will restart automatically."
+                "The update has been downloaded.\n\n"
+                "A progress window will appear showing the update status.\n"
+                "The application will restart automatically when complete."
             )
             QApplication.instance().quit()
         else:
