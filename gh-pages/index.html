@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary Meta Tags -->
+  <title>Better Pickleball Sessions — Free Session Manager & Smart Matchmaking</title>
+  <meta name="title" content="Better Pickleball Sessions — Free Session Manager & Smart Matchmaking">
+  <meta name="description" content="Free desktop app for managing pickleball sessions with intelligent matchmaking. Supports Round Robin, King of the Court, Competitive Variety, and more. Fair rotations, ELO rankings, and automatic court management.">
+  <meta name="keywords" content="pickleball, session manager, round robin, king of the court, matchmaking, tournament manager, court management, rankings, ELO, free">
+  <meta name="author" content="Better Pickleball Sessions">
+  <meta name="robots" content="index, follow">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://betterpickleballsessions.com/">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://betterpickleballsessions.com/">
+  <meta property="og:title" content="Better Pickleball Sessions — Free Session Manager">
+  <meta property="og:description" content="Free desktop app for managing pickleball sessions with intelligent matchmaking algorithms. Round Robin, King of the Court, Competitive Variety, and more.">
+  <!-- SCREENSHOT: Replace with an actual og-image.png showing the app -->
+  <meta property="og:image" content="https://betterpickleballsessions.com/og-image.png">
+  <meta property="og:site_name" content="Better Pickleball Sessions">
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://betterpickleballsessions.com/">
+  <meta property="twitter:title" content="Better Pickleball Sessions — Free Session Manager">
+  <meta property="twitter:description" content="Free desktop app for managing pickleball sessions with intelligent matchmaking.">
+  <!-- SCREENSHOT: Replace with an actual og-image.png showing the app -->
+  <meta property="twitter:image" content="https://betterpickleballsessions.com/og-image.png">
+
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏓</text></svg>">
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Better Pickleball Sessions",
+    "description": "Free desktop application for managing pickleball sessions with intelligent matchmaking algorithms",
+    "url": "https://betterpickleballsessions.com",
+    "applicationCategory": "SportsApplication",
+    "operatingSystem": "Windows, macOS, Linux",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": [
+      "Competitive Variety matchmaking with ELO ratings",
+      "Round Robin tournaments",
+      "King of the Court competitions",
+      "Competitive Round Robin with pre-scheduled matches",
+      "Fair waitlist rotation",
+      "Multiple court management",
+      "Session export and statistics",
+      "Auto-updater for easy updates",
+      "Singles and doubles support"
+    ]
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green-dark: #1a6b3c;
+      --green-mid: #2d9254;
+      --green-light: #4cb868;
+      --green-pale: #e8f5e9;
+      --yellow: #f9c846;
+      --yellow-light: #fff8e1;
+      --text: #1a1a2e;
+      --text-light: #4a4a6a;
+      --bg: #ffffff;
+      --bg-alt: #f7faf8;
+      --border: #d4e8da;
+      --shadow: 0 2px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+      --radius: 12px;
+      --max-width: 960px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── Header ─── */
+    .hero {
+      background: linear-gradient(135deg, var(--green-dark) 0%, var(--green-mid) 50%, var(--green-light) 100%);
+      color: #fff;
+      text-align: center;
+      padding: 4rem 1.5rem 3rem;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      margin-bottom: 0.75rem;
+    }
+    .hero h1 .emoji { font-size: 0.85em; }
+    .hero p.tagline {
+      font-size: clamp(1.05rem, 2.5vw, 1.3rem);
+      opacity: 0.92;
+      max-width: 640px;
+      margin: 0 auto 2rem;
+    }
+    .hero-buttons { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.85rem 1.8rem;
+      border-radius: 8px;
+      font-size: 1.05rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary {
+      background: var(--yellow);
+      color: var(--text);
+      box-shadow: 0 4px 14px rgba(249,200,70,0.4);
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      border: 2px solid rgba(255,255,255,0.4);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.25); }
+
+    /* ─── Sections ─── */
+    section { padding: 4rem 1.5rem; }
+    .container { max-width: var(--max-width); margin: 0 auto; }
+    .section-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .section-subtitle {
+      text-align: center;
+      color: var(--text-light);
+      margin-bottom: 2.5rem;
+      font-size: 1.05rem;
+    }
+
+    /* ─── Features ─── */
+    .features { background: var(--bg-alt); }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.5rem;
+    }
+    .feature-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      box-shadow: var(--shadow);
+      transition: box-shadow 0.2s;
+    }
+    .feature-card:hover { box-shadow: var(--shadow-lg); }
+    .feature-card .icon { font-size: 2rem; margin-bottom: 0.75rem; }
+    .feature-card h3 { font-size: 1.15rem; margin-bottom: 0.4rem; }
+    .feature-card p { color: var(--text-light); font-size: 0.95rem; }
+
+    /* ─── Screenshots ─── */
+    .screenshots { background: var(--bg); }
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+    .screenshot-placeholder {
+      background: var(--bg-alt);
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 3rem 1.5rem;
+      text-align: center;
+      color: var(--text-light);
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .screenshot-placeholder .placeholder-icon { font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.5; }
+    .screenshot-placeholder .placeholder-label { font-weight: 600; margin-bottom: 0.25rem; }
+    .screenshot-placeholder .placeholder-hint { font-size: 0.85rem; opacity: 0.7; }
+
+    /* ─── Getting Started ─── */
+    .getting-started { background: var(--bg-alt); }
+    .steps {
+      max-width: 700px;
+      margin: 0 auto;
+      counter-reset: step;
+    }
+    .step {
+      position: relative;
+      padding-left: 3.5rem;
+      margin-bottom: 2rem;
+    }
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      position: absolute; left: 0; top: 0;
+      width: 2.5rem; height: 2.5rem;
+      background: var(--green-mid);
+      color: #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 1.1rem;
+    }
+    .step h3 { font-size: 1.15rem; margin-bottom: 0.3rem; }
+    .step p { color: var(--text-light); font-size: 0.95rem; }
+    code, .code-block {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    }
+    .code-block {
+      background: #1e1e2e;
+      color: #cdd6f4;
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      margin-top: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    .code-block .comment { color: #6c7086; }
+    .code-block .cmd { color: #a6e3a1; }
+
+    /* ─── Game Modes ─── */
+    .game-modes { background: var(--bg); }
+    .mode-list { max-width: 700px; margin: 0 auto; }
+    .mode-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+      background: var(--bg);
+      box-shadow: var(--shadow);
+    }
+    .mode-item h3 { font-size: 1.1rem; margin-bottom: 0.3rem; }
+    .mode-item h3 .emoji { margin-right: 0.4rem; }
+    .mode-item p { color: var(--text-light); font-size: 0.95rem; }
+
+    /* ─── Footer ─── */
+    footer {
+      background: var(--green-dark);
+      color: rgba(255,255,255,0.85);
+      text-align: center;
+      padding: 2.5rem 1.5rem;
+      font-size: 0.9rem;
+    }
+    footer a { color: var(--yellow); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    footer .footer-links { margin-bottom: 0.75rem; }
+    footer .footer-links a { margin: 0 0.75rem; }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 600px) {
+      .hero { padding: 3rem 1rem 2rem; }
+      section { padding: 3rem 1rem; }
+      .step { padding-left: 3rem; }
+      .screenshot-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─── Hero ─── -->
+  <header class="hero">
+    <h1><span class="emoji">🏓</span> Better Pickleball Sessions</h1>
+    <p class="tagline">
+      Free desktop app for managing pickleball sessions with intelligent matchmaking.
+      Fair rotations, ELO rankings, and automatic court management — so you can focus on playing.
+    </p>
+    <div class="hero-buttons">
+      <a href="#getting-started" class="btn btn-primary">⬇ Get Started</a>
+      <a href="https://github.com/iysaleh/pickleball_session_manager" class="btn btn-secondary" target="_blank" rel="noopener">★ View on GitHub</a>
+    </div>
+  </header>
+
+  <!-- ─── Features ─── -->
+  <section class="features" id="features">
+    <div class="container">
+      <h2 class="section-title">Why Better Pickleball Sessions?</h2>
+      <p class="section-subtitle">Everything you need to run great pickleball sessions — built by players, for players.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="icon">🧠</div>
+          <h3>Smart Matchmaking</h3>
+          <p>ELO-based skill balancing ensures competitive, fair matches every round. No more lopsided games.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🔄</div>
+          <h3>Fair Rotations</h3>
+          <p>Partner &amp; opponent variety constraints prevent repetitive pairings. Everyone plays with everyone.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">⏱️</div>
+          <h3>Wait Time Priority</h3>
+          <p>Players who have waited longest get prioritized automatically. No one gets left on the sidelines.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🏟️</div>
+          <h3>Multi-Court Management</h3>
+          <p>Manage 1 to 10+ courts simultaneously. Courts fill automatically as matches finish.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📊</div>
+          <h3>Rankings &amp; Stats</h3>
+          <p>Track wins, losses, point differentials, ELO ratings, and more for every player.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">💾</div>
+          <h3>Session Persistence</h3>
+          <p>Sessions auto-save and can be resumed after closing. Export detailed session reports.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Game Modes ─── -->
+  <section class="game-modes" id="game-modes">
+    <div class="container">
+      <h2 class="section-title">Game Modes</h2>
+      <p class="section-subtitle">Choose the format that fits your group.</p>
+      <div class="mode-list">
+        <div class="mode-item">
+          <h3><span class="emoji">🎯</span> Competitive Variety</h3>
+          <p>ELO-based matchmaking with hard variety constraints. Skill-balanced matches that maximize partner and opponent diversity. Adaptive constraints relax as sessions progress for better balance.</p>
+        </div>
+        <div class="mode-item">
+          <h3><span class="emoji">👑</span> King of the Court</h3>
+          <p>Rounds-based play where winners move up courts and losers move down. Teams split every round. Fair waitlist rotation ensures nobody sits out twice until everyone has waited once.</p>
+        </div>
+        <div class="mode-item">
+          <h3><span class="emoji">🔁</span> Round Robin</h3>
+          <p>Classic round robin where everyone plays with as many different partners as possible. Automatic queue generation optimizes for maximum variety.</p>
+        </div>
+        <div class="mode-item">
+          <h3><span class="emoji">📋</span> Competitive Round Robin</h3>
+          <p>Pre-scheduled tournament with all matches generated upfront. Review, approve, and modify the schedule before play begins. Continuous flow ensures courts never sit empty.</p>
+        </div>
+        <div class="mode-item">
+          <h3><span class="emoji">🤝</span> Locked Teams</h3>
+          <p>Fixed partner pairings that stay together throughout the session. Great for established doubles teams.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Screenshots ─── -->
+  <section class="screenshots" id="screenshots">
+    <div class="container">
+      <h2 class="section-title">See It in Action</h2>
+      <p class="section-subtitle">Here's what running a session looks like.</p>
+      <div class="screenshot-grid">
+        <!-- SCREENSHOT: Replace these placeholders with actual screenshots -->
+        <div class="screenshot-placeholder">
+          <div class="placeholder-icon">📸</div>
+          <div class="placeholder-label">Session Setup</div>
+          <div class="placeholder-hint">Screenshot of the session configuration screen</div>
+          <!-- Replace this div with: <img src="screenshots/setup.png" alt="Session setup screen"> -->
+        </div>
+        <div class="screenshot-placeholder">
+          <div class="placeholder-icon">📸</div>
+          <div class="placeholder-label">Active Session</div>
+          <div class="placeholder-hint">Screenshot of an active session with courts and matches</div>
+          <!-- Replace this div with: <img src="screenshots/active-session.png" alt="Active session with court management"> -->
+        </div>
+        <div class="screenshot-placeholder">
+          <div class="placeholder-icon">📸</div>
+          <div class="placeholder-label">Rankings &amp; Stats</div>
+          <div class="placeholder-hint">Screenshot showing player rankings and statistics</div>
+          <!-- Replace this div with: <img src="screenshots/rankings.png" alt="Player rankings and statistics"> -->
+        </div>
+        <div class="screenshot-placeholder">
+          <div class="placeholder-icon">📸</div>
+          <div class="placeholder-label">Match History</div>
+          <div class="placeholder-hint">Screenshot of match history and session export</div>
+          <!-- Replace this div with: <img src="screenshots/history.png" alt="Match history and export"> -->
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Getting Started ─── -->
+  <section class="getting-started" id="getting-started">
+    <div class="container">
+      <h2 class="section-title">Getting Started</h2>
+      <p class="section-subtitle">Up and running in under 5 minutes.</p>
+      <div class="steps">
+        <div class="step">
+          <h3>Install Python</h3>
+          <p>Download and install <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">Python 3.8 or newer</a>. On Windows, make sure to check <strong>"Add Python to PATH"</strong> during installation.</p>
+        </div>
+        <div class="step">
+          <h3>Download the App</h3>
+          <p>Clone or download the repository from GitHub:</p>
+          <div class="code-block">
+            <span class="comment"># Clone with git</span><br>
+            <span class="cmd">git clone https://github.com/iysaleh/pickleball_session_manager.git</span><br>
+            <span class="cmd">cd pickleball_session_manager</span><br><br>
+            <span class="comment"># Or download the ZIP from GitHub and extract it</span>
+          </div>
+        </div>
+        <div class="step">
+          <h3>Install Dependencies</h3>
+          <p>Install the required Python packages (just PyQt6 for the GUI):</p>
+          <div class="code-block">
+            <span class="cmd">pip install -r requirements.txt</span><br><br>
+            <span class="comment"># On Windows, do:</span><br>
+            <span class="cmd">pip install -r requirements-windows.txt</span>
+          </div>
+        </div>
+        <div class="step">
+          <h3>Run the App</h3>
+          <p>Launch the session manager:</p>
+          <div class="code-block">
+            <span class="cmd">python main.py</span>
+          </div>
+        </div>
+        <div class="step">
+          <h3>(Optional) Create a Desktop Shortcut</h3>
+          <p>For quick access, create a desktop shortcut:</p>
+          <div class="code-block">
+            <span class="cmd">python create_shortcut.py</span>
+          </div>
+          <p style="margin-top: 0.5rem;">This works on Windows, macOS, and Linux.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Footer ─── -->
+  <footer>
+    <div class="footer-links">
+      <a href="https://github.com/iysaleh/pickleball_session_manager" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/iysaleh/pickleball_session_manager/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://github.com/iysaleh/pickleball_session_manager/issues" target="_blank" rel="noopener">Report a Bug</a>
+    </div>
+    <p>Better Pickleball Sessions — Free &amp; open-source. Built with ❤️ for the pickleball community.</p>
+  </footer>
+
+</body>
+</html>
