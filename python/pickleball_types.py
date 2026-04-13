@@ -302,6 +302,7 @@ class Session:
     king_of_court_wait_counts: Dict[str, int] = field(default_factory=dict)  # player_id -> number of times they've waited
     king_of_court_waitlist_history: List[str] = field(default_factory=list)  # ordered list of players who have waited (first = longest ago)
     king_of_court_waitlist_rotation_index: int = 0  # current position in waitlist history for fair rotation
+    session_exported: bool = False  # True if session was manually exported during this session
 
 
 @dataclass

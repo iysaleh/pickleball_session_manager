@@ -1,347 +1,359 @@
-.PHONY: run_fuzz_tests clean run_test_gui_new_match_highlight run_gui_crash_test run_test_dynamic_threshold run_test_roaming_range_enforcement run_test_amanda_carrie_bug run_test_populate_bad_match run_test_full_session_replay run_test_export_stats test_export_winners run_match_history_snapshots run_test_competitive_variety_settings run_test_competitive_variety_slider run_test_competitive_variety_repetition run_test_competitive_variety_requirements run_test_show_rank_button run_test_slider_reevaluation run_test_variety_slider run_test_court_sliding run_test_court_slide_with_historic_load run_test_court_slide_gui_state_reset run_test_first_bye_feature run_test_first_bye_bug_fixes run_test_first_bye_15_players_bug run_test_first_bye_validation_fix run_test_team_balancing_bug run_test_balance_analysis run_test_enhanced_manual_match run_test_balance_bug_reproduction run_test_constraints_debug run_test_scoring_balance run_test_automatic_vs_manual run_test_determinism_fix run_test_first_match_randomization run_test_court_filling_bug test_time_manager test_wait_time_resumption test_realistic_session_resumption test_match_duration_resumption test_complete_session_resumption test_adaptive_slider test_disabled_adaptive test_enhanced_balance_constraints test_match_queue_visibility test_king_of_court_rounds test_waitlist_rotation_fix test_waitlist_exact_rotation test_first_bye_round_robin test_competitive_round_robin test_continuous_flow test_competitive_round_robin_rounds test_continuous_wave_flow test_manage_matches_ui test_manage_matches_functions test_ultra_competitive_first_round test_pooled_continuous_rr test_pooled_rr_waitlist_sizing test_pooled_rr_fixes test_roundrobin_fix test_competitive_rr_10_players test_strict_continuous_rr test_strict_rr_score_bugs test_rr_standings_csv_export test_session_logger
+.PHONY: test_strict_continuous_rr test_competitive_rr_10_players test_roundrobin_fix test_pooled_continuous_rr test_pooled_rr_waitlist_sizing test_pooled_rr_fixes test_manage_matches_functions test_manage_matches_ui test_continuous_wave_flow test_competitive_round_robin_rounds test_continuous_flow test_competitive_round_robin test_first_bye_round_robin test_9_players_singles_validation test_waitlist_exact_rotation test_enhanced_elo_ranking test_king_of_court_comprehensive test_king_of_court_rounds test_session_manager test_koc_preseeded_ratings test_king_of_court_advancement run_test_gui_new_match_highlight test_skill_based_deterministic test_skill_based_courts_roaming test_skill_based_courts test_real_user_workflow test_complete_session_restoration test_pre_seed_restoration test_pre_seeded_ratings test_gui_integration run_fuzz_tests run_test_competitive_variety_settings run_test_competitive_variety_slider run_test_competitive_variety_repetition run_test_competitive_variety_requirements run_test_show_rank_button run_test_slider_reevaluation run_test_variety_slider run_test_court_sliding run_test_court_slide_with_historic_load run_test_court_slide_gui_state_reset run_test_first_bye_feature run_test_first_bye_bug_fixes run_test_first_bye_15_players_bug run_test_first_bye_validation_fix run_test_team_balancing_bug run_player_removal_persistence_test run_test_back_to_back_partner_bug run_test_partner_repetition_8_players run_test_opponent_repetition_8_players run_test_direct_history_check run_test_priority_queueing run_test_per_player_repetition run_test_dense_constraints run_test_bracket_restrictions run_test_roaming_range run_test_roundrobin_strictness run_test_repro_roundrobin_repetition run_test_dynamic_threshold run_test_roaming_range_enforcement run_test_amanda_carrie_bug run_test_populate_bad_match run_test_full_session_replay run_test_audio_announcement run_test_manual_announcement run_test_export_stats test_export_winners run_match_history_snapshots test_wait_priority test_wait_priority_integration run_test_balance_analysis run_test_enhanced_manual_match run_test_balance_bug_reproduction run_test_constraints_debug run_test_scoring_balance run_test_automatic_vs_manual run_test_determinism_fix run_test_first_match_randomization run_test_court_filling_bug test_time_manager test_wait_time_resumption test_realistic_session_resumption test_match_duration_resumption test_complete_session_resumption test_court_layout_visual test_font_auto_sizing test_waitlist_auto_sizing test_waitlist_auto_sizing_validation test_comprehensive_auto_sizing test_horizontal_scrollbar_fix test_complete_auto_sizing_system test_court_space_constraints test_court_name_persistence test_court_integration test_adaptive_matchmaking test_dynamic_thresholds test_adaptive_slider test_gui_compatibility test_match_queue_visibility clean test_disabled_adaptive test_adaptive_state_button test_gui_button_cycle_fix test_slider_auto_movement test_enhanced_balance_constraints test_partner_opponent_partner_prevention test_roaming_range_preservation test_deterministic_waitlist test_deterministic_waitlist_v2 test_court_ordering_persistence test_waitlist_rotation_fix test_ultra_competitive_first_round test_strict_rr_score_bugs test_match_data_integrity test_rr_standings_csv_export test_session_logger test_export_and_sleep_features test_session_setup_defaults test_auto_updater
 
 test_strict_continuous_rr:
-	python test_strict_continuous_rr.py 2>&1
+	python tests/test_strict_continuous_rr.py 2>&1
 
 test_competitive_rr_10_players:
-	python test_competitive_rr_10_players.py 2>&1
+	python tests/test_competitive_rr_10_players.py 2>&1
 
 test_roundrobin_fix:
-	python test_repro_roundrobin_fix.py 2>&1
+	python tests/test_repro_roundrobin_fix.py 2>&1
 
 test_pooled_continuous_rr:
-	python test_pooled_continuous_rr.py 2>&1
+	python tests/test_pooled_continuous_rr.py 2>&1
 
 test_pooled_rr_waitlist_sizing:
-	python test_pooled_rr_waitlist_sizing.py 2>&1
+	python tests/test_pooled_rr_waitlist_sizing.py 2>&1
 
 test_pooled_rr_fixes:
-	python test_pooled_rr_fixes.py 2>&1
+	python tests/test_pooled_rr_fixes.py 2>&1
 
 test_manage_matches_functions:
-	python test_manage_matches_functions.py 2>&1
+	python tests/test_manage_matches_functions.py 2>&1
 
 test_manage_matches_ui:
-	python test_manage_matches_ui.py 2>&1
+	python tests/test_manage_matches_ui.py 2>&1
 
 test_continuous_wave_flow:
-	python test_continuous_wave_flow.py 2>&1
+	python tests/test_continuous_wave_flow.py 2>&1
 
 test_competitive_round_robin_rounds:
-	python test_competitive_round_robin_rounds.py 2>&1
+	python tests/test_competitive_round_robin_rounds.py 2>&1
 
 test_continuous_flow:
-	python test_continuous_flow.py 2>&1
+	python tests/test_continuous_flow.py 2>&1
 
 test_competitive_round_robin:
-	python test_competitive_round_robin.py 2>&1
+	python tests/test_competitive_round_robin.py 2>&1
 
 test_first_bye_round_robin:
-	python test_first_bye_round_robin_singles.py 2>&1
+	python tests/test_first_bye_round_robin_singles.py 2>&1
 
 test_9_players_singles_validation:
-	python test_9_players_singles_validation.py 2>&1
+	python tests/test_9_players_singles_validation.py 2>&1
 
 test_waitlist_exact_rotation:
-	python test_waitlist_exact_rotation.py 2>&1
+	python tests/test_waitlist_exact_rotation.py 2>&1
 
 test_enhanced_elo_ranking:
-	python test_enhanced_elo_ranking.py 2>&1
+	python tests/test_enhanced_elo_ranking.py 2>&1
 
 test_king_of_court_comprehensive:
-	python test_king_of_court_comprehensive.py 2>&1
+	python tests/test_king_of_court_comprehensive.py 2>&1
 
 test_king_of_court_rounds:
-	python test_king_of_court_rounds.py
+	python tests/test_king_of_court_rounds.py
 
 test_session_manager:
-	python test_session_manager.py
+	python tests/test_session_manager.py
 
 test_koc_preseeded_ratings:
-	python test_koc_preseeded_ratings.py
+	python tests/test_koc_preseeded_ratings.py
 
 test_king_of_court_advancement:
-	python test_king_of_court_advancement.py
+	python tests/test_king_of_court_advancement.py
 
 run_test_gui_new_match_highlight:
-	python3 python/test_gui_new_match_highlight.py
+	python tests/test_gui_new_match_highlight.py
 
 test_skill_based_deterministic:
-	python test_skill_based_deterministic.py
+	python tests/test_skill_based_deterministic.py
 
 test_skill_based_courts_roaming:
-	python test_skill_based_courts.py
+	python tests/test_skill_based_courts.py
 
 test_skill_based_courts:
-	python test_skill_based_courts.py
+	python tests/test_skill_based_courts.py
 
 test_real_user_workflow:
-	python test_real_user_workflow.py
+	python tests/test_real_user_workflow.py
 
 test_complete_session_restoration:
-	python test_complete_session_restoration.py
+	python tests/test_complete_session_restoration.py
 
 test_pre_seed_restoration:
-	python test_pre_seed_restoration.py
+	python tests/test_pre_seed_restoration.py
 
 test_pre_seeded_ratings:
-	python test_pre_seeded_ratings.py
+	python tests/test_pre_seeded_ratings.py
 
 test_gui_integration:
-	python test_gui_integration.py
+	python tests/test_gui_integration.py
 
 run_fuzz_tests:
-	python3 test_competitive_variety_fuzzing.py
+	python tests/test_competitive_variety_fuzzing.py
 
 run_test_competitive_variety_settings:
-	python3 test_competitive_variety_settings.py
+	python tests/test_competitive_variety_settings.py
 
 run_test_competitive_variety_slider:
-	python3 test_competitive_variety_slider.py
+	python tests/test_competitive_variety_slider.py
 
 run_test_competitive_variety_repetition:
-	python3 test_competitive_variety_repetition.py
+	python tests/test_competitive_variety_repetition.py
 
 run_test_competitive_variety_requirements:
-	python3 test_competitive_variety_requirements.py
+	python tests/test_competitive_variety_requirements.py
 
 run_test_show_rank_button:
-	python3 test_show_rank_button.py
+	python tests/test_show_rank_button.py
 
 run_test_slider_reevaluation:
-	python3 test_slider_reevaluation.py
+	python tests/test_slider_reevaluation.py
 
 run_test_variety_slider:
-	python3 test_variety_slider.py
+	python tests/test_variety_slider.py
 
 run_test_court_sliding:
-	python3 test_court_sliding.py
+	python tests/test_court_sliding.py
 
 run_test_court_slide_with_historic_load:
-	python3 test_court_slide_with_historic_load.py
+	python tests/test_court_slide_with_historic_load.py
 
 run_test_court_slide_gui_state_reset:
-	python3 test_court_slide_gui_state_reset.py
+	python tests/test_court_slide_gui_state_reset.py
 
 run_test_first_bye_feature:
-	python3 test_first_bye_feature.py
+	python tests/test_first_bye_feature.py
 
 run_test_first_bye_bug_fixes:
-	python3 test_first_bye_bug_fixes.py
+	python tests/test_first_bye_bug_fixes.py
 
 run_test_first_bye_15_players_bug:
-	python3 test_first_bye_15_players_bug.py
+	python tests/test_first_bye_15_players_bug.py
 
 run_test_first_bye_validation_fix:
-	python3 test_first_bye_validation_fix.py
+	python tests/test_first_bye_validation_fix.py
 
 run_test_team_balancing_bug:
-	python3 test_team_balancing_bug.py
+	python tests/test_team_balancing_bug.py
 
 run_player_removal_persistence_test:
-	python3 test_player_removal_persistence.py
+	python tests/test_player_removal_persistence.py
 
 run_test_back_to_back_partner_bug:
-	python3 test_back_to_back_partner_bug.py
+	python tests/test_back_to_back_partner_bug.py
 
 run_test_partner_repetition_8_players:
-	python3 test_partner_repetition_8_players.py
+	python tests/test_partner_repetition_8_players.py
 
 run_test_opponent_repetition_8_players:
-	python3 test_opponent_repetition_8_players.py
+	python tests/test_opponent_repetition_8_players.py
 
 run_test_direct_history_check:
-	python3 test_direct_history_check.py
+	python tests/test_direct_history_check.py
 
 run_test_priority_queueing:
-	python3 test_priority_queueing.py
+	python tests/test_priority_queueing.py
 
 run_test_per_player_repetition:
-	python3 test_per_player_repetition.py
+	python tests/test_per_player_repetition.py
 
 run_test_dense_constraints:
-	python3 test_dense_constraints.py
+	python tests/test_dense_constraints.py
 
 run_test_bracket_restrictions:
-	python3 test_bracket_restrictions.py
+	python tests/test_bracket_restrictions.py
 
 run_test_roaming_range:
-	python3 test_roaming_range.py
+	python tests/test_roaming_range.py
 
 run_test_roundrobin_strictness:
-	python3 test_roundrobin_strictness.py
+	python tests/test_roundrobin_strictness.py
 
 run_test_repro_roundrobin_repetition:
-	python3 test_repro_roundrobin_repetition.py
+	python tests/test_repro_roundrobin_repetition.py
 
 run_test_dynamic_threshold:
-	python3 test_dynamic_threshold.py
+	python tests/test_dynamic_threshold.py
 
 run_test_roaming_range_enforcement:
-	python3 test_roaming_range_enforcement.py
+	python tests/test_roaming_range_enforcement.py
 
 run_test_amanda_carrie_bug:
-	python3 test_amanda_carrie_bug.py
+	python tests/test_amanda_carrie_bug.py
 
 run_test_populate_bad_match:
-	python3 test_populate_bad_match.py
+	python tests/test_populate_bad_match.py
 
 run_test_full_session_replay:
-	python3 test_full_session_replay.py
+	python tests/test_full_session_replay.py
 
 run_test_audio_announcement:
-	python3 test_audio_announcement.py
+	python tests/test_audio_announcement.py
 
 run_test_manual_announcement:
-	python3 test_manual_announcement.py
+	python tests/test_manual_announcement.py
 
 run_test_export_stats:
-	python3 test_export_stats.py
+	python tests/test_export_stats.py
 
 test_export_winners:
-	python3 test_export_winners.py
+	python tests/test_export_winners.py
 
 run_match_history_snapshots:
-	python3 test_match_history_snapshots.py
+	python tests/test_match_history_snapshots.py
 
 test_wait_priority:
-	python3 test_wait_priority_system.py
+	python tests/test_wait_priority_system.py
 
 test_wait_priority_integration:
-	python3 test_wait_priority_integration.py
+	python tests/test_wait_priority_integration.py
 
 run_test_balance_analysis:
-	python3 test_balance_analysis.py
+	python tests/test_balance_analysis.py
 
 run_test_enhanced_manual_match:
-	python3 test_enhanced_manual_match.py
+	python tests/test_enhanced_manual_match.py
 
 run_test_balance_bug_reproduction:
-	python3 test_balance_bug_reproduction.py
+	python tests/test_balance_bug_reproduction.py
 
 run_test_constraints_debug:
-	python3 test_constraints_debug.py
+	python tests/test_constraints_debug.py
 
 run_test_scoring_balance:
-	python3 test_scoring_balance.py
+	python tests/test_scoring_balance.py
 
 run_test_automatic_vs_manual:
-	python3 test_automatic_vs_manual.py
+	python tests/test_automatic_vs_manual.py
 
 run_test_determinism_fix:
-	python3 test_determinism_fix.py
+	python tests/test_determinism_fix.py
 
 run_test_first_match_randomization:
-	python3 test_first_match_randomization.py
+	python tests/test_first_match_randomization.py
 
 run_test_court_filling_bug:
-	python3 test_court_filling_bug.py
+	python tests/test_court_filling_bug.py
 
 test_time_manager:
-	python3 test_time_manager.py
+	python tests/test_time_manager.py
 
 test_wait_time_resumption:
-	python3 test_wait_time_resumption.py
+	python tests/test_wait_time_resumption.py
 
 test_realistic_session_resumption:
-	python3 test_realistic_session_resumption.py
+	python tests/test_realistic_session_resumption.py
 
 test_match_duration_resumption:
-	python3 test_match_duration_resumption.py
+	python tests/test_match_duration_resumption.py
 
 test_complete_session_resumption:
-	python3 test_complete_session_resumption.py
+	python tests/test_complete_session_resumption.py
 
 test_court_layout_visual:
-	python3 test_court_layout_visual.py
+	python tests/test_court_layout_visual.py
 
 test_font_auto_sizing:
-	python3 test_font_auto_sizing.py
+	python tests/test_font_auto_sizing.py
 
 test_waitlist_auto_sizing:
-	python3 test_waitlist_auto_sizing.py
+	python tests/test_waitlist_auto_sizing.py
 
 test_waitlist_auto_sizing_validation:
-	python3 test_waitlist_auto_sizing_validation.py
+	python tests/test_waitlist_auto_sizing_validation.py
 
 test_comprehensive_auto_sizing:
-	python3 test_comprehensive_auto_sizing.py
+	python tests/test_comprehensive_auto_sizing.py
 
 test_horizontal_scrollbar_fix:
-	python3 test_horizontal_scrollbar_fix.py
+	python tests/test_horizontal_scrollbar_fix.py
 
 test_complete_auto_sizing_system:
-	python3 test_complete_auto_sizing_system.py
+	python tests/test_complete_auto_sizing_system.py
 
 test_court_space_constraints:
-	python3 test_court_space_constraints.py
+	python tests/test_court_space_constraints.py
 
 test_court_name_persistence:
-	python3 test_court_name_persistence.py
+	python tests/test_court_name_persistence.py
 
 test_court_integration:
-	python3 test_court_integration.py
+	python tests/test_court_integration.py
 
 test_adaptive_matchmaking:
-	python3 test_adaptive_matchmaking.py
+	python tests/test_adaptive_matchmaking.py
 
 test_dynamic_thresholds:
-	python3 test_dynamic_thresholds.py
+	python tests/test_dynamic_thresholds.py
 
 test_adaptive_slider:
-	python3 test_adaptive_slider.py
+	python tests/test_adaptive_slider.py
 
 test_gui_compatibility:
-	python3 test_gui_compatibility.py
+	python tests/test_gui_compatibility.py
 
 test_match_queue_visibility:
-	python3 test_match_queue_visibility.py
+	python tests/test_match_queue_visibility.py
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
 
 test_disabled_adaptive:
-	python3 test_disabled_adaptive.py
+	python tests/test_disabled_adaptive.py
 
 test_adaptive_state_button:
-	python3 test_adaptive_state_button.py
+	python tests/test_adaptive_state_button.py
 
 test_gui_button_cycle_fix:
-	python3 test_gui_button_cycle_fix.py
+	python tests/test_gui_button_cycle_fix.py
 
 test_slider_auto_movement:
-	python3 test_slider_auto_movement.py
+	python tests/test_slider_auto_movement.py
 
 test_enhanced_balance_constraints:
-	python3 test_enhanced_balance_constraints.py
+	python tests/test_enhanced_balance_constraints.py
 
 test_partner_opponent_partner_prevention:
-	python3 test_partner_opponent_partner_prevention.py
+	python tests/test_partner_opponent_partner_prevention.py
 
 test_roaming_range_preservation:
-	python3 test_roaming_range_preservation.py
+	python tests/test_roaming_range_preservation.py
 
 test_deterministic_waitlist:
-	python test_deterministic_waitlist.py
+	python tests/test_deterministic_waitlist.py
 
 test_deterministic_waitlist_v2:
-	python test_deterministic_waitlist_v2.py
+	python tests/test_deterministic_waitlist_v2.py
 
 test_court_ordering_persistence:
-	python test_court_ordering_persistence.py
+	python tests/test_court_ordering_persistence.py
 
 test_waitlist_rotation_fix:
-	python test_waitlist_rotation_fix.py
+	python tests/test_waitlist_rotation_fix.py
 
 test_ultra_competitive_first_round:
-	python test_ultra_competitive_first_round.py
+	python tests/test_ultra_competitive_first_round.py
+
 test_strict_rr_score_bugs:
-	python test_strict_rr_score_bugs.py 2>&1
+	python tests/test_strict_rr_score_bugs.py 2>&1
+
 test_match_data_integrity:
-	python test_match_data_integrity.py 2>&1
+	python tests/test_match_data_integrity.py 2>&1
+
 test_rr_standings_csv_export:
-	python test_rr_standings_csv_export.py 2>&1
+	python tests/test_rr_standings_csv_export.py 2>&1
 
 test_session_logger:
-	python test_session_logger.py 2>&1
+	python tests/test_session_logger.py 2>&1
+
+test_export_and_sleep_features:
+	python tests/test_export_and_sleep_features.py 2>&1
+
+test_session_setup_defaults:
+	python tests/test_session_setup_defaults.py 2>&1
+
+test_auto_updater:
+	python tests/test_auto_updater.py 2>&1

@@ -153,8 +153,22 @@ class SessionLogger:
         self._logger.removeHandler(self._handler)
 
 
-def initialize_session_logger(log_dir: str = '.') -> SessionLogger:
-    """Initialize the global session logger. Returns the logger instance."""
+def get_logs_directory() -> str:
+    """Get the logs directory path, creating it if possible. Falls back to cwd."""
+    logs_dir = os.path.join(os.getcwd(), "logs")
+    try:
+        os.makedirs(logs_dir, exist_ok=True)
+        return logs_dir
+    except OSError:
+        return os.getcwd()
+
+
+def initialize_session_logger(log_dir: str = None) -> SessionLogger:
+    """Initialize the global session logger. Returns the logger instance.
+    
+    If log_dir is None, uses get_logs_directory() which creates a 'logs'
+    subdirectory with fallback to cwd.
+    """
     global _session_logger
     # Close previous logger if exists
     if _session_logger is not None:
@@ -162,6 +176,8 @@ def initialize_session_logger(log_dir: str = '.') -> SessionLogger:
             _session_logger.close()
         except Exception:
             pass
+    if log_dir is None:
+        log_dir = get_logs_directory()
     _session_logger = SessionLogger(log_dir)
     return _session_logger
 
