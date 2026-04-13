@@ -836,6 +836,17 @@ UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f947' in posit
 * Add a button to the initial "Pickleball Session Manager" menu underneath "New Session with Previous Players" labeled "Open Last Export" which uses the default system editor to open the latest exported session --- this needs to be supported on all platforms Mac, Windows, Linux.
 * Update the "Export Session" function to export to a dedicated "exports" subdirectory in the program working directory... If the program is unable to create the "exports" directory, it should fall back to exporting/writing in the directory is does currently.
 * Add a button to the initial "Pickleball Session Manager" menu underneath the new "Open Last Export" button labeled "Open Exports Directory" which uses the default filesystem explorer to bring up the exports directory for the user -- this needs to be supported on all platforms Mac, Windows and Linux.
+* Add functionality to automatically export the current session when "End Session" or the close window "X" is pressed -- This auto-export function should not happen if "Export Session" was manually pressed earlier in the session -- so you will have to add state to keep track of that -- note that resuming last session should load the state of whether or not an export has already happened -- export to close to resume to close should not result in another export.
+* Add a sleep always awake icon button to the right of the "Mute Announcements" button on the Active Session screen. By default, this is active and prevents the computer from going to sleep, or the monitor from dimming or shutting off. This needs to work on all platforms Mac, Windows, and Linux. Make sure to add a tooltip explaining the feature. When this program is active, we don't want users having to wake the computer from sleep or screen shutoffs, and this button will control that functionality.
+
+* Create a simple script that creates a shortcut to launch the application and places it on the desktop. For windows, this shortcut that gets created should have a tennis ball icon.
+* When "New Session" is initially pressed, the first default option is "Strict Continuous Round Robin" -- Instead, make the first default option "Continuous Round Robin"
+* When "Competetive Variety" is selected in the "Session Setup", it defaults to "Session Type" as "Singles" -- instead, default to Session Type "Doubles" --- Completely remove "Singles" as an option for "Competetive Variety" since it's not really supported.
+
+
+* Create auto-updater functionality -- it checks to see if the current local version is the same version as the latest release on github: github.com/iysaleh/pickleball_session_manager --- Add a "Check for Updates" button to the main menu that triggers this when pushed. 
+
+
 
 
 

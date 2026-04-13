@@ -2582,9 +2582,9 @@ class SetupDialog(QDialog):
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel("Game Mode:"))
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Strict Continuous Round Robin", "Continuous Round Robin", "King of the Court", "Competitive Variety", "Competitive Round Robin", "Competitive Continuous Round Robin", "Pooled Continuous RR with Crossover"])
-        # Set default to 'Strict Continuous Round Robin'
-        self.mode_combo.setCurrentIndex(self.mode_combo.findText("Strict Continuous Round Robin"))
+        self.mode_combo.addItems(["Continuous Round Robin", "Strict Continuous Round Robin", "King of the Court", "Competitive Variety", "Competitive Round Robin", "Competitive Continuous Round Robin", "Pooled Continuous RR with Crossover"])
+        # Set default to 'Continuous Round Robin'
+        self.mode_combo.setCurrentIndex(self.mode_combo.findText("Continuous Round Robin"))
         mode_layout.addWidget(self.mode_combo)
         
         # Pre-seeded Skill Ratings checkbox (only show for Competitive Variety)
@@ -2884,6 +2884,10 @@ class SetupDialog(QDialog):
                 # Remove Doubles if present, keep only Singles
                 self.type_combo.clear()
                 self.type_combo.addItem("Singles")
+        elif is_competitive_variety:
+            # Competitive Variety only supports Doubles
+            self.type_combo.clear()
+            self.type_combo.addItem("Doubles")
         else:
             # Restore both options if not already present
             if self.type_combo.count() < 2:
