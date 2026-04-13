@@ -1,0 +1,4 @@
+# Windows-specific dependencies (install with: pip install -r requirements-windows.txt)
+-r requirements.txt
+
+pywin32>=306
