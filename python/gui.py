@@ -6238,6 +6238,7 @@ class SessionWindow(QMainWindow):
         export_lines.append("")
         
         # Non-seeded player statistics for competitive-variety with pre-seeded ratings
+        unseeded_data = []
         if self.session.config.mode == 'competitive-variety' and self.session.config.pre_seeded_ratings:
             from python.competitive_variety import calculate_elo_rating_unseeded
             
@@ -6306,7 +6307,14 @@ class SessionWindow(QMainWindow):
                     export_lines.append(f"{medal}: {s['name']} - {record}, {s['pt_diff']:+d} pts")
                     winner_count += 1
             else:
-                for i, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(player_data):
+                # Use non-seeded rankings for winners when pre-seeded ratings are active
+                # so higher seeds don't get automatic advantage
+                winners_data = player_data
+                if (self.session.config.mode == 'competitive-variety' and 
+                    self.session.config.pre_seeded_ratings and unseeded_data):
+                    winners_data = unseeded_data
+                
+                for i, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(winners_data):
                     if games_played == 0:
                         continue
                     if winner_count >= 3:
