@@ -2857,6 +2857,12 @@ class SetupDialog(QDialog):
         # Get current mode after potential restoration
         current_mode = self.mode_combo.currentText()
         
+        # Restore pre-seed state from previous session
+        # (on_game_mode_changed may have unchecked it during mode transitions)
+        if self.previous_pre_seeded and self.previous_players:
+            self.pre_seed_checkbox.setChecked(True)
+            self.player_widget.set_pre_seed_mode(True)
+        
         # Set default behavior ONLY for new sessions (no previous players)
         if current_mode == "Competitive Variety" and not self.previous_players:
             # New session - default to pre-seeded mode for Competitive Variety
@@ -6231,6 +6237,54 @@ class SessionWindow(QMainWindow):
         
         export_lines.append("")
         
+        # Non-seeded player statistics for competitive-variety with pre-seeded ratings
+        unseeded_data = []
+        if self.session.config.mode == 'competitive-variety' and self.session.config.pre_seeded_ratings:
+            from python.competitive_variety import calculate_elo_rating_unseeded
+            
+            unseeded_data = []
+            for player in self.session.config.players:
+                if player.id not in self.session.active_players:
+                    continue
+                stats = self.session.player_stats[player.id]
+                unseeded_elo = calculate_elo_rating_unseeded(stats)
+                record = f"{stats.wins}-{stats.losses}"
+                win_pct = (stats.wins / stats.games_played * 100) if stats.games_played > 0 else 0
+                from python.utils import get_current_wait_time, format_duration
+                current_wait = get_current_wait_time(stats)
+                total_wait_seconds = stats.total_wait_time + current_wait
+                avg_pt_diff = (stats.total_points_for - stats.total_points_against) / stats.games_played if stats.games_played > 0 else 0
+                unseeded_data.append((player.name, unseeded_elo, record, stats.games_played, win_pct, total_wait_seconds, avg_pt_diff, stats.total_points_for, stats.total_points_against))
+            
+            unseeded_data.sort(key=lambda x: x[1], reverse=True)
+            
+            export_lines.append("SESSION PERFORMANCE STATISTICS - NON-SEEDED (sorted by Session ELO):")
+            export_lines.append("-" * 70)
+            export_lines.append(f"{'Rank':<6} {'Player':<25} {'Session ELO':<14} {'W-L':<10} {'Games':<10} {'Win %':<10} {'Avg Pt Diff':<15} {'Pts For':<10} {'Pts Against':<12}")
+            export_lines.append("-" * 132)
+            
+            for rank_num, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(unseeded_data, 1):
+                win_pct_str = f"{win_pct:.1f}%" if games_played > 0 else "N/A"
+                avg_pt_diff_str = f"{avg_pt_diff:.1f}" if games_played > 0 else "N/A"
+                export_lines.append(
+                    f"{rank_num:<6} {player_name:<25} {elo:<14.0f} {record:<10} {games_played:<10} {win_pct_str:<10} {avg_pt_diff_str:<15} {pts_for:<10} {pts_against:<12}"
+                )
+            
+            export_lines.append("")
+            
+            # Non-seeded CSV
+            export_lines.append("SESSION PERFORMANCE CSV (NON-SEEDED):")
+            export_lines.append("-" * 70)
+            export_lines.append("Rank,Player,SessionELO,Wins,Losses,Games,Win%,AvgPtDiff,PtsFor,PtsAgainst")
+            for rank_num, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(unseeded_data, 1):
+                wins, losses = record.split('-')
+                win_pct_csv = f"{win_pct:.1f}" if games_played > 0 else "0"
+                avg_pt_diff_csv = f"{avg_pt_diff:.1f}" if games_played > 0 else "0"
+                player_name_csv = f'"{player_name}"' if ',' in player_name else player_name
+                export_lines.append(f"{rank_num},{player_name_csv},{elo:.0f},{wins},{losses},{games_played},{win_pct_csv},{avg_pt_diff_csv},{pts_for},{pts_against}")
+            
+            export_lines.append("")
+        
         # Session Winners (top 3 players by ELO from session statistics) for non-pooled modes
         if self.session.config.mode != 'pooled-continuous-rr' and player_data:
             export_lines.append("SESSION WINNERS:")
@@ -6253,7 +6307,14 @@ class SessionWindow(QMainWindow):
                     export_lines.append(f"{medal}: {s['name']} - {record}, {s['pt_diff']:+d} pts")
                     winner_count += 1
             else:
-                for i, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(player_data):
+                # Use non-seeded rankings for winners when pre-seeded ratings are active
+                # so higher seeds don't get automatic advantage
+                winners_data = player_data
+                if (self.session.config.mode == 'competitive-variety' and 
+                    self.session.config.pre_seeded_ratings and unseeded_data):
+                    winners_data = unseeded_data
+                
+                for i, (player_name, elo, record, games_played, win_pct, total_wait_seconds, avg_pt_diff, pts_for, pts_against) in enumerate(winners_data):
                     if games_played == 0:
                         continue
                     if winner_count >= 3:

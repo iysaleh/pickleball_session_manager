@@ -242,7 +242,11 @@ def get_player_pre_seeded_rating(session: Session, player_id: str) -> Optional[f
 
 
 def calculate_player_elo_rating(session: Session, player_id: str) -> float:
-    """Calculate ELO rating for a player, using pre-seeded rating if available."""
+    """Calculate ELO rating for a player, using pre-seeded rating if available.
+    
+    When a pre-seeded rating is provided, performance adjustments are dampened 
+    based on games played so the seed anchors the rating strongly in early games.
+    """
     player_stats = session.player_stats.get(player_id)
     if not player_stats:
         # Create a dummy stats object for new players
@@ -267,7 +271,45 @@ def calculate_player_elo_rating(session: Session, player_id: str) -> float:
     win_rate = wins / games
     
     # Win rate adjustment (logarithmic) - start from base rating
-    rating = base_rating + math.log(1 + win_rate * 9) * 200 - 200
+    adjustment = math.log(1 + win_rate * 9) * 200 - 200
+    
+    # Point differential adjustment
+    if games > 0:
+        avg_point_diff = (player_stats.total_points_for - player_stats.total_points_against) / games
+        if avg_point_diff != 0:
+            adjustment += math.log(1 + abs(avg_point_diff)) * 50 * (1 if avg_point_diff > 0 else -1)
+    
+    # Consistency bonus for strong players
+    if win_rate >= 0.6 and games > 0:
+        adjustment += math.log(games) * 30
+    
+    # When pre-seeded, dampen adjustments based on games played so the seed
+    # anchors the rating in early games. Full adjustment after 4 games.
+    if pre_seeded_rating is not None:
+        confidence = min(1.0, games / 4.0)
+        adjustment *= confidence
+    
+    rating = base_rating + adjustment
+    
+    # Clamp to valid range
+    return max(MIN_RATING, min(MAX_RATING, rating))
+
+
+def calculate_elo_rating_unseeded(player_stats) -> float:
+    """
+    Calculate ELO rating purely from session performance (wins/losses/point differential).
+    Ignores any pre-seeded skill ratings - always starts from BASE_RATING (1500).
+    Used for export to show session-only performance rankings.
+    """
+    if player_stats.games_played == 0:
+        return BASE_RATING
+    
+    games = player_stats.games_played
+    wins = player_stats.wins
+    win_rate = wins / games
+    
+    # Win rate adjustment (logarithmic) - start from neutral base
+    rating = BASE_RATING + math.log(1 + win_rate * 9) * 200 - 200
     
     # Point differential adjustment
     if games > 0:
@@ -311,18 +353,25 @@ def calculate_elo_rating(player_stats, pre_seeded_rating: Optional[float] = None
     wins = player_stats.wins
     win_rate = wins / games
     
-    # Win rate adjustment (logarithmic) - start from base rating
-    rating = base_rating + math.log(1 + win_rate * 9) * 200 - 200
+    # Win rate adjustment (logarithmic)
+    adjustment = math.log(1 + win_rate * 9) * 200 - 200
     
     # Point differential adjustment
     if games > 0:
         avg_point_diff = (player_stats.total_points_for - player_stats.total_points_against) / games
         if avg_point_diff != 0:
-            rating += math.log(1 + abs(avg_point_diff)) * 50 * (1 if avg_point_diff > 0 else -1)
+            adjustment += math.log(1 + abs(avg_point_diff)) * 50 * (1 if avg_point_diff > 0 else -1)
     
     # Consistency bonus for strong players
     if win_rate >= 0.6 and games > 0:
-        rating += math.log(games) * 30
+        adjustment += math.log(games) * 30
+    
+    # When pre-seeded, dampen adjustments based on games played
+    if pre_seeded_rating is not None:
+        confidence = min(1.0, games / 4.0)
+        adjustment *= confidence
+    
+    rating = base_rating + adjustment
     
     # Clamp to valid range
     return max(MIN_RATING, min(MAX_RATING, rating))
@@ -1136,6 +1185,122 @@ def get_must_play_players(session: Session, available_players: List[str]) -> Lis
     return must_play
 
 
+# Balance threshold for triggering relaxed must-play search
+MUST_PLAY_BALANCE_THRESHOLD = 300
+
+
+def _can_play_relaxed(session: Session, player1: str, player2: str, role: str) -> bool:
+    """
+    Relaxed constraint check for must-play balance override.
+    Only enforces: locked teams, banned pairs, and back-to-back prevention (1-game gap).
+    Skips: roaming range, full repetition constraints, partner-opponent-partner pattern.
+    Used when must-play players would otherwise get badly imbalanced matches.
+    """
+    # Check Banned Pairs
+    if role == 'partner' and session.config.banned_pairs:
+        for banned in session.config.banned_pairs:
+            if player1 in banned and player2 in banned:
+                return False
+
+    # Check Locked Teams
+    if session.config.locked_teams:
+        p1_locked_partner = None
+        for team in session.config.locked_teams:
+            if player1 in team:
+                for member in team:
+                    if member != player1:
+                        p1_locked_partner = member
+                        break
+                break
+        
+        p2_locked_partner = None
+        for team in session.config.locked_teams:
+            if player2 in team:
+                for member in team:
+                    if member != player2:
+                        p2_locked_partner = member
+                        break
+                break
+        
+        if role == 'partner':
+            if p1_locked_partner and p1_locked_partner != player2:
+                return False
+            if p2_locked_partner and p2_locked_partner != player1:
+                return False
+            if p1_locked_partner == player2:
+                return True
+        elif role == 'opponent':
+            if p1_locked_partner == player2:
+                return False
+
+    # Back-to-back prevention only (1-game gap)
+    completed_matches = [m for m in session.matches if m.status == 'completed']
+    if completed_matches:
+        last_match = completed_matches[-1]
+        if role == 'partner':
+            if (player1 in last_match.team1 and player2 in last_match.team1) or \
+               (player1 in last_match.team2 and player2 in last_match.team2):
+                return False
+        elif role == 'opponent':
+            if (player1 in last_match.team1 and player2 in last_match.team2) or \
+               (player1 in last_match.team2 and player2 in last_match.team1):
+                return False
+
+    return True
+
+
+def _find_relaxed_must_play_match(
+    session: Session,
+    candidates: List[str],
+    must_play: List[str],
+    search_limit: int
+) -> Optional[Tuple[List[str], List[str]]]:
+    """
+    Search for a well-balanced match with must-play players using relaxed constraints.
+    Only enforces locked teams, banned pairs, and back-to-back prevention.
+    Returns the most balanced (team1, team2) or None.
+    """
+    best_diff = float('inf')
+    best_config = None
+
+    for combo in combinations(candidates[:search_limit], 4):
+        if not any(p in must_play for p in combo):
+            continue
+
+        configs = [
+            ([combo[0], combo[1]], [combo[2], combo[3]]),
+            ([combo[0], combo[2]], [combo[1], combo[3]]),
+            ([combo[0], combo[3]], [combo[1], combo[2]]),
+        ]
+
+        for team1, team2 in configs:
+            if not (_can_play_relaxed(session, team1[0], team1[1], 'partner') and
+                    _can_play_relaxed(session, team2[0], team2[1], 'partner')):
+                continue
+
+            valid = True
+            for p1 in team1:
+                for p2 in team2:
+                    if not _can_play_relaxed(session, p1, p2, 'opponent'):
+                        valid = False
+                        break
+                if not valid:
+                    break
+
+            if not valid:
+                continue
+
+            t1_rating = sum(calculate_player_elo_rating(session, p) for p in team1)
+            t2_rating = sum(calculate_player_elo_rating(session, p) for p in team2)
+            diff = abs(t1_rating - t2_rating)
+
+            if diff < best_diff:
+                best_diff = diff
+                best_config = (list(team1), list(team2))
+
+    return best_config
+
+
 def get_simple_wait_priority_candidates(session: Session, available_players: List[str]) -> List[str]:
     """
     Get candidates sorted by simple wait priority (courts_completed_since_last_play).
@@ -1620,6 +1785,30 @@ def populate_empty_courts_competitive_variety(session: Session) -> None:
                                         found_match = True
                                         break
                         
+                        # Relaxed must-play balance override:
+                        # If must-play match is poorly balanced (or none found), try relaxed constraints
+                        if must_play:
+                            normal_diff = float('inf')
+                            if found_match and best_team1 and best_team2:
+                                t1_r = sum(calculate_player_elo_rating(session, p) for p in best_team1)
+                                t2_r = sum(calculate_player_elo_rating(session, p) for p in best_team2)
+                                normal_diff = abs(t1_r - t2_r)
+                            
+                            if not found_match or normal_diff > MUST_PLAY_BALANCE_THRESHOLD:
+                                relaxed_result = _find_relaxed_must_play_match(
+                                    session, candidates_for_matching, must_play, search_limit
+                                )
+                                if relaxed_result:
+                                    rt1, rt2 = relaxed_result
+                                    relaxed_t1_r = sum(calculate_player_elo_rating(session, p) for p in rt1)
+                                    relaxed_t2_r = sum(calculate_player_elo_rating(session, p) for p in rt2)
+                                    relaxed_diff = abs(relaxed_t1_r - relaxed_t2_r)
+                                    
+                                    # Use relaxed match if it's significantly better or normal found nothing
+                                    if not found_match or relaxed_diff < normal_diff * 0.7:
+                                        best_team1, best_team2 = rt1, rt2
+                                        found_match = True
+
                         if not found_match:
                             # Fallback: try any valid combination
                             for combo in combinations(candidates_for_matching[:search_limit], 4):
