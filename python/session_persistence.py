@@ -653,7 +653,15 @@ def save_session(session) -> bool:
                 if player.id == bye_id:
                     bye_player_names.append(player.name)
                     break
-        save_player_history(player_names, bye_player_names)
+        active_players_list = [p for p in session.config.players if p.id in session.active_players]
+        save_player_history(
+            player_names, 
+            bye_player_names,
+            players_with_ratings=active_players_list,
+            pre_seeded=session.config.pre_seeded_ratings,
+            game_mode=session.config.mode,
+            session_type=session.config.session_type
+        )
         
         return True
     except Exception as e:

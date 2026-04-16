@@ -242,7 +242,11 @@ def get_player_pre_seeded_rating(session: Session, player_id: str) -> Optional[f
 
 
 def calculate_player_elo_rating(session: Session, player_id: str) -> float:
-    """Calculate ELO rating for a player, using pre-seeded rating if available."""
+    """Calculate ELO rating for a player, using pre-seeded rating if available.
+    
+    When a pre-seeded rating is provided, performance adjustments are dampened 
+    based on games played so the seed anchors the rating strongly in early games.
+    """
     player_stats = session.player_stats.get(player_id)
     if not player_stats:
         # Create a dummy stats object for new players
@@ -267,7 +271,45 @@ def calculate_player_elo_rating(session: Session, player_id: str) -> float:
     win_rate = wins / games
     
     # Win rate adjustment (logarithmic) - start from base rating
-    rating = base_rating + math.log(1 + win_rate * 9) * 200 - 200
+    adjustment = math.log(1 + win_rate * 9) * 200 - 200
+    
+    # Point differential adjustment
+    if games > 0:
+        avg_point_diff = (player_stats.total_points_for - player_stats.total_points_against) / games
+        if avg_point_diff != 0:
+            adjustment += math.log(1 + abs(avg_point_diff)) * 50 * (1 if avg_point_diff > 0 else -1)
+    
+    # Consistency bonus for strong players
+    if win_rate >= 0.6 and games > 0:
+        adjustment += math.log(games) * 30
+    
+    # When pre-seeded, dampen adjustments based on games played so the seed
+    # anchors the rating in early games. Full adjustment after 4 games.
+    if pre_seeded_rating is not None:
+        confidence = min(1.0, games / 4.0)
+        adjustment *= confidence
+    
+    rating = base_rating + adjustment
+    
+    # Clamp to valid range
+    return max(MIN_RATING, min(MAX_RATING, rating))
+
+
+def calculate_elo_rating_unseeded(player_stats) -> float:
+    """
+    Calculate ELO rating purely from session performance (wins/losses/point differential).
+    Ignores any pre-seeded skill ratings - always starts from BASE_RATING (1500).
+    Used for export to show session-only performance rankings.
+    """
+    if player_stats.games_played == 0:
+        return BASE_RATING
+    
+    games = player_stats.games_played
+    wins = player_stats.wins
+    win_rate = wins / games
+    
+    # Win rate adjustment (logarithmic) - start from neutral base
+    rating = BASE_RATING + math.log(1 + win_rate * 9) * 200 - 200
     
     # Point differential adjustment
     if games > 0:
@@ -311,18 +353,25 @@ def calculate_elo_rating(player_stats, pre_seeded_rating: Optional[float] = None
     wins = player_stats.wins
     win_rate = wins / games
     
-    # Win rate adjustment (logarithmic) - start from base rating
-    rating = base_rating + math.log(1 + win_rate * 9) * 200 - 200
+    # Win rate adjustment (logarithmic)
+    adjustment = math.log(1 + win_rate * 9) * 200 - 200
     
     # Point differential adjustment
     if games > 0:
         avg_point_diff = (player_stats.total_points_for - player_stats.total_points_against) / games
         if avg_point_diff != 0:
-            rating += math.log(1 + abs(avg_point_diff)) * 50 * (1 if avg_point_diff > 0 else -1)
+            adjustment += math.log(1 + abs(avg_point_diff)) * 50 * (1 if avg_point_diff > 0 else -1)
     
     # Consistency bonus for strong players
     if win_rate >= 0.6 and games > 0:
-        rating += math.log(games) * 30
+        adjustment += math.log(games) * 30
+    
+    # When pre-seeded, dampen adjustments based on games played
+    if pre_seeded_rating is not None:
+        confidence = min(1.0, games / 4.0)
+        adjustment *= confidence
+    
+    rating = base_rating + adjustment
     
     # Clamp to valid range
     return max(MIN_RATING, min(MAX_RATING, rating))
